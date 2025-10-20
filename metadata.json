@@ -1,0 +1,5 @@
+{
+  "name": "TeamCheck",
+  "description": "An employee attendance tracking application to monitor workday start, breaks, and end times for your team.",
+  "requestFramePermissions": []
+}

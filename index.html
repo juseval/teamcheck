@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChronoLog AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@400;500;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'lucius-lime': '#91A673',
+              'bright-white': '#F6F2F1',
+              'dark-hunter-green': '#3A4A3F',
+              'whisper-white': '#EAE2D3',
+              'bokara-grey': '#2A2725',
+              'wet-sand': '#AE8F60',
+            },
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+              display: ['Orbitron', 'sans-serif'],
+            }
+          }
+        }
+      }
+    </script>
+    <script>
+      // This polyfill is used to provide the Gemini API Key to the application.
+      // In a real-world scenario, this would be handled by a secure build process.
+      window.process = {
+        env: {
+          API_KEY: 'AIzaSyD2FS-gDuf7TYquc6Crb24dlpom5gZhQng'
+        }
+      };
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@19.0.0-rc.0",
+    "react-dom/client": "https://esm.sh/react-dom@19.0.0-rc.0/client",
+    "@google/genai": "https://esm.sh/@google/genai@^1.15.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+  }
+}
+</script>
+<!-- Add Babel to transpile JSX in the browser -->
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+  <body class="bg-bokara-grey">
+    <div id="root"></div>
+    <!-- Change script type to text/babel for Babel to transpile it -->
+    <script type="text/babel" data-presets="react,typescript" data-type="module" src="/index.tsx"></script>
+  </body>
+</html>
