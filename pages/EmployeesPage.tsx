@@ -1,11 +1,13 @@
 import React from 'react';
-import { Employee, WorkSchedule } from '../types.ts';
+import { Employee, WorkSchedule } from '../types';
 
 interface EmployeesPageProps {
   employees: Employee[];
   onAddEmployee: () => void;
-  onEditEmployee: (employeeId: number) => void;
-  onRemoveEmployee: (employeeId: number) => void;
+  // FIX: Changed employeeId type from number to string.
+  onEditEmployee: (employeeId: string) => void;
+  // FIX: Changed employeeId type from number to string.
+  onRemoveEmployee: (employeeId: string) => void;
   workSchedules: WorkSchedule[];
 }
 
@@ -17,7 +19,10 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
   return (
     <div className="w-full mx-auto animate-fade-in">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-bokara-grey">Employees</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-3xl font-bold text-bokara-grey">Employees</h1>
+          <span className="bg-lucius-lime/20 text-bokara-grey text-lg font-bold px-3 py-1 rounded-full">{employees.length}</span>
+        </div>
         <button
           onClick={onAddEmployee}
           className="bg-lucius-lime hover:bg-opacity-80 text-bokara-grey font-bold py-2 px-4 rounded-lg transition-all duration-300 shadow-md flex items-center gap-2"

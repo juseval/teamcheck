@@ -1,6 +1,6 @@
 import React, { useState, useMemo, Fragment } from 'react';
-import { Employee, AttendanceLogEntry, ActivityStatus, TimesheetEntry } from '../types.ts';
-import { EditIcon } from '../components/Icons.tsx';
+import { Employee, AttendanceLogEntry, ActivityStatus, TimesheetEntry } from '../types';
+import { EditIcon } from '../components/Icons';
 
 const formatDuration = (seconds: number, style: 'short' | 'long' = 'long') => {
     if (isNaN(seconds) || seconds < 0) return '00:00:00';
@@ -29,7 +29,7 @@ const TimesheetPage: React.FC<{
     activityStatuses: ActivityStatus[];
     onEditEntry: (entry: TimesheetEntry) => void;
 }> = ({ employees, attendanceLog, activityStatuses, onEditEntry }) => {
-    const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<number[]>([]);
+    const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
     
     const lastWeek = new Date();
     lastWeek.setDate(lastWeek.getDate() - 7);
@@ -37,7 +37,7 @@ const TimesheetPage: React.FC<{
     const [startDate, setStartDate] = useState(lastWeek.toISOString().split('T')[0]);
     const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
     
-    const handleEmployeeSelection = (employeeId: number) => {
+    const handleEmployeeSelection = (employeeId: string) => {
         setSelectedEmployeeIds(prev =>
             prev.includes(employeeId)
                 ? prev.filter(id => id !== employeeId)
@@ -55,7 +55,7 @@ const TimesheetPage: React.FC<{
         activityStatuses.forEach(s => statusColorMap.set(s.name, s.color));
         statusColorMap.set('Working', 'transparent');
 
-        const results: Record<number, {
+        const results: Record<string, {
             employeeName: string;
             dailyData: Record<string, {
                 entries: TimesheetEntry[];
@@ -189,47 +189,58 @@ const TimesheetPage: React.FC<{
                         </thead>
                         <tbody>
                             {timesheetData.length === 0 ? (
-                                <tr><td colSpan={6} className="text-center p-16 text-bokara-grey/60">No data found for the selected criteria.</td></tr>
+                                <tr>
+                                    <td colSpan={6} className="text-center p-16 text-bokara-grey/60">
+                                        No timesheet data for the selected criteria.
+                                    </td>
+                                </tr>
                             ) : (
-                                timesheetData.map(empData => (
-                                    <Fragment key={empData.employeeName}>
-                                        <tr className="bg-dark-hunter-green/90 text-bright-white sticky top-0">
-                                            <td colSpan={4} className="p-3 font-bold text-lg">{empData.employeeName}</td>
-                                            <td colSpan={2} className="p-3 text-right font-semibold text-sm">
-                                                Total Work: <span className="font-mono">{formatDuration(empData.totalWork)}</span> | 
-                                                Activities: <span className="font-mono">{formatDuration(empData.totalActivities)}</span>
+                                timesheetData.map(employeeData => (
+                                    <Fragment key={employeeData.employeeName}>
+                                        <tr className="bg-bokara-grey/5">
+                                            <td colSpan={6} className="p-3 font-bold text-bokara-grey">
+                                                {employeeData.employeeName}
                                             </td>
                                         </tr>
-                                        {Object.entries(empData.dailyData).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime()).map(([date, dayData]) => {
-                                            // FIX: Add type assertion for dayData because Object.entries infers the value as `unknown`.
-                                            const data = dayData as { entries: TimesheetEntry[]; totalWork: number; totalActivities: number; };
+                                        {Object.entries(employeeData.dailyData).sort(([dateA], [dateB]) => new Date(dateA).getTime() - new Date(dateB).getTime()).map(([date, dailyInfo]) => {
+                                            // FIX: Cast dailyInfo to access its properties as it is inferred as 'unknown'.
+                                            const info = dailyInfo as { entries: TimesheetEntry[]; totalWork: number; totalActivities: number; };
                                             return (
                                             <Fragment key={date}>
-                                                {data.entries.map((entry, index) => (
-                                                     <tr key={entry.key} style={{backgroundColor: entry.color ? `${entry.color}20` : 'transparent'}} className="border-b border-bokara-grey/10 hover:bg-bokara-grey/5">
-                                                        <td className="p-3 text-bokara-grey/80">{index === 0 ? `${entry.dayOfWeek}, ${entry.date}`: ''}</td>
-                                                        <td className="p-3 text-bokara-grey">{entry.type}</td>
-                                                        <td className="p-3 text-bokara-grey/80 font-mono">{formatTime(entry.timeIn)}</td>
-                                                        <td className="p-3 text-bokara-grey/80 font-mono">{formatTime(entry.timeOut)}</td>
-                                                        <td className="p-3 text-bokara-grey font-mono text-right">{formatDuration(entry.duration)}</td>
+                                                {info.entries.map(entry => (
+                                                    <tr key={entry.key} className="border-b border-bokara-grey/10 hover:bg-whisper-white/40">
+                                                        <td className="p-3 whitespace-nowrap">
+                                                            <div className="font-semibold">{entry.dayOfWeek}</div>
+                                                            <div className="text-sm text-bokara-grey/70">{entry.date}</div>
+                                                        </td>
+                                                        <td className="p-3">
+                                                            <div className="flex items-center gap-2">
+                                                                {entry.color && entry.color !== 'transparent' && <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }}></div>}
+                                                                <span>{entry.type}</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="p-3 font-mono">{formatTime(entry.timeIn)}</td>
+                                                        <td className="p-3 font-mono">{formatTime(entry.timeOut)}</td>
+                                                        <td className="p-3 font-mono text-right">{formatDuration(entry.duration)}</td>
                                                         <td className="p-3 text-center">
-                                                            <button onClick={() => onEditEntry(entry)} className="p-1 text-bokara-grey/50 hover:text-lucius-lime rounded-full hover:bg-whisper-white transition-colors" title="Edit Entry">
+                                                            <button onClick={() => onEditEntry(entry)} className="p-1.5 text-bokara-grey/50 hover:text-lucius-lime rounded-full hover:bg-whisper-white transition-colors" title="Edit Entry">
                                                                 <EditIcon className="w-5 h-5" />
                                                             </button>
                                                         </td>
-                                                     </tr>
+                                                    </tr>
                                                 ))}
-                                                <tr className="bg-whisper-white border-b-2 border-bokara-grey/20">
-                                                    <td colSpan={4} className="p-2 text-right font-bold text-bokara-grey/80 text-sm">Daily Total for {date}</td>
-                                                    <td className="p-2 font-semibold text-bokara-grey text-sm text-right">
-                                                        Work: <span className="font-mono text-lucius-lime">{formatDuration(data.totalWork)}</span>
-                                                    </td>
-                                                     <td className="p-2 font-semibold text-bokara-grey text-sm text-right">
-                                                        Activities: <span className="font-mono text-wet-sand">{formatDuration(data.totalActivities)}</span>
-                                                    </td>
+                                                <tr className="bg-whisper-white/30 font-semibold">
+                                                    <td colSpan={4} className="p-2 text-right text-sm">Total for {date}:</td>
+                                                    <td className="p-2 text-right font-mono">{formatDuration(info.totalWork + info.totalActivities)}</td>
+                                                    <td></td>
                                                 </tr>
                                             </Fragment>
                                         )})}
+                                         <tr className="bg-lucius-lime/20 font-bold">
+                                            <td colSpan={4} className="p-3 text-right text-bokara-grey">Total for {employeeData.employeeName}:</td>
+                                            <td className="p-3 text-right font-mono text-bokara-grey">{formatDuration(employeeData.totalWork + employeeData.totalActivities)}</td>
+                                            <td></td>
+                                        </tr>
                                     </Fragment>
                                 ))
                             )}

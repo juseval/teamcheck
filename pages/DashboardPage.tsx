@@ -1,16 +1,15 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Employee, AttendanceLogEntry, AttendanceAction, ActivityStatus, WorkSchedule, CalendarEvent } from '../types.ts';
-import DashboardSummary from '../components/DashboardSummary.tsx';
-import { exportDashboardData } from '../services/exportService.ts';
-import { ClockIcon, PowerIcon, TeamIcon } from '../components/Icons.tsx';
-import EmployeeTimeline from '../components/EmployeeTimeline.tsx';
-import LateArrivalsWidget from '../components/LateArrivalsWidget.tsx';
-import AgentStateDashboard from '../components/AgentStateDashboard.tsx';
+import { Employee, AttendanceLogEntry, AttendanceAction, ActivityStatus, WorkSchedule, CalendarEvent } from '../types';
+import DashboardSummary from '../components/DashboardSummary';
+import { ClockIcon, PowerIcon, TeamIcon } from '../components/Icons';
+import EmployeeTimeline from '../components/EmployeeTimeline';
+import AgentStateDashboard from '../components/AgentStateDashboard';
+import TimesheetOverview from '../components/TimesheetOverview';
 
 interface DashboardPageProps {
   attendanceLog: AttendanceLogEntry[];
   employees: Employee[];
-  onEmployeeAction: (employeeId: number, action: AttendanceAction) => void;
+  onEmployeeAction: (employeeId: string, action: AttendanceAction) => void;
   activityStatuses: ActivityStatus[];
   workSchedules: WorkSchedule[];
   calendarEvents: CalendarEvent[];
@@ -40,7 +39,7 @@ const StatusIndicator: React.FC<{ status: Employee['status'] }> = ({ status }) =
 
 const DashboardPage: React.FC<DashboardPageProps> = ({ attendanceLog, employees, onEmployeeAction, activityStatuses, workSchedules, calendarEvents }) => {
   
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(employees.length > 0 ? employees[0].id : null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(employees.length > 0 ? employees[0].id : null);
   const [elapsedTime, setElapsedTime] = useState(0);
 
   const selectedEmployee = employees.find(e => e.id === selectedEmployeeId);
@@ -90,7 +89,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ attendanceLog, employees,
 
   return (
     <div className="flex flex-col items-center gap-8 pt-8">
-      <LateArrivalsWidget
+      <TimesheetOverview
         employees={employees}
         attendanceLog={attendanceLog}
         workSchedules={workSchedules}
@@ -112,7 +111,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ attendanceLog, employees,
           <select
             id="employee-select"
             value={selectedEmployeeId ?? ''}
-            onChange={(e) => setSelectedEmployeeId(Number(e.target.value))}
+            onChange={(e) => setSelectedEmployeeId(e.target.value)}
             className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime"
           >
             {employees.map(emp => (

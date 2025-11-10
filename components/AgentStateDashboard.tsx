@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Employee, WorkSchedule, ActivityStatus, CalendarEvent } from '../types';
+import { Employee, WorkSchedule, ActivityStatus, CalendarEvent } from '../types.ts';
 import { PowerIcon, PhoneStatusIcon, CrossStatusIcon, CheckStatusIcon, SpeakerStatusIcon, FilterIcon } from './Icons';
 
 interface AgentStateDashboardProps {
@@ -12,13 +12,13 @@ interface AgentStateDashboardProps {
 type AgentState = 'After Call Work' | 'Not Ready' | 'Ready' | 'On Call' | 'Offline';
 
 interface Agent {
-  id: number;
+  // FIX: Changed id type from number to string.
+  id: string;
   fullName: string;
   state: AgentState;
   reasonCode: string;
   stateDuration: number;
   callType: 'Inbound' | 'Outbound' | '-';
-  campaign: string;
   schedule: string;
 }
 
@@ -75,7 +75,8 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
         const todayDayOfWeek = now.getDay();
         const nowTs = now.getTime();
 
-        const todaysEventsMap = new Map<number, CalendarEvent>();
+        // FIX: Changed Map key type from number to string.
+        const todaysEventsMap = new Map<string, CalendarEvent>();
         for (const event of calendarEvents) {
             const startDate = new Date(event.startDate + 'T00:00:00');
             const endDate = new Date(event.endDate + 'T23:59:59');
@@ -85,7 +86,8 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
         }
 
         const processedAgentList: Agent[] = [];
-        const processedEmployeeIds = new Set<number>();
+        // FIX: Changed Set type from number to string.
+        const processedEmployeeIds = new Set<string>();
 
         // 1. Process employees with calendar events for today
         todaysEventsMap.forEach((event, employeeId) => {
@@ -115,7 +117,6 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
                     reasonCode: event.type,
                     stateDuration: duration,
                     callType: '-',
-                    campaign: '-',
                     schedule: scheduleString,
                 });
             }
@@ -138,14 +139,12 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
                     reasonCode: '-',
                     stateDuration: 0,
                     callType: '-',
-                    campaign: '-',
                     schedule: scheduleString,
                 });
             } else {
                 let state: AgentState = 'Not Ready';
                 let reasonCode = employee.status;
                 let callType: Agent['callType'] = '-';
-                let campaign = '-';
 
                 switch(employee.status) {
                     case 'Working':
@@ -156,13 +155,11 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
                         state = 'On Call';
                         reasonCode = '-';
                         callType = 'Inbound';
-                        campaign = 'JC_OmniChannel';
                         break;
                     case 'After Call Work':
                         state = 'After Call Work';
                         reasonCode = '-';
                         callType = 'Inbound';
-                        campaign = 'JC_OmniChannel';
                         break;
                     default:
                         state = 'Not Ready';
@@ -176,7 +173,6 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
                     reasonCode,
                     stateDuration: employee.currentStatusStartTime ? Math.floor((nowTs - employee.currentStatusStartTime) / 1000) : 0,
                     callType,
-                    campaign,
                     schedule: scheduleString,
                 });
             }
@@ -203,7 +199,6 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
                             </th>
                             <th scope="col" className="px-4 py-3">State Duration</th>
                             <th scope="col" className="px-4 py-3 bg-blue-50/50">Call Type</th>
-                            <th scope="col" className="px-4 py-3">Campaign</th>
                             <th scope="col" className="px-4 py-3">Schedule</th>
                             <th scope="col" className="px-4 py-3">Actions</th>
                         </tr>
@@ -233,7 +228,6 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
                                     </div>
                                 </td>
                                 <td className={`px-4 py-2 font-semibold ${agent.callType !== '-' && agent.state !== 'Offline' ? 'text-blue-800 bg-blue-50/50' : ''}`}>{agent.callType}</td>
-                                <td className="px-4 py-2">{agent.campaign}</td>
                                 <td className="px-4 py-2 font-mono">{agent.schedule}</td>
                                 <td className="px-4 py-2">
                                      <button className={agent.state === 'Offline' ? 'text-gray-400' : 'text-bokara-grey/60'} disabled={agent.state === 'Offline'}>▼</button>
