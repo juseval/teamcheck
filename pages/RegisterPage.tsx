@@ -1,28 +1,37 @@
 import React, { useState } from 'react';
-import { ArrowLeftIcon } from '../components/Icons.tsx';
+import { ArrowLeftIcon } from '../components/Icons';
 
 interface RegisterPageProps {
+  onRegister: (data: { fullName: string; email: string; }) => Promise<void>;
   onNavigateToLogin: () => void;
   onNavigateToHome: () => void;
 }
 
-const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateToLogin, onNavigateToHome }) => {
+const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLogin, onNavigateToHome }) => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isRegistering, setIsRegistering] = useState(false);
 
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In a real app, you'd perform registration logic
     if (password !== confirmPassword) {
         alert("Passwords do not match!");
         return;
     }
-    console.log("Registering user:", { fullName, email });
-    // After successful registration, navigate to login
-    onNavigateToLogin();
+    setIsRegistering(true);
+    try {
+        await onRegister({ fullName, email });
+        alert('Registration successful! You can now log in.');
+        onNavigateToLogin();
+    } catch (error) {
+        alert('Registration failed. This email might already be in use.');
+        console.error("Registration failed", error);
+    } finally {
+        setIsRegistering(false);
+    }
   };
 
   return (
@@ -114,10 +123,10 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateToLogin, onNaviga
             <div>
               <button
                 type="submit"
-                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-bokara-grey bg-lucius-lime hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lucius-lime transition-colors disabled:bg-lucius-lime/40"
-                disabled={!fullName || !email || !password || password !== confirmPassword}
+                className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-bokara-grey bg-lucius-lime hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lucius-lime transition-colors disabled:bg-lucius-lime/40 disabled:cursor-wait"
+                disabled={!fullName || !email || !password || password !== confirmPassword || isRegistering}
               >
-                Create Account
+                {isRegistering ? 'Creating Account...' : 'Create Account'}
               </button>
             </div>
           </form>

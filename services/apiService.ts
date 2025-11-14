@@ -1,395 +1,476 @@
-import { Employee, AttendanceLogEntry, ActivityStatus, Task, CalendarEvent, PayrollChangeType, WorkSchedule } from '../types.ts';
+import { Employee, AttendanceLogEntry, ActivityStatus, Task, CalendarEvent, PayrollChangeType, WorkSchedule } from '../types';
+import { db, isFirebaseEnabled } from './firebase';
+import { initialEmployees } from '../data/initialData';
 
-// --- In-memory "database" ---
-let employees: Employee[] = [
-  { id: 1, name: 'Johnny Cash', email: 'j.cash@example.com', phone: '111-222-3333', location: 'Main Office', role: 'employee', status: 'After Call Work', lastClockInTime: Date.now() - 2 * 60 * 60 * 1000, currentStatusStartTime: Date.now() - (27 * 60 + 25) * 1000, workScheduleId: 'schedule-1' },
-  { id: 2, name: 'Daniel Cartmell', email: 'd.cartmell@example.com', phone: '222-333-4444', location: 'Remote', role: 'employee', status: 'Meeting', lastClockInTime: Date.now() - 3 * 60 * 60 * 1000, currentStatusStartTime: Date.now() - (35 * 60 + 45) * 1000, workScheduleId: 'schedule-1' },
-  { id: 3, name: 'Waylon Jennings', email: 'w.jennings@example.com', phone: '333-444-5555', location: 'Main Office', role: 'employee', status: 'Team Meeting', lastClockInTime: Date.now() - 4 * 60 * 60 * 1000, currentStatusStartTime: Date.now() - (66 * 60 + 45) * 1000, workScheduleId: 'schedule-2' },
-  { id: 4, name: 'Willie Nelson', email: 'w.nelson@example.com', phone: '444-555-6666', location: 'Field Office', role: 'employee', status: 'Team Meeting', lastClockInTime: Date.now() - 5 * 60 * 60 * 1000, currentStatusStartTime: Date.now() - (73 * 60 + 25) * 1000, workScheduleId: 'schedule-2' },
-  { id: 5, name: 'Danielle O\'Keeffe', email: 'd.okeeffe@example.com', phone: '555-666-7777', location: 'Main Office', role: 'employee', status: 'Working', lastClockInTime: Date.now() - 2 * 60 * 60 * 1000, currentStatusStartTime: Date.now() - (119 * 60 + 20) * 1000, workScheduleId: 'schedule-1' },
-  { id: 6, name: 'Ryan Ignacio', email: 'r.ignacio@example.com', phone: '666-777-8888', location: 'Remote', role: 'employee', status: 'Not Ready', lastClockInTime: Date.now() - 1 * 60 * 60 * 1000, currentStatusStartTime: Date.now() - (47 * 60 + 15) * 1000, workScheduleId: 'schedule-1' },
-  { id: 7, name: 'Michael Stockton', email: 'm.stockton@example.com', phone: '777-888-9999', location: 'Main Office', role: 'employee', status: 'On Call', lastClockInTime: Date.now() - 3 * 60 * 60 * 1000, currentStatusStartTime: Date.now() - (34 * 60 + 20) * 1000, workScheduleId: 'schedule-2' },
-  { id: 8, name: 'Charlie Miller', email: 'c.miller@example.com', phone: '888-999-0000', location: 'Main Office', role: 'employee', status: 'Break', lastClockInTime: Date.now() - 4 * 60 * 60 * 1000, currentStatusStartTime: Date.now() - (6 * 60 + 35) * 1000, workScheduleId: 'schedule-2' },
-  { id: 9, name: 'Juan Sebastian', email: 'j.sebastian@example.com', phone: '999-000-1111', location: 'Main Office', role: 'admin', status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, workScheduleId: 'schedule-1' },
-];
-
-let attendanceLog: AttendanceLogEntry[] = [];
-
-let activityStatuses: ActivityStatus[] = [
-  { id: 'break', name: 'Break', color: '#AE8F60' },
-  { id: 'training', name: 'Training', color: '#5D9B9B' },
-  { id: 'feedback', name: 'Feedback', color: '#9B5D9B' },
-  { id: 'active-pause', name: 'Active Pause', color: '#5D9B6E' },
-  // New statuses for Agent State dashboard
-  { id: 'acw', name: 'After Call Work', color: '#60A5FA' },
-  { id: 'meeting', name: 'Meeting', color: '#A78BFA' },
-  { id: 'team-meeting', name: 'Team Meeting', color: '#8b5cf6' },
-  { id: 'on-call', name: 'On Call', color: '#FACC15' },
-  { id: 'not-ready', name: 'Not Ready', color: '#F87171' },
-];
-
-let payrollChangeTypes: PayrollChangeType[] = [
-    { id: 'sick', name: 'Sick', color: '#F59E0B' },
-    { id: 'vacation', name: 'Vacation', color: '#10B981' },
-    { id: 'family-day', name: 'Family Day', color: '#3B82F6' },
-    { id: 'dia-no-remunerado', name: 'Dia No Remunerado', color: '#6B7280' },
-    { id: 'ooo', name: 'O.O.O.', color: '#EF4444' },
-    { id: 'no-show', name: 'No Show', color: '#000000' },
-    { id: 'suspended', name: 'Suspended', color: '#4B0082' },
-    { id: 'paternity-leave', name: 'Paternity Leave', color: '#8B5CF6' },
-    { id: 'reserve-holiday', name: 'Reserve Holiday', color: '#06B6D4' },
-    { id: 'graduation-day', name: 'Graduation Day', color: '#D946EF' },
-    { id: 'visa', name: 'Visa', color: '#65A30D' },
-    { id: 'moving-day', name: 'Moving Day', color: '#EA580C' },
-    { id: 'birthday-half-day', name: 'Birthday Half-Day', color: '#FBBF24' },
-    { id: 'pet-half-day', name: 'Pet Half-Day', color: '#22C55E' },
-    { id: 'friend-half-day', name: 'Friend Half-Day', color: '#EC4899' },
-    { id: 'halloween-half-day', name: 'Halloween Half-Day', color: '#F97316' },
-    { id: 'medical', name: 'Medical', color: '#0EA5E9' },
-];
-
-let workSchedules: WorkSchedule[] = [
-    { id: 'schedule-1', name: 'Horario A', startTime: '07:00', endTime: '15:00', days: [1, 2, 3, 4, 5] },
-    { id: 'schedule-2', name: 'Horario B', startTime: '15:00', endTime: '23:00', days: [1, 2, 3, 4, 5] },
-    { id: 'schedule-3', name: 'Horario C (Noche)', startTime: '23:00', endTime: '07:00', days: [1, 2, 3, 4, 5] },
-];
-
-let tasks: Task[] = [
-    { id: 1, name: 'Design new dashboard layout', startDate: '2025-08-04', endDate: '2025-08-11', status: 'In Progress', assigneeId: 1, progress: 60, color: '#3B82F6' },
-    { id: 2, name: 'Develop API for timesheets', startDate: '2025-08-08', endDate: '2025-08-18', status: 'In Progress', assigneeId: 2, progress: 40, color: '#F59E0B' },
-    { id: 3, name: 'Client demo preparation', startDate: '2025-08-15', endDate: '2025-08-19', status: 'In Progress', assigneeId: 3, progress: 20, color: '#10B981' },
-    { id: 4, name: 'Initial project planning', startDate: '2025-08-01', endDate: '2025-08-05', status: 'Complete', assigneeId: 1, progress: 100, color: '#6B7280'},
-    { id: 5, name: 'User testing for new feature', startDate: '2025-08-20', endDate: '2025-08-25', status: 'To-do', assigneeId: 4, progress: 0, color: '#8B5CF6' },
-    { id: 6, name: 'Fix login page bug', startDate: '2025-08-06', endDate: '2025-08-07', status: 'Complete', assigneeId: 2, progress: 100, color: '#6B7280' },
-];
-
-const today = new Date();
-const year = today.getFullYear();
-const month = today.getMonth() + 1; // getMonth() is 0-indexed
-const monthStr = month.toString().padStart(2, '0');
-
-let calendarEvents: CalendarEvent[] = [
-  // Sample data for the current month
-  { id: 1, employeeId: 1, type: 'Vacation', startDate: `${year}-${monthStr}-05`, endDate: `${year}-${monthStr}-07` },
-  { id: 2, employeeId: 2, type: 'Sick', startDate: `${year}-${monthStr}-10`, endDate: `${year}-${monthStr}-10` },
-  { id: 3, employeeId: 3, type: 'Visa', startDate: `${year}-${monthStr}-15`, endDate: `${year}-${monthStr}-20` },
-  { id: 4, employeeId: 4, type: 'Birthday Half-Day', startDate: `${year}-${monthStr}-02`, endDate: `${year}-${monthStr}-02` },
-  { id: 6, employeeId: 6, type: 'Medical', startDate: `${year}-${monthStr}-22`, endDate: `${year}-${monthStr}-22` },
-  { id: 7, employeeId: 7, type: 'Family Day', startDate: `${year}-${monthStr}-12`, endDate: `${year}-${monthStr}-12` },
-];
-
-
-// --- API Simulation ---
-const simulateNetworkDelay = (delay: number = 500) => new Promise(res => setTimeout(res, delay));
-
-// In a real app, this would hit a /login endpoint and return a user/token
-export const login = async (email: string, password: string): Promise<{ success: boolean }> => {
-  await simulateNetworkDelay();
-  if (email === 'demo@teamcheck.com' && password === 'password123') {
-    return { success: true };
-  }
-  return { success: false };
-}
-
-export const getEmployees = async (): Promise<Employee[]> => {
-  await simulateNetworkDelay();
-  // Return a deep copy to prevent direct mutation of the "database"
-  return JSON.parse(JSON.stringify(employees));
-};
-
-export const getAttendanceLog = async (): Promise<AttendanceLogEntry[]> => {
-    await simulateNetworkDelay(200);
-    return JSON.parse(JSON.stringify(attendanceLog));
-}
-
-export const addEmployee = async (employeeData: Omit<Employee, 'id' | 'status' | 'lastClockInTime' | 'currentStatusStartTime'>): Promise<Employee> => {
-  await simulateNetworkDelay();
-  const newEmployee: Employee = {
-    ...employeeData,
-    id: Date.now(),
-    status: 'Clocked Out',
-    lastClockInTime: null,
-    currentStatusStartTime: null,
-  };
-  employees = [...employees, newEmployee];
-  return newEmployee;
-};
-
-export const removeEmployee = async (employeeId: number): Promise<{ success: boolean }> => {
-    await simulateNetworkDelay();
-    const initialLength = employees.length;
-    employees = employees.filter(emp => emp.id !== employeeId);
-    return { success: employees.length < initialLength };
-}
-
-export const updateEmployeeStatus = async (employeeToUpdate: Employee): Promise<Employee> => {
-    await simulateNetworkDelay(100);
-    employees = employees.map(emp => emp.id === employeeToUpdate.id ? employeeToUpdate : emp);
-    return employeeToUpdate;
-}
-
-export const updateEmployeeDetails = async (employeeToUpdate: Employee): Promise<Employee> => {
-    await simulateNetworkDelay(300);
-    employees = employees.map(emp => emp.id === employeeToUpdate.id ? {...emp, ...employeeToUpdate} : emp);
-    // Return a copy of the updated employee
-    return JSON.parse(JSON.stringify(employees.find(e => e.id === employeeToUpdate.id)));
-}
-
-export const addAttendanceLogEntry = async (logEntry: Omit<AttendanceLogEntry, 'id' | 'timestamp'> & { timestamp: number }): Promise<AttendanceLogEntry> => {
-    await simulateNetworkDelay(100);
-    const newLogEntry: AttendanceLogEntry = {
-        ...logEntry,
-        id: logEntry.timestamp, // Use timestamp for ID for consistency
-    };
-    attendanceLog = [newLogEntry, ...attendanceLog];
-    return newLogEntry;
-}
-
-export const updateAttendanceLogEntry = async (logId: number, updates: { action: string, timestamp: number }): Promise<AttendanceLogEntry> => {
-    await simulateNetworkDelay(300);
-    
-    const logIndex = attendanceLog.findIndex(log => log.id === logId);
-    if (logIndex === -1) {
-        throw new Error("Log entry not found.");
-    }
-
-    const updatedLog = {
-        ...attendanceLog[logIndex],
-        ...updates
-    };
-
-    // Replace the old log with the updated one
-    attendanceLog[logIndex] = updatedLog;
-
-    return JSON.parse(JSON.stringify(updatedLog));
-};
-
-export const updateEmployeeCurrentSession = async (employeeId: number, newStartTime: number): Promise<{ updatedEmployee: Employee, updatedLog: AttendanceLogEntry }> => {
-  await simulateNetworkDelay(200);
-
-  const employeeIndex = employees.findIndex(emp => emp.id === employeeId);
-  if (employeeIndex === -1) throw new Error("Employee not found");
+// --- MOCK API IMPLEMENTATION ---
+const createMockApi = () => {
+  // In-memory store
+  let mockEmployees: Employee[] = JSON.parse(JSON.stringify(initialEmployees));
+  let mockAttendanceLog: AttendanceLogEntry[] = [];
+  let mockActivityStatuses: ActivityStatus[] = [
+    { id: '1', name: 'Break', color: '#AE8F60' },
+    { id: '2', name: 'Training', color: '#3B82F6' },
+    { id: '3', name: 'Meeting', color: '#8B5CF6' },
+  ];
+  let mockPayrollChangeTypes: PayrollChangeType[] = [
+      { id: '1', name: 'Vacation', color: '#10B981' },
+      { id: '2', name: 'Sick Day', color: '#F59E0B' },
+      { id: '3', name: 'Family Day', color: '#EF4444' },
+  ];
+  let mockWorkSchedules: WorkSchedule[] = [
+      { id: '1', name: 'Morning Shift', startTime: '07:00', endTime: '15:00', days: [1,2,3,4,5] },
+      { id: '2', name: 'Afternoon Shift', startTime: '15:00', endTime: '23:00', days: [1,2,3,4,5] },
+  ];
+  let mockTasks: Task[] = [];
+  let mockCalendarEvents: CalendarEvent[] = [];
   
-  const employee = employees[employeeIndex];
-  if (!employee.currentStatusStartTime) throw new Error("Employee has no active session");
-  
-  const originalStartTime = employee.currentStatusStartTime;
+  // Simple ID generator
+  const getNextId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
-  // Find the corresponding log entry
-  const logIndex = attendanceLog.findIndex(log => log.employeeId === employeeId && log.timestamp === originalStartTime);
-  if (logIndex === -1) throw new Error("Log entry for current session not found");
+  return {
+    loginWithEmail: async (email: string): Promise<{ success: boolean, user?: Employee }> => {
+        const user = mockEmployees.find(e => e.email === email);
+        if (user) {
+            return Promise.resolve({ success: true, user });
+        }
+        return Promise.resolve({ success: false });
+    },
+    streamEmployees: (callback: (employees: Employee[]) => void): (() => void) => {
+        callback([...mockEmployees]);
+        return () => {}; // No-op unsubscribe for mock
+    },
+    streamAttendanceLog: (callback: (log: AttendanceLogEntry[]) => void): (() => void) => {
+        callback([...mockAttendanceLog]);
+        return () => {}; // No-op unsubscribe for mock
+    },
+    getEmployees: async (): Promise<Employee[]> => Promise.resolve([...mockEmployees]),
+    addEmployee: async (employeeData: Omit<Employee, 'id' | 'status' | 'lastClockInTime' | 'currentStatusStartTime'>): Promise<Employee> => {
+        const newEmployee: Employee = {
+            ...employeeData,
+            id: getNextId('employee'),
+            status: 'Clocked Out',
+            lastClockInTime: null,
+            currentStatusStartTime: null,
+        };
+        mockEmployees.push(newEmployee);
+        return Promise.resolve(newEmployee);
+    },
+    removeEmployee: async (employeeId: string): Promise<{ success: boolean }> => {
+        mockEmployees = mockEmployees.filter(emp => emp.id !== employeeId);
+        return Promise.resolve({ success: true });
+    },
+    updateEmployeeStatus: async (employeeToUpdate: Employee): Promise<Employee> => {
+        const index = mockEmployees.findIndex(emp => emp.id === employeeToUpdate.id);
+        if (index !== -1) {
+            mockEmployees[index] = { ...mockEmployees[index], ...employeeToUpdate };
+            return Promise.resolve(mockEmployees[index]);
+        }
+        throw new Error("Employee not found");
+    },
+    updateEmployeeDetails: async (employeeToUpdate: Employee): Promise<Employee> => {
+       const index = mockEmployees.findIndex(emp => emp.id === employeeToUpdate.id);
+        if (index !== -1) {
+            mockEmployees[index] = { ...mockEmployees[index], ...employeeToUpdate };
+            return Promise.resolve(mockEmployees[index]);
+        }
+        throw new Error("Employee not found");
+    },
+    getAttendanceLog: async (): Promise<AttendanceLogEntry[]> => Promise.resolve([...mockAttendanceLog]),
+    addAttendanceLogEntry: async (logEntry: Omit<AttendanceLogEntry, 'id'>): Promise<AttendanceLogEntry> => {
+        const newLog: AttendanceLogEntry = {
+            ...logEntry,
+            id: getNextId('log'),
+        };
+        mockAttendanceLog.push(newLog);
+        return Promise.resolve(newLog);
+    },
+    updateAttendanceLogEntry: async (logId: string, updates: { action: string, timestamp: number }): Promise<AttendanceLogEntry> => {
+        const index = mockAttendanceLog.findIndex(log => log.id === logId);
+        if (index !== -1) {
+            mockAttendanceLog[index] = { ...mockAttendanceLog[index], ...updates };
+            return Promise.resolve(mockAttendanceLog[index]);
+        }
+        throw new Error("Log entry not found");
+    },
+    updateEmployeeCurrentSession: async (employeeId: string, newStartTime: number): Promise<{ updatedEmployee: Employee, updatedLog: AttendanceLogEntry }> => {
+        const employee = mockEmployees.find(e => e.id === employeeId);
+        if (!employee || !employee.currentStatusStartTime) throw new Error("Employee or session not found");
 
-  // Update the log entry
-  const updatedLog = { ...attendanceLog[logIndex], timestamp: newStartTime };
-  attendanceLog[logIndex] = updatedLog;
+        const originalStartTime = employee.currentStatusStartTime;
+        const log = mockAttendanceLog.find(l => l.employeeId === employeeId && l.timestamp === originalStartTime);
+        if (!log) throw new Error("Log entry for session not found");
 
-  // Update the employee record
-  const updatedEmployee = { ...employee, currentStatusStartTime: newStartTime };
-  
-  // If the edited entry was the initial clock-in, update that time too
-  if (employee.lastClockInTime === originalStartTime) {
-    updatedEmployee.lastClockInTime = newStartTime;
-  }
-  
-  employees[employeeIndex] = updatedEmployee;
+        employee.currentStatusStartTime = newStartTime;
+        if (employee.lastClockInTime === originalStartTime) {
+            employee.lastClockInTime = newStartTime;
+        }
+        log.timestamp = newStartTime;
 
-  return { 
-    updatedEmployee: JSON.parse(JSON.stringify(updatedEmployee)),
-    updatedLog: JSON.parse(JSON.stringify(updatedLog)),
+        return Promise.resolve({ updatedEmployee: { ...employee }, updatedLog: { ...log } });
+    },
+    updateTimesheetEntry: async (employeeId: string, startLogId: string, endLogId: string, newStartTime: number, newEndTime: number): Promise<{ updatedLogs: AttendanceLogEntry[] }> => {
+        const startLog = mockAttendanceLog.find(l => l.id === startLogId);
+        const endLog = mockAttendanceLog.find(l => l.id === endLogId);
+
+        if (!startLog || !endLog) throw new Error("Log entries not found");
+
+        startLog.timestamp = newStartTime;
+        endLog.timestamp = newEndTime;
+
+        return Promise.resolve({ updatedLogs: [{ ...startLog }, { ...endLog }] });
+    },
+    getActivityStatuses: async (): Promise<ActivityStatus[]> => Promise.resolve([...mockActivityStatuses]),
+    addActivityStatus: async (name: string, color: string): Promise<ActivityStatus> => {
+        const newStatus = { id: getNextId('status'), name, color };
+        mockActivityStatuses.push(newStatus);
+        return Promise.resolve(newStatus);
+    },
+    removeActivityStatus: async (id: string): Promise<{ success: boolean }> => {
+        mockActivityStatuses = mockActivityStatuses.filter(s => s.id !== id);
+        return Promise.resolve({ success: true });
+    },
+    getPayrollChangeTypes: async (): Promise<PayrollChangeType[]> => Promise.resolve([...mockPayrollChangeTypes]),
+    addPayrollChangeType: async (name: string, color: string): Promise<PayrollChangeType> => {
+        const newType = { id: getNextId('payroll'), name, color };
+        mockPayrollChangeTypes.push(newType);
+        return Promise.resolve(newType);
+    },
+    updatePayrollChangeType: async (id: string, updates: Partial<Omit<PayrollChangeType, 'id'>>): Promise<PayrollChangeType> => {
+        const index = mockPayrollChangeTypes.findIndex(t => t.id === id);
+        if (index !== -1) {
+            mockPayrollChangeTypes[index] = { ...mockPayrollChangeTypes[index], ...updates };
+            return Promise.resolve(mockPayrollChangeTypes[index]);
+        }
+        throw new Error("Payroll change type not found");
+    },
+    removePayrollChangeType: async (id: string): Promise<{ success: boolean }> => {
+        mockPayrollChangeTypes = mockPayrollChangeTypes.filter(t => t.id !== id);
+        return Promise.resolve({ success: true });
+    },
+    getWorkSchedules: async (): Promise<WorkSchedule[]> => Promise.resolve([...mockWorkSchedules]),
+    addWorkSchedule: async (scheduleData: Omit<WorkSchedule, 'id'>): Promise<WorkSchedule> => {
+        const newSchedule: WorkSchedule = { ...scheduleData, id: getNextId('schedule') };
+        mockWorkSchedules.push(newSchedule);
+        return Promise.resolve(newSchedule);
+    },
+    updateWorkSchedule: async (id: string, updates: Partial<Omit<WorkSchedule, 'id'>>): Promise<WorkSchedule> => {
+        const index = mockWorkSchedules.findIndex(s => s.id === id);
+        if (index !== -1) {
+            mockWorkSchedules[index] = { ...mockWorkSchedules[index], ...updates };
+            return Promise.resolve(mockWorkSchedules[index]);
+        }
+        throw new Error("Work schedule not found");
+    },
+    removeWorkSchedule: async (id: string): Promise<{ success: boolean }> => {
+        mockWorkSchedules = mockWorkSchedules.filter(s => s.id !== id);
+        return Promise.resolve({ success: true });
+    },
+    getTasks: async (): Promise<Task[]> => Promise.resolve([...mockTasks]),
+    addTask: async (taskData: Omit<Task, 'id'>): Promise<Task> => {
+        const newTask: Task = { ...taskData, id: getNextId('task') };
+        mockTasks.push(newTask);
+        return Promise.resolve(newTask);
+    },
+    getCalendarEvents: async (): Promise<CalendarEvent[]> => Promise.resolve([...mockCalendarEvents]),
+    addCalendarEvent: async (eventData: Omit<CalendarEvent, 'id'>): Promise<CalendarEvent> => {
+        const newEvent: CalendarEvent = { ...eventData, id: getNextId('event') };
+        mockCalendarEvents.push(newEvent);
+        return Promise.resolve(newEvent);
+    },
+    updateCalendarEvent: async (eventData: CalendarEvent): Promise<CalendarEvent> => {
+        const index = mockCalendarEvents.findIndex(e => e.id === eventData.id);
+        if (index !== -1) {
+            mockCalendarEvents[index] = { ...mockCalendarEvents[index], ...eventData };
+            return Promise.resolve(mockCalendarEvents[index]);
+        }
+        throw new Error("Calendar event not found");
+    },
+    removeCalendarEvent: async (eventId: string): Promise<{ success: boolean }> => {
+        mockCalendarEvents = mockCalendarEvents.filter(e => e.id !== eventId);
+        return Promise.resolve({ success: true });
+    },
   };
 };
 
-export const updateTimesheetEntry = async (
-  employeeId: number,
-  startLogId: number,
-  endLogId: number,
-  newStartTime: number,
-  newEndTime: number
-): Promise<{ updatedLogs: AttendanceLogEntry[] }> => {
-    await simulateNetworkDelay(300);
-    
-    // --- Validation: Check for overlaps ---
-    const date = new Date(newStartTime);
-    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-    const dayEnd = new Date(dayStart).setHours(23, 59, 59, 999);
-
-    const otherLogsOnSameDay = attendanceLog.filter(log => 
-        log.employeeId === employeeId &&
-        log.id !== startLogId && 
-        log.id !== endLogId &&
-        log.timestamp >= dayStart &&
-        log.timestamp <= dayEnd
-    );
-
-    for (const log of otherLogsOnSameDay) {
-        // Check if another log point falls within the new time range
-        if (log.timestamp > newStartTime && log.timestamp < newEndTime) {
-            throw new Error(`Edición fallida: El nuevo rango de tiempo (${new Date(newStartTime).toLocaleTimeString()} - ${new Date(newEndTime).toLocaleTimeString()}) se solapa con una entrada existente a las ${new Date(log.timestamp).toLocaleTimeString()}.`);
+// --- REAL API IMPLEMENTATION ---
+const createRealApi = () => {
+    const getDb = () => {
+        if (!db) {
+            throw new Error("Firestore is not initialized.");
         }
+        return db;
     }
 
-    let updatedLogs: AttendanceLogEntry[] = [];
-    
-    const startLogIndex = attendanceLog.findIndex(log => log.id === startLogId);
-    const endLogIndex = attendanceLog.findIndex(log => log.id === endLogId);
+    return {
+        loginWithEmail: async (email: string): Promise<{ success: boolean, user?: Employee }> => {
+            // FIX: This function should throw on database error, and only return success:false for "not found"
+            try {
+                const q = getDb().collection('employees').where("email", "==", email).limit(1);
+                const querySnapshot = await q.get();
 
-    if (startLogIndex === -1 || endLogIndex === -1) {
-        throw new Error("No se encontraron las entradas de registro originales.");
-    }
+                if (querySnapshot.empty) {
+                    console.warn(`Login failed: No user found with email ${email}`);
+                    return { success: false };
+                }
+                
+                const userDoc = querySnapshot.docs[0];
+                const user = { ...(userDoc.data() as Omit<Employee, 'id'>), id: userDoc.id };
+                return { success: true, user: user };
+            } catch (error) {
+                console.error("Error querying database during login:", error);
+                throw error; // Propagate the error to be handled by the caller
+            }
+        },
+        streamEmployees: (callback: (employees: Employee[]) => void): (() => void) => {
+            // FIX: Use v8 namespaced syntax for collection and onSnapshot
+            const q = getDb().collection('employees');
+            const unsubscribe = q.onSnapshot((querySnapshot) => {
+                const employees = querySnapshot.docs.map(doc => ({ ...(doc.data() as Omit<Employee, 'id'>), id: doc.id }));
+                callback(employees);
+            });
+            return unsubscribe;
+        },
+        streamAttendanceLog: (callback: (log: AttendanceLogEntry[]) => void): (() => void) => {
+            // FIX: Use v8 namespaced syntax for collection and onSnapshot
+            const q = getDb().collection('attendanceLog');
+            const unsubscribe = q.onSnapshot((querySnapshot) => {
+                const log = querySnapshot.docs.map(doc => ({ ...(doc.data() as Omit<AttendanceLogEntry, 'id'>), id: doc.id }));
+                callback(log);
+            });
+            return unsubscribe;
+        },
+        getEmployees: async (): Promise<Employee[]> => {
+            // FIX: Use v8 namespaced syntax for collection and get
+            const snapshot = await getDb().collection('employees').get();
+            return snapshot.docs.map(doc => ({ ...(doc.data() as Omit<Employee, 'id'>), id: doc.id }));
+        },
+        addEmployee: async (employeeData: Omit<Employee, 'id' | 'status' | 'lastClockInTime' | 'currentStatusStartTime'>): Promise<Employee> => {
+            const newEmployeeData = {
+              ...employeeData,
+              status: 'Clocked Out',
+              lastClockInTime: null,
+              currentStatusStartTime: null,
+            };
+            // FIX: Use v8 namespaced syntax for collection and add
+            const docRef = await getDb().collection('employees').add(newEmployeeData);
+            return { ...newEmployeeData, id: docRef.id };
+        },
+        removeEmployee: async (employeeId: string): Promise<{ success: boolean }> => {
+            // FIX: Use v8 namespaced syntax for collection, doc, and delete
+            await getDb().collection('employees').doc(employeeId).delete();
+            return { success: true };
+        },
+        updateEmployeeStatus: async (employeeToUpdate: Employee): Promise<Employee> => {
+            const { id, ...data } = employeeToUpdate;
+            // FIX: Use v8 namespaced syntax for collection, doc, and update
+            await getDb().collection('employees').doc(id).update(data);
+            return employeeToUpdate;
+        },
+        updateEmployeeDetails: async (employeeToUpdate: Employee): Promise<Employee> => {
+            const { id, ...data } = employeeToUpdate;
+            // FIX: Use v8 namespaced syntax for collection, doc, and update
+            await getDb().collection('employees').doc(id).update(data);
+            return employeeToUpdate;
+        },
+        getAttendanceLog: async (): Promise<AttendanceLogEntry[]> => {
+            // FIX: Use v8 namespaced syntax for collection and get
+            const snapshot = await getDb().collection('attendanceLog').get();
+            return snapshot.docs.map(doc => ({ ...(doc.data() as Omit<AttendanceLogEntry, 'id'>), id: doc.id }));
+        },
+        addAttendanceLogEntry: async (logEntry: Omit<AttendanceLogEntry, 'id'>): Promise<AttendanceLogEntry> => {
+            // FIX: Use v8 namespaced syntax for collection and add
+            const docRef = await getDb().collection('attendanceLog').add(logEntry);
+            return { ...logEntry, id: docRef.id };
+        },
+        updateAttendanceLogEntry: async (logId: string, updates: { action: string, timestamp: number }): Promise<AttendanceLogEntry> => {
+            // FIX: Use v8 namespaced syntax for collection, doc, update, and get
+            const logRef = getDb().collection('attendanceLog').doc(logId);
+            await logRef.update(updates);
+            const updatedDoc = await logRef.get();
+            return { ...(updatedDoc.data() as Omit<AttendanceLogEntry, 'id'>), id: logId };
+        },
+        updateEmployeeCurrentSession: async (employeeId: string, newStartTime: number): Promise<{ updatedEmployee: Employee, updatedLog: AttendanceLogEntry }> => {
+            // FIX: Use v8 namespaced syntax for doc and get
+            const employeeRef = getDb().collection('employees').doc(employeeId);
+            const employeeDoc = await employeeRef.get();
+            if (!employeeDoc.exists) throw new Error("Employee not found");
+            const employee = { ...(employeeDoc.data() as Omit<Employee, 'id'>), id: employeeDoc.id };
+            
+            if (!employee.currentStatusStartTime) throw new Error("Employee has no active session");
+            const originalStartTime = employee.currentStatusStartTime;
 
-    // Update the timestamps
-    const updatedStartLog = { ...attendanceLog[startLogIndex], timestamp: newStartTime };
-    const updatedEndLog = { ...attendanceLog[endLogIndex], timestamp: newEndTime };
+            // FIX: Use v8 namespaced syntax for query and get
+            const logQuery = getDb().collection('attendanceLog').where("employeeId", "==", employeeId).where("timestamp", "==", originalStartTime);
+            const logSnapshot = await logQuery.get();
+            if (logSnapshot.empty) throw new Error("Log entry for current session not found");
 
-    attendanceLog[startLogIndex] = updatedStartLog;
-    attendanceLog[endLogIndex] = updatedEndLog;
-    
-    updatedLogs.push(updatedStartLog, updatedEndLog);
+            const logDoc = logSnapshot.docs[0];
+            // FIX: Use v8 namespaced syntax for doc
+            const logRef = getDb().collection('attendanceLog').doc(logDoc.id);
 
-    return { updatedLogs: JSON.parse(JSON.stringify(updatedLogs)) };
-};
+            const updatedEmployeeData: Partial<Employee> = { currentStatusStartTime: newStartTime };
+            if (employee.lastClockInTime === originalStartTime) {
+                updatedEmployeeData.lastClockInTime = newStartTime;
+            }
+            
+            // FIX: Use v8 namespaced syntax for batch
+            const batch = getDb().batch();
+            batch.update(logRef, { timestamp: newStartTime });
+            batch.update(employeeRef, updatedEmployeeData);
+            await batch.commit();
 
-// --- Activity Status API ---
-export const getActivityStatuses = async (): Promise<ActivityStatus[]> => {
-  await simulateNetworkDelay(100);
-  return JSON.parse(JSON.stringify(activityStatuses));
-};
+            return {
+                updatedEmployee: { ...employee, ...updatedEmployeeData },
+                updatedLog: { ...(logDoc.data() as Omit<AttendanceLogEntry, 'id'>), timestamp: newStartTime, id: logDoc.id }
+            };
+        },
+        updateTimesheetEntry: async (employeeId: string, startLogId: string, endLogId: string, newStartTime: number, newEndTime: number): Promise<{ updatedLogs: AttendanceLogEntry[] }> => {
+            // FIX: Use v8 namespaced syntax for batch and doc
+            const batch = getDb().batch();
+            const startLogRef = getDb().collection('attendanceLog').doc(startLogId);
+            const endLogRef = getDb().collection('attendanceLog').doc(endLogId);
 
-export const addActivityStatus = async (name: string, color: string): Promise<ActivityStatus> => {
-  await simulateNetworkDelay(200);
-  const newStatus: ActivityStatus = {
-    id: name.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now(),
-    name,
-    color,
-  };
-  activityStatuses = [...activityStatuses, newStatus];
-  return newStatus;
-};
+            const startLogDoc = await startLogRef.get();
+            const endLogDoc = await endLogRef.get();
 
-export const removeActivityStatus = async (id: string): Promise<{ success: boolean }> => {
-  await simulateNetworkDelay(200);
-  const initialLength = activityStatuses.length;
-  activityStatuses = activityStatuses.filter(status => status.id !== id);
-  return { success: activityStatuses.length < initialLength };
-};
-
-// --- Payroll Change Types API ---
-export const getPayrollChangeTypes = async (): Promise<PayrollChangeType[]> => {
-    await simulateNetworkDelay(100);
-    return JSON.parse(JSON.stringify(payrollChangeTypes));
-};
-
-export const addPayrollChangeType = async (name: string, color: string): Promise<PayrollChangeType> => {
-    await simulateNetworkDelay(200);
-    const newType: PayrollChangeType = {
-        id: name.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now(),
-        name,
-        color,
+            // FIX: The `exists` property on a DocumentSnapshot is a boolean, not a function. Changed `endLogDoc.exists()` to `endLogDoc.exists`.
+            if (!startLogDoc.exists || !endLogDoc.exists) throw new Error("Log entries not found");
+            
+            batch.update(startLogRef, { timestamp: newStartTime });
+            batch.update(endLogRef, { timestamp: newEndTime });
+            await batch.commit();
+            
+            return { 
+                updatedLogs: [
+                    { ...(startLogDoc.data() as Omit<AttendanceLogEntry, 'id'>), id: startLogDoc.id, timestamp: newStartTime },
+                    { ...(endLogDoc.data() as Omit<AttendanceLogEntry, 'id'>), id: endLogDoc.id, timestamp: newEndTime },
+                ]
+            };
+        },
+        getActivityStatuses: async (): Promise<ActivityStatus[]> => {
+            // FIX: Use v8 namespaced syntax for collection and get
+            const snapshot = await getDb().collection('activityStatuses').get();
+            return snapshot.docs.map(doc => ({ ...(doc.data() as Omit<ActivityStatus, 'id'>), id: doc.id }));
+        },
+        addActivityStatus: async (name: string, color: string): Promise<ActivityStatus> => {
+            // FIX: Use v8 namespaced syntax for collection and add
+            const docRef = await getDb().collection('activityStatuses').add({ name, color });
+            return { id: docRef.id, name, color };
+        },
+        removeActivityStatus: async (id: string): Promise<{ success: boolean }> => {
+            // FIX: Use v8 namespaced syntax for collection, doc, and delete
+            await getDb().collection('activityStatuses').doc(id).delete();
+            return { success: true };
+        },
+        getPayrollChangeTypes: async (): Promise<PayrollChangeType[]> => {
+            // FIX: Use v8 namespaced syntax for collection and get
+            const snapshot = await getDb().collection('payrollChangeTypes').get();
+            return snapshot.docs.map(doc => ({ ...(doc.data() as Omit<PayrollChangeType, 'id'>), id: doc.id }));
+        },
+        addPayrollChangeType: async (name: string, color: string): Promise<PayrollChangeType> => {
+            // FIX: Use v8 namespaced syntax for collection and add
+            const docRef = await getDb().collection('payrollChangeTypes').add({ name, color });
+            return { id: docRef.id, name, color };
+        },
+        updatePayrollChangeType: async (id: string, updates: Partial<Omit<PayrollChangeType, 'id'>>): Promise<PayrollChangeType> => {
+            // FIX: Use v8 namespaced syntax for collection, doc, update, and get
+            const typeRef = getDb().collection('payrollChangeTypes').doc(id);
+            await typeRef.update(updates);
+            const updatedDoc = await typeRef.get();
+            return { ...(updatedDoc.data() as Omit<PayrollChangeType, 'id'>), id } as PayrollChangeType;
+        },
+        removePayrollChangeType: async (id: string): Promise<{ success: boolean }> => {
+            // FIX: Use v8 namespaced syntax for collection, doc, and delete
+            await getDb().collection('payrollChangeTypes').doc(id).delete();
+            return { success: true };
+        },
+        getWorkSchedules: async (): Promise<WorkSchedule[]> => {
+            // FIX: Use v8 namespaced syntax for collection and get
+            const snapshot = await getDb().collection('workSchedules').get();
+            return snapshot.docs.map(doc => ({ ...(doc.data() as Omit<WorkSchedule, 'id'>), id: doc.id }));
+        },
+        addWorkSchedule: async (scheduleData: Omit<WorkSchedule, 'id'>): Promise<WorkSchedule> => {
+            // FIX: Use v8 namespaced syntax for collection and add
+            const docRef = await getDb().collection('workSchedules').add(scheduleData);
+            return { ...scheduleData, id: docRef.id };
+        },
+        updateWorkSchedule: async (id: string, updates: Partial<Omit<WorkSchedule, 'id'>>): Promise<WorkSchedule> => {
+            // FIX: Use v8 namespaced syntax for collection, doc, update, and get
+            const scheduleRef = getDb().collection('workSchedules').doc(id);
+            await scheduleRef.update(updates);
+            const updatedDoc = await scheduleRef.get();
+            return { ...(updatedDoc.data() as Omit<WorkSchedule, 'id'>), id } as WorkSchedule;
+        },
+        removeWorkSchedule: async (id: string): Promise<{ success: boolean }> => {
+            // FIX: Use v8 namespaced syntax for collection, doc, and delete
+            await getDb().collection('workSchedules').doc(id).delete();
+            return { success: true };
+        },
+        getTasks: async (): Promise<Task[]> => {
+            // FIX: Use v8 namespaced syntax for collection and get
+            const snapshot = await getDb().collection('tasks').get();
+            return snapshot.docs.map(doc => ({ ...(doc.data() as Omit<Task, 'id'>), id: doc.id }));
+        },
+        addTask: async (taskData: Omit<Task, 'id'>): Promise<Task> => {
+            // FIX: Use v8 namespaced syntax for collection and add
+            const docRef = await getDb().collection('tasks').add(taskData);
+            return { ...taskData, id: docRef.id };
+        },
+        getCalendarEvents: async (): Promise<CalendarEvent[]> => {
+            // FIX: Use v8 namespaced syntax for collection and get
+            const snapshot = await getDb().collection('calendarEvents').get();
+            return snapshot.docs.map(doc => ({ ...(doc.data() as Omit<CalendarEvent, 'id'>), id: doc.id }));
+        },
+        addCalendarEvent: async (eventData: Omit<CalendarEvent, 'id'>): Promise<CalendarEvent> => {
+            // FIX: Use v8 namespaced syntax for collection and add
+            const docRef = await getDb().collection('calendarEvents').add(eventData);
+            return { ...eventData, id: docRef.id };
+        },
+        updateCalendarEvent: async (eventData: CalendarEvent): Promise<CalendarEvent> => {
+            const { id, ...data } = eventData;
+            // FIX: Use v8 namespaced syntax for collection, doc, and update
+            await getDb().collection('calendarEvents').doc(id).update(data);
+            return eventData;
+        },
+        removeCalendarEvent: async (eventId: string): Promise<{ success: boolean }> => {
+            // FIX: Use v8 namespaced syntax for collection, doc, and delete
+            await getDb().collection('calendarEvents').doc(eventId).delete();
+            return { success: true };
+        },
     };
-    payrollChangeTypes = [...payrollChangeTypes, newType];
-    return newType;
 };
 
-export const updatePayrollChangeType = async (id: string, updates: Partial<Omit<PayrollChangeType, 'id'>>): Promise<PayrollChangeType> => {
-    await simulateNetworkDelay(100);
-    let updatedType: PayrollChangeType | undefined;
-    payrollChangeTypes = payrollChangeTypes.map(type => {
-        if (type.id === id) {
-            updatedType = { ...type, ...updates };
-            return updatedType;
-        }
-        return type;
-    });
-    if (!updatedType) throw new Error("Type not found");
-    return updatedType;
-}
+const api = isFirebaseEnabled ? createRealApi() : createMockApi();
 
-export const removePayrollChangeType = async (id: string): Promise<{ success: boolean }> => {
-    await simulateNetworkDelay(200);
-    const initialLength = payrollChangeTypes.length;
-    payrollChangeTypes = payrollChangeTypes.filter(type => type.id !== id);
-    return { success: payrollChangeTypes.length < initialLength };
-};
-
-// --- Work Schedules API ---
-export const getWorkSchedules = async (): Promise<WorkSchedule[]> => {
-    await simulateNetworkDelay(100);
-    return JSON.parse(JSON.stringify(workSchedules));
-};
-
-export const addWorkSchedule = async (scheduleData: Omit<WorkSchedule, 'id'>): Promise<WorkSchedule> => {
-    await simulateNetworkDelay(200);
-    const newSchedule: WorkSchedule = {
-        ...scheduleData,
-        id: `schedule-${Date.now()}`,
-    };
-    workSchedules = [...workSchedules, newSchedule];
-    return newSchedule;
-};
-
-export const updateWorkSchedule = async (id: string, updates: Partial<Omit<WorkSchedule, 'id'>>): Promise<WorkSchedule> => {
-    await simulateNetworkDelay(100);
-    let updatedSchedule: WorkSchedule | undefined;
-    workSchedules = workSchedules.map(schedule => {
-        if (schedule.id === id) {
-            updatedSchedule = { ...schedule, ...updates };
-            return updatedSchedule;
-        }
-        return schedule;
-    });
-    if (!updatedSchedule) throw new Error("Schedule not found");
-    return updatedSchedule;
-};
-
-export const removeWorkSchedule = async (id: string): Promise<{ success: boolean }> => {
-    await simulateNetworkDelay(200);
-    const initialLength = workSchedules.length;
-    workSchedules = workSchedules.filter(schedule => schedule.id !== id);
-    return { success: workSchedules.length < initialLength };
-};
-
-
-// --- Tasks API for Schedule Page ---
-export const getTasks = async (): Promise<Task[]> => {
-  await simulateNetworkDelay(300);
-  return JSON.parse(JSON.stringify(tasks));
-};
-
-export const addTask = async (taskData: Omit<Task, 'id'>): Promise<Task> => {
-    await simulateNetworkDelay(200);
-    const newTask: Task = {
-        ...taskData,
-        id: Date.now(),
-    };
-    tasks = [...tasks, newTask];
-    return newTask;
-}
-
-// --- Calendar Events API ---
-export const getCalendarEvents = async (): Promise<CalendarEvent[]> => {
-  await simulateNetworkDelay(200);
-  return JSON.parse(JSON.stringify(calendarEvents));
-};
-
-export const addCalendarEvent = async (eventData: Omit<CalendarEvent, 'id'>): Promise<CalendarEvent> => {
-    await simulateNetworkDelay(200);
-    const newEvent: CalendarEvent = {
-        ...eventData,
-        id: Date.now(),
-    };
-    calendarEvents = [...calendarEvents, newEvent];
-    return newEvent;
-};
-
-export const updateCalendarEvent = async (eventData: CalendarEvent): Promise<CalendarEvent> => {
-    await simulateNetworkDelay(200);
-    calendarEvents = calendarEvents.map(e => e.id === eventData.id ? eventData : e);
-    return eventData;
-};
-
-export const removeCalendarEvent = async (eventId: number): Promise<{ success: boolean }> => {
-    await simulateNetworkDelay(200);
-    const initialLength = calendarEvents.length;
-    calendarEvents = calendarEvents.filter(e => e.id !== eventId);
-    return { success: calendarEvents.length < initialLength };
-};
+export const {
+    loginWithEmail,
+    streamEmployees,
+    streamAttendanceLog,
+    getEmployees,
+    addEmployee,
+    removeEmployee,
+    updateEmployeeStatus,
+    updateEmployeeDetails,
+    getAttendanceLog,
+    addAttendanceLogEntry,
+    updateAttendanceLogEntry,
+    updateEmployeeCurrentSession,
+    updateTimesheetEntry,
+    getActivityStatuses,
+    addActivityStatus,
+    removeActivityStatus,
+    getPayrollChangeTypes,
+    addPayrollChangeType,
+    updatePayrollChangeType,
+    removePayrollChangeType,
+    getWorkSchedules,
+    addWorkSchedule,
+    updateWorkSchedule,
+    removeWorkSchedule,
+    getTasks,
+    addTask,
+    getCalendarEvents,
+    addCalendarEvent,
+    updateCalendarEvent,
+    removeCalendarEvent,
+} = api;

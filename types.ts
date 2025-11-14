@@ -1,7 +1,7 @@
 export type EmployeeStatus = string;
 
 export interface Employee {
-  id: number;
+  id: string;
   name: string;
   email: string;
   phone: string;
@@ -17,15 +17,15 @@ export interface Employee {
 export type AttendanceAction = string;
 
 export interface AttendanceLogEntry {
-  id: number; // using timestamp for simplicity
-  employeeId: number;
+  id: string;
+  employeeId: string;
   employeeName: string;
   action: AttendanceAction;
   timestamp: number;
 }
 
 export interface TimeEntry {
-  id: number;
+  id: string;
   activity: string;
   startTime: number;
   endTime: number;
@@ -54,7 +54,7 @@ export interface ActivityStatus {
 
 export interface TimesheetEntry {
   key: string;
-  employeeId: number;
+  employeeId: string;
   employeeName: string;
   date: string;
   dayOfWeek: string;
@@ -63,26 +63,26 @@ export interface TimesheetEntry {
   timeOut: number;
   duration: number; // in seconds
   color?: string;
-  startLogId: number;
-  endLogId: number;
+  startLogId: string;
+  endLogId: string;
 }
 
 export type TaskStatus = 'To-do' | 'In Progress' | 'Complete';
 
 export interface Task {
-  id: number;
+  id: string;
   name: string;
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
   status: TaskStatus;
-  assigneeId?: number;
+  assigneeId?: string;
   progress: number;
   color: string;
 }
 
 export interface CalendarEvent {
-  id: number;
-  employeeId: number;
+  id: string;
+  employeeId: string;
   type: string; // 'Vacation', 'Family Day', etc.
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD

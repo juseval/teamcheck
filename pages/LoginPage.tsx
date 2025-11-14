@@ -1,26 +1,30 @@
 import React, { useState } from 'react';
-import { ArrowLeftIcon } from '../components/Icons.tsx';
+import { ArrowLeftIcon } from '../components/Icons';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface LoginPageProps {
-  onLogin: () => Promise<void>;
+  onLogin: (credentials: { email: string; }) => Promise<void>;
   onNavigateToRegister: () => void;
   onNavigateToHome: () => void;
 }
 
 const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, onNavigateToHome }) => {
-  const [email, setEmail] = useState('demo@teamcheck.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const { addNotification } = useNotification();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (email && password) {
       setIsLoggingIn(true);
       try {
-        await onLogin();
+        await onLogin({ email });
+        // Successful login will unmount this component, no need to setIsLoggingIn(false)
       } catch (error) {
-        console.error("Login failed", error);
-        setIsLoggingIn(false); // Re-enable button on failure
+        // The notification is handled by the `onLogin` function.
+        // We only need to reset the UI state here.
+        setIsLoggingIn(false);
       }
     }
   };
@@ -42,11 +46,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
         </div>
         
         <div className="bg-white rounded-xl shadow-md p-8 border border-bokara-grey/10">
-          <div className="text-center mb-6 bg-lucius-lime/10 p-3 rounded-lg border border-lucius-lime/20">
-            <p className="text-sm text-bokara-grey">
-                Using <span className="font-bold">demo credentials</span>. <br/> Just click Sign In to continue.
-            </p>
-          </div>
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-lucius-lime mb-2">

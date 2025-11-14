@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { AttendanceLogEntry, AttendanceAction } from '../types.ts';
+import { AttendanceLogEntry, AttendanceAction } from '../types';
 
 interface DashboardSummaryProps {
   attendanceLog: AttendanceLogEntry[];
@@ -18,7 +18,7 @@ const DashboardSummary: React.FC<DashboardSummaryProps> = ({ attendanceLog }) =>
     let breakTime = 0;
     const sortedLog = [...attendanceLog].sort((a, b) => a.timestamp - b.timestamp);
 
-    const logsByEmployee: { [key: number]: AttendanceLogEntry[] } = {};
+    const logsByEmployee: { [key: string]: AttendanceLogEntry[] } = {};
     for (const entry of sortedLog) {
       if (!logsByEmployee[entry.employeeId]) {
         logsByEmployee[entry.employeeId] = [];

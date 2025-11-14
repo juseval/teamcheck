@@ -32,20 +32,17 @@
     <script>
       // This polyfill is used to provide the Gemini API Key to the application.
       // In a real-world scenario, this would be handled by a secure build process.
-      window.process = {
-        env: {
-          API_KEY: 'AIzaSyD2FS-gDuf7TYquc6Crb24dlpom5gZhQng'
-        }
-      };
-    </script>
+         </script>
   <script type="importmap">
 {
   "imports": {
-    "react": "https://esm.sh/react@19.0.0-rc.0",
-    "react-dom/client": "https://esm.sh/react-dom@19.0.0-rc.0/client",
-    "@google/genai": "https://esm.sh/@google/genai@^1.15.0",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "vite": "https://aistudiocdn.com/vite@^7.2.2",
+    "firebase/": "https://aistudiocdn.com/firebase@^12.5.0/",
+    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.0"
   }
 }
 </script>

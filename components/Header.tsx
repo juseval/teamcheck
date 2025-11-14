@@ -1,17 +1,16 @@
 import React from 'react';
-import ProfileDropdown from './ProfileDropdown.tsx';
-import { User } from '../types.ts';
+import ProfileDropdown from './ProfileDropdown';
+import { User } from '../types';
 
 interface HeaderProps {
   currentPage: string;
   onNavigate: (page: string) => void;
   user: User;
   userRole: 'admin' | 'employee';
-  onToggleRole: () => void;
   onLogout: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, user, userRole, onToggleRole, onLogout }) => {
+const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, user, userRole, onLogout }) => {
 
   return (
     <header className="py-4 px-4 sm:px-8 bg-bright-white/80 backdrop-blur-md shadow-sm w-full flex justify-between items-center sticky top-0 z-20 border-b border-bokara-grey/10">
@@ -22,22 +21,12 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, user, userRole
         </h1>
       </button>
       
-      {/* Center: Role Switcher (for demo) */}
+      {/* Center: Role Display */}
       <div className="absolute left-1/2 -translate-x-1/2">
         <div className="flex items-center gap-1 rounded-lg bg-whisper-white p-1 border border-bokara-grey/10 shadow-inner">
-          <span className="text-sm font-semibold text-bokara-grey/70 hidden sm:inline px-2">View as:</span>
-           <button 
-            onClick={() => userRole !== 'admin' && onToggleRole()}
-            className={`px-3 py-1 text-sm font-semibold rounded-md transition-colors ${userRole === 'admin' ? 'bg-lucius-lime text-bokara-grey' : 'text-bokara-grey/70 hover:bg-white'}`}
-          >
-            Admin
-          </button>
-          <button 
-            onClick={() => userRole !== 'employee' && onToggleRole()}
-            className={`px-3 py-1 text-sm font-semibold rounded-md transition-colors ${userRole === 'employee' ? 'bg-lucius-lime text-bokara-grey' : 'text-bokara-grey/70 hover:bg-white'}`}
-          >
-            Employee
-          </button>
+          <span className="px-3 py-1 text-sm font-semibold rounded-md bg-lucius-lime text-bokara-grey capitalize">
+            {userRole} View
+          </span>
         </div>
       </div>
 
