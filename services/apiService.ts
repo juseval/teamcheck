@@ -29,7 +29,7 @@ const createMockApi = () => {
   };
 
   // Initialize state from storage, ensuring data integrity
-  // We cast 'e' to 'any' to safely access 'uid' even if TS thinks it's missing during the map
+  // Cast e to 'any' to avoid TS errors when checking for uid on legacy data
   let mockEmployees: Employee[] = loadFromStorage<any[]>('tc_db_employees', JSON.parse(JSON.stringify(initialEmployees))).map((e: any) => ({
       ...e,
       uid: e.uid || getNextId('user') // Ensure uid exists on load for legacy data
@@ -79,8 +79,7 @@ const createMockApi = () => {
     loginWithEmailAndPassword: async (email: string, password: string): Promise<Employee> => {
         const user = mockEmployees.find(e => e.email === email);
         if (user) {
-            // In mock, any password is fine
-            // Ensure uid is present (it should be due to initialization logic)
+            // In mock, any password is fine as long as not empty logic is handled by UI
             mockCurrentUser = { uid: user.uid || 'mock-uid', email: user.email };
             return Promise.resolve(user);
         }

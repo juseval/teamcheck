@@ -3,7 +3,7 @@ export type EmployeeStatus = string;
 
 export interface Employee {
   id: string;
-  uid?: string; // UID from Firebase Authentication
+  uid?: string; // UID from Firebase Authentication or Mock ID
   name: string;
   email: string;
   phone: string;
