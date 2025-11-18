@@ -1,10 +1,12 @@
+
 import React, { useState, useEffect } from 'react';
-import { Employee } from '../types.ts';
+import { Employee } from '../types';
 
 interface EditTimeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (employeeId: number, newStartTime: number) => void;
+  // FIX: Changed employeeId type from number to string.
+  onSave: (employeeId: string, newStartTime: number) => void;
   employee: Employee | null;
 }
 

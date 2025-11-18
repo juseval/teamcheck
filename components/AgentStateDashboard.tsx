@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { Employee, WorkSchedule, ActivityStatus, CalendarEvent } from '../types.ts';
+import { Employee, WorkSchedule, ActivityStatus, CalendarEvent } from '../types';
 import { PowerIcon, PhoneStatusIcon, CrossStatusIcon, CheckStatusIcon, SpeakerStatusIcon, FilterIcon } from './Icons';
 
 interface AgentStateDashboardProps {
@@ -17,7 +18,7 @@ interface Agent {
   fullName: string;
   state: AgentState;
   reasonCode: string;
-  stateDuration: number;
+  stateDuration: number | null;
   callType: 'Inbound' | 'Outbound' | '-';
   schedule: string;
 }
@@ -71,22 +72,23 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
     
     const agents = useMemo(() => {
         const now = new Date();
-        const todayStr = now.toISOString().split('T')[0];
-        const todayDayOfWeek = now.getDay();
         const nowTs = now.getTime();
+        
+        // Construct YYYY-MM-DD string safely using local time values
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const todayStr = `${year}-${month}-${day}`;
 
-        // FIX: Changed Map key type from number to string.
         const todaysEventsMap = new Map<string, CalendarEvent>();
         for (const event of calendarEvents) {
-            const startDate = new Date(event.startDate + 'T00:00:00');
-            const endDate = new Date(event.endDate + 'T23:59:59');
-            if (now >= startDate && now <= endDate) {
+            // Compare date strings directly to avoid timezone shifts
+            if (todayStr >= event.startDate && todayStr <= event.endDate) {
                 todaysEventsMap.set(event.employeeId, event);
             }
         }
 
         const processedAgentList: Agent[] = [];
-        // FIX: Changed Set type from number to string.
         const processedEmployeeIds = new Set<string>();
 
         // 1. Process employees with calendar events for today
@@ -95,27 +97,18 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
             if (employee) {
                 processedEmployeeIds.add(employeeId);
 
-                let duration = 0;
                 const schedule = employee.workScheduleId ? scheduleMap.get(employee.workScheduleId) : null;
                 const scheduleString = schedule ? `${schedule.startTime} - ${schedule.endTime}` : 'N/A';
                 
-                // Calculate duration since shift start
-                if (schedule && schedule.days.includes(todayDayOfWeek)) {
-                    const [hours, minutes] = schedule.startTime.split(':').map(Number);
-                    const shiftStartTime = new Date(todayStr);
-                    shiftStartTime.setHours(hours, minutes, 0, 0);
-
-                    if (nowTs > shiftStartTime.getTime()) {
-                        duration = Math.floor((nowTs - shiftStartTime.getTime()) / 1000);
-                    }
-                }
+                // For calendar events (Novedades), we do NOT show a duration/timer.
+                // It should display as static.
 
                 processedAgentList.push({
                     id: employee.id,
                     fullName: employee.name,
                     state: 'Not Ready',
                     reasonCode: event.type,
-                    stateDuration: duration,
+                    stateDuration: null, // Set to null to display '-'
                     callType: '-',
                     schedule: scheduleString,
                 });
@@ -137,7 +130,7 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
                     fullName: employee.name,
                     state: 'Offline',
                     reasonCode: '-',
-                    stateDuration: 0,
+                    stateDuration: null, // Set to null for Offline
                     callType: '-',
                     schedule: scheduleString,
                 });
@@ -145,6 +138,7 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
                 let state: AgentState = 'Not Ready';
                 let reasonCode = employee.status;
                 let callType: Agent['callType'] = '-';
+                let duration: number | null = employee.currentStatusStartTime ? Math.floor((nowTs - employee.currentStatusStartTime) / 1000) : 0;
 
                 switch(employee.status) {
                     case 'Working':
@@ -165,13 +159,19 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
                         state = 'Not Ready';
                         reasonCode = employee.status;
                 }
+                
+                // FIX: If the duration is absurdly high (e.g., > 24 hours), it likely means the status is a long-term one (like Vacation/Sick)
+                // that wasn't caught by the calendar event logic, or a stale timer. We should hide the timer.
+                if (duration && duration > 86400) {
+                    duration = null;
+                }
 
                 processedAgentList.push({
                     id: employee.id,
                     fullName: employee.name,
                     state,
                     reasonCode,
-                    stateDuration: employee.currentStatusStartTime ? Math.floor((nowTs - employee.currentStatusStartTime) / 1000) : 0,
+                    stateDuration: duration,
                     callType,
                     schedule: scheduleString,
                 });
@@ -220,7 +220,7 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
                                 <td className="px-4 py-2">
                                     <div className="flex items-center gap-2">
                                         <StateIcon state={agent.state} reasonCode={agent.reasonCode} />
-                                        {agent.state !== 'Offline' ? (
+                                        {agent.stateDuration !== null ? (
                                             <span className="font-mono">{formatDuration(agent.stateDuration)}</span>
                                         ) : (
                                             <span className="font-mono">-</span>

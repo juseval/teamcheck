@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { Employee, PayrollChangeType, CalendarEvent } from '../types.ts';
+import { Employee, PayrollChangeType, CalendarEvent } from '../types';
 
 interface EditEventModalProps {
   isOpen: boolean;
@@ -23,7 +24,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ isOpen, onClose, onUpda
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setEventData(prev => prev ? { ...prev, [name]: name === 'employeeId' ? Number(value) : value } : null);
+    setEventData(prev => prev ? { ...prev, [name]: value } : null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {

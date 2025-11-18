@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Employee, WorkSchedule } from '../types.ts';
+import { Employee, WorkSchedule } from '../types';
 
 interface EditEmployeeModalProps {
   isOpen: boolean;
