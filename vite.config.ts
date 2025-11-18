@@ -1,19 +1,22 @@
 
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+// FIX: Import 'cwd' from 'node:process' to provide proper typing and avoid errors with the global 'process' object.
+import { cwd } from 'node:process';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
-  // Load env file based on `mode` in the current working directory.
-  const env = loadEnv(mode, process.cwd(), '');
+  // Load env file based on `mode`, and merge with `process.env`
+  // This ensures variables from the execution environment take precedence.
+  const env = { ...loadEnv(mode, cwd(), ''), ...process.env };
   
   return {
     // vite config
     define: {
-      // This is required for the @google/genai SDK which expects process.env.API_KEY
+      // FIX: Explicitly define `process.env` variables to be exposed to the client.
+      // This resolves the "Cannot read properties of undefined" error for env vars
+      // by switching from `import.meta.env` to a more robust `process.env` injection.
       'process.env.API_KEY': JSON.stringify(env.API_KEY),
-      // We also polyfill the Firebase keys into process.env for consistency, 
-      // although services/firebase.ts now checks import.meta.env as well.
       'process.env.VITE_FIREBASE_API_KEY': JSON.stringify(env.VITE_FIREBASE_API_KEY),
       'process.env.VITE_FIREBASE_AUTH_DOMAIN': JSON.stringify(env.VITE_FIREBASE_AUTH_DOMAIN),
       'process.env.VITE_FIREBASE_PROJECT_ID': JSON.stringify(env.VITE_FIREBASE_PROJECT_ID),

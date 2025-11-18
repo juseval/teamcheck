@@ -1,10 +1,13 @@
+// FIX: Removed reference to 'vite/client' as types are now globally handled by vite-env.d.ts to fix type resolution errors.
 
 // Import the functions you need from the SDKs you need
-// FIX: Switched to Firebase v8 compat imports to resolve module export errors.
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
+import 'firebase/compat/auth';
 
 // Your web app's Firebase configuration
+// FIX: Switched from import.meta.env to process.env to resolve runtime errors.
+// Environment variables are now injected via Vite's `define` config.
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API_KEY,
   authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -16,21 +19,49 @@ const firebaseConfig = {
 
 let app: firebase.app.App | null = null;
 let db: firebase.firestore.Firestore | null = null;
+let auth: firebase.auth.Auth | null = null;
 let isFirebaseEnabled = false;
 
-// Only initialize Firebase if all config values are present
-if (Object.values(firebaseConfig).every(value => value)) {
+// Check for missing keys for better debugging
+// We check values instead of keys to ensure they are not undefined strings
+const requiredKeys = [
+  'apiKey',
+  'authDomain',
+  'projectId',
+  'storageBucket',
+  'messagingSenderId',
+  'appId'
+];
+
+const missingKeys = requiredKeys.filter(key => !firebaseConfig[key as keyof typeof firebaseConfig]);
+
+if (missingKeys.length === 0) {
   try {
-    // FIX: Updated initialization to use Firebase v8 compat syntax.
-    app = firebase.initializeApp(firebaseConfig);
+    if (!firebase.apps.length) {
+        app = firebase.initializeApp(firebaseConfig);
+    } else {
+        app = firebase.app();
+    }
     db = firebase.firestore();
+    auth = firebase.auth();
+    
+    // Enable offline persistence to handle temporary disconnects gracefully
+    db.enablePersistence().catch((err) => {
+        if (err.code == 'failed-precondition') {
+            console.warn('Firebase persistence failed: Multiple tabs open.');
+        } else if (err.code == 'unimplemented') {
+            console.warn('Firebase persistence not supported by browser.');
+        }
+    });
+
     isFirebaseEnabled = true;
-    console.log("Firebase initialized successfully.");
+    console.log("Firebase initialized successfully connected to:", firebaseConfig.projectId);
   } catch (error) {
     console.error("Firebase initialization failed:", error);
   }
 } else {
-  console.warn("Firebase configuration is missing or incomplete. Running in offline mode with mock data. Please check your .env file.");
+  console.warn("Running in OFFLINE/MOCK mode. Missing Firebase config keys:", missingKeys.join(', '));
+  console.warn("Please ensure your .env file exists and variables start with VITE_");
 }
 
-export { db, isFirebaseEnabled };
+export { db, auth, isFirebaseEnabled };
