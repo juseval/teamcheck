@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import Header from './components/Header';
 import TrackerPage from './pages/TrackerPage';
@@ -28,19 +29,38 @@ import EditTimesheetEntryModal from './components/EditTimesheetEntryModal';
 import EditActivityLogEntryModal from './components/EditActivityLogEntryModal';
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
 import * as api from './services/apiService';
-import { isFirebaseEnabled } from './services/firebase';
-import { initialEmployees } from './data/initialData';
+import { auth, isFirebaseEnabled } from './services/firebase';
 import { Employee, AttendanceLogEntry, EmployeeStatus, AttendanceAction, User, TimeEntry, ActivityStatus, Task, TaskStatus, CalendarEvent, PayrollChangeType, WorkSchedule, TimesheetEntry } from './types';
 
 const AppContent: React.FC = () => {
-    // --- Auth State ---
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authPage, setAuthPage] = useState<'home' | 'login' | 'register'>('home');
-  const [isLoading, setIsLoading] = useState(true);
+  // --- Auth State ---
+  const [authInitialized, setAuthInitialized] = useState(false);
+  
+  // Initialize authPage from localStorage to persist state across refreshes
+  const [authPage, setAuthPage] = useState<'home' | 'login' | 'register'>(() => {
+      const saved = localStorage.getItem('teamcheck_auth_page');
+      return (saved === 'login' || saved === 'register') ? saved : 'home';
+  });
+
+  // Save authPage to localStorage whenever it changes
+  useEffect(() => {
+      localStorage.setItem('teamcheck_auth_page', authPage);
+  }, [authPage]);
+
+  const [isDataLoading, setIsDataLoading] = useState(true);
   const [isOfflineMode] = useState(!isFirebaseEnabled);
   const { addNotification } = useNotification();
 
-  const [currentPage, setCurrentPage] = useState('tracker');
+  // Initialize currentPage from localStorage to persist navigation across refreshes
+  const [currentPage, setCurrentPage] = useState(() => {
+      return localStorage.getItem('teamcheck_current_page') || 'tracker';
+  });
+
+  // Save currentPage to localStorage whenever it changes
+  useEffect(() => {
+      localStorage.setItem('teamcheck_current_page', currentPage);
+  }, [currentPage]);
+
   const [attendanceLog, setAttendanceLog] = useState<AttendanceLogEntry[]>([]);
   
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -76,58 +96,79 @@ const AppContent: React.FC = () => {
   }>({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   const [loggedInUser, setLoggedInUser] = useState<Employee | null>(null);
+  const isAuthenticated = !!loggedInUser;
 
-  // --- Data Fetching ---
+  // --- Auth & Data Management ---
   useEffect(() => {
-    // Simulate checking auth status on page load
-    setIsLoading(false);
-  }, []);
+    let unsubscribeAuth = () => {};
 
+    if (auth) {
+        unsubscribeAuth = auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                try {
+                    const profile = await api.getEmployeeProfile(user.uid);
+                    if (profile) {
+                        setLoggedInUser(profile);
+                    } else {
+                        console.warn("Profile not found for user", user.uid);
+                        addNotification("Could not find employee profile. Logging out.", 'error');
+                        await api.logout();
+                    }
+                } catch (error) {
+                    console.error("Error fetching profile", error);
+                }
+            } else {
+                setLoggedInUser(null);
+                setEmployees([]);
+                setAttendanceLog([]);
+            }
+            if (!authInitialized) setAuthInitialized(true);
+        });
+    } else {
+        // Handle offline mode or Firebase not initialized
+        // Restore session from localStorage for Mock Mode persistence
+        const savedUser = localStorage.getItem('teamcheck_mock_user');
+        if (savedUser) {
+            try {
+                const parsedUser = JSON.parse(savedUser);
+                setLoggedInUser(parsedUser);
+            } catch (e) {
+                console.error("Failed to restore mock user session", e);
+                localStorage.removeItem('teamcheck_mock_user');
+            }
+        }
+        
+        if (!authInitialized) setAuthInitialized(true);
+    }
+
+    return () => unsubscribeAuth();
+  }, [authInitialized, addNotification]);
+  
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && loggedInUser) {
         let unsubscribeEmployees = () => {};
         let unsubscribeLogs = () => {};
 
-        const initializeApp = async () => {
-            setIsLoading(true);
+        const initializeAppData = async () => {
+            setIsDataLoading(true);
 
-            // Seed database on first run if it's empty and firebase is enabled
-            if (isFirebaseEnabled) {
-                try {
-                    const employeesSnapshot = await api.getEmployees();
-                    if (employeesSnapshot.length === 0) {
-                        console.log("Employees collection is empty. Seeding with initial data...");
-                        const seedPromises = initialEmployees.map(emp => {
-                            // Exclude fields that are auto-generated or set by default
-                            const { id, status, lastClockInTime, currentStatusStartTime, ...rest } = emp;
-                            return api.addEmployee(rest);
-                        });
-                        await Promise.all(seedPromises);
-                        console.log("Initial data seeded successfully.");
-                    }
-                } catch (error) {
-                    console.error("Error seeding database. This may be due to Firestore security rules.", error);
-                }
-            }
-            
-            // Setup real-time listeners
-            unsubscribeEmployees = api.streamEmployees((employeesData) => {
-                setEmployees(employeesData);
-                
-                // Keep the loggedInUser's data fresh if an admin makes changes to their profile.
-                setLoggedInUser(currentLoggedInUser => {
-                    if (currentLoggedInUser) {
-                        const updatedUserData = employeesData.find(e => e.id === currentLoggedInUser.id);
-                        return updatedUserData || null;
-                    }
-                    return null;
-                });
-            });
-            
-            unsubscribeLogs = api.streamAttendanceLog(setAttendanceLog);
-
-            // Fetch other static data
             try {
+                // Setup real-time listeners
+                unsubscribeEmployees = api.streamEmployees((employeesData) => {
+                    setEmployees(employeesData);
+                    // Keep the loggedInUser's data fresh
+                    setLoggedInUser(currentLoggedInUser => {
+                        if (currentLoggedInUser) {
+                            const updatedUserData = employeesData.find(e => e.id === currentLoggedInUser.id);
+                            return updatedUserData || currentLoggedInUser;
+                        }
+                        return null;
+                    });
+                });
+                
+                unsubscribeLogs = api.streamAttendanceLog(setAttendanceLog);
+
+                // Fetch other static data
                 const [statusesData, tasksData, eventsData, payrollTypesData, schedulesData] = await Promise.all([
                     api.getActivityStatuses(),
                     api.getTasks(),
@@ -140,86 +181,73 @@ const AppContent: React.FC = () => {
                 setCalendarEvents(eventsData);
                 setPayrollChangeTypes(payrollTypesData);
                 setWorkSchedules(schedulesData);
+
             } catch (error) {
-                console.error("Failed to fetch static data:", error);
+                console.error("Failed to fetch app data:", error);
+                addNotification("Failed to load app settings. Check console.", 'error');
             } finally {
-                setIsLoading(false);
+                setIsDataLoading(false);
             }
         };
 
-        initializeApp();
+        initializeAppData();
         
-        // Cleanup listeners on component unmount or auth change
         return () => {
             unsubscribeEmployees();
             unsubscribeLogs();
         };
     } else {
-        // Clear data on logout
-        setEmployees([]);
-        setAttendanceLog([]);
-        setLoggedInUser(null);
+        setIsDataLoading(false);
     }
-}, [isAuthenticated]);
+}, [isAuthenticated, loggedInUser?.id /* Only re-run if user ID changes, not on every user update */, addNotification]);
 
 
-  // Determine user role from loggedInUser data
   const userRole = loggedInUser?.role || 'employee';
 
   // --- Auth Handlers ---
-  const handleLogin = async (credentials: { email: string; }) => {
+  const handleLogin = async (credentials: { email: string; password: string; }) => {
     try {
-        // FIX: Added a guard to prevent crash on undefined credentials.
-        if (!credentials || !credentials.email) {
-            throw new Error("Credenciales no válidas. Por favor, inténtalo de nuevo.");
-        }
-
-        const result = await api.loginWithEmail(credentials.email);
-        if (result.success && result.user) {
-            setLoggedInUser(result.user);
-            setIsAuthenticated(true);
-            setCurrentPage(result.user.role === 'admin' ? 'dashboard' : 'tracker');
-        } else {
-            // This case handles when the user is not found by the API.
-            throw new Error("Credenciales no válidas. Por favor, inténtalo de nuevo.");
-        }
-    } catch (error) {
-        console.error("Login failed in App.tsx", error);
-        const errorMessage = (error as Error).message || 'Ocurrió un error desconocido';
+        const userProfile = await api.loginWithEmailAndPassword(credentials.email, credentials.password);
         
-        if (errorMessage.toLowerCase().includes('index')) {
-             addNotification("Error de base de datos: Falta un índice. Revisa la consola para crear el índice en Firestore.", 'error');
-        } else {
-            // Show the user-friendly message from the `throw` statements or the DB error.
-            addNotification(errorMessage, 'error');
+        // If in Mock Mode, manually persist session
+        if (!isFirebaseEnabled) {
+            setLoggedInUser(userProfile);
+            localStorage.setItem('teamcheck_mock_user', JSON.stringify(userProfile));
         }
-        // Re-throw so the LoginPage can update its UI state.
+        
+        setCurrentPage(userProfile.role === 'admin' ? 'dashboard' : 'tracker');
+    } catch (error: any) {
+        console.error("Login failed in App.tsx", error);
+        addNotification(error.message || "Invalid credentials. Please try again.", 'error');
         throw error;
     }
   };
   
-  const handleRegister = async (data: { fullName: string; email: string; }) => {
+  const handleRegister = async (data: { fullName: string; email: string; password: string; }) => {
     try {
-        // In a real app, this would also handle auth (e.g., createUserWithEmailAndPassword)
-        // And check if user with email already exists.
-        const employeeData = {
-            name: data.fullName,
-            email: data.email,
-            phone: '', // Default empty values
-            location: 'Main Office', // Default
-            role: 'employee' as const, // Hardcode role to 'employee'
-            workScheduleId: null,
-        };
-        await api.addEmployee(employeeData);
-    } catch (error) {
+        await api.registerWithEmailAndPassword(data.fullName, data.email, data.password);
+    } catch (error: any) {
         console.error("Registration failed in App.tsx", error);
-        throw error; // Re-throw to be caught in RegisterPage for UI feedback
+        addNotification(error.message || 'Registration failed. The email might be in use.', 'error');
+        throw error;
     }
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    setAuthPage('home');
+  const handleLogout = async () => {
+    try {
+        await api.logout();
+        
+        // Clear persistence for mock mode
+        if (!isFirebaseEnabled) {
+            setLoggedInUser(null);
+            localStorage.removeItem('teamcheck_mock_user');
+        }
+        
+        setAuthPage('home');
+        setCurrentPage('tracker');
+    } catch (error: any) {
+        addNotification(error.message || 'Logout failed.', 'error');
+    }
   };
 
   const userForProfile: User = {
@@ -251,7 +279,7 @@ const AppContent: React.FC = () => {
       if (lastLog) {
         const duration = Math.round((currentLog.timestamp - lastLog.timestamp) / 1000);
         if (duration > 0) {
-            let activity = 'Working'; // Default activity
+            let activity = 'Working';
             if (lastLog.action.startsWith('Start ')) {
                 activity = lastLog.action.substring(6);
             }
@@ -267,16 +295,16 @@ const AppContent: React.FC = () => {
       }
 
       if (currentLog.action === 'Clock Out') {
-        lastLog = null; // Session ends
+        lastLog = null;
       } else {
-        lastLog = currentLog; // Start of a new interval
+        lastLog = currentLog;
       }
     }
     
-    return entries.reverse(); // Show most recent first
+    return entries.reverse();
   }, [attendanceLog, loggedInUser, userRole, employees]);
 
-  const handleAddEmployee = async (employeeData: Omit<Employee, 'id' | 'status' | 'lastClockInTime' | 'currentStatusStartTime'>) => {
+  const handleAddEmployee = async (employeeData: Omit<Employee, 'id' | 'status' | 'lastClockInTime' | 'currentStatusStartTime' | 'uid'>) => {
     await api.addEmployee(employeeData);
     setIsAddModalOpen(false);
   };
@@ -302,14 +330,14 @@ const AppContent: React.FC = () => {
   const promptRemoveEmployee = (employeeId: string) => {
     const employee = employees.find(e => e.id === employeeId);
     if (employee && employee.status !== 'Clocked Out') {
-      alert("No se puede eliminar un empleado que no ha registrado su salida.");
+      addNotification("Cannot remove an employee who has not clocked out.", 'error');
       return;
     }
     if (employee) {
        setConfirmation({
         isOpen: true,
-        title: 'Confirmar Eliminación',
-        message: `¿Estás seguro de que quieres eliminar a ${employee.name}? Esta acción no se puede deshacer.`,
+        title: 'Confirm Removal',
+        message: `Are you sure you want to remove ${employee.name}? This action cannot be undone.`,
         onConfirm: () => handleConfirmRemoveEmployee(employee.id),
       });
     }
@@ -328,7 +356,7 @@ const AppContent: React.FC = () => {
     if (!employee) return;
 
     if (action.startsWith('Start ')) {
-        newStatus = action.substring(6); // e.g., "Start Break" -> "Break"
+        newStatus = action.substring(6);
     } else if (action.startsWith('End ')) {
         newStatus = 'Working';
     } else if (action === 'Clock In') {
@@ -372,7 +400,7 @@ const AppContent: React.FC = () => {
           setEmployeeToEditTime(null);
       } catch (error) {
           console.error("Failed to update time entry:", error);
-          alert("Error: Could not update the session time. See console for details.");
+          addNotification("Error: Could not update the session time.", 'error');
       }
   };
 
@@ -393,7 +421,7 @@ const AppContent: React.FC = () => {
         setLogEntryToEdit(null);
     } catch (error) {
         console.error("Failed to update log entry:", error);
-        alert("Error: Could not update the log entry. See console for details.");
+        addNotification("Error: Could not update the log entry.", 'error');
     }
   };
 
@@ -407,7 +435,7 @@ const AppContent: React.FC = () => {
 
     } catch (error: any) {
         console.error("Failed to update timesheet entry:", error);
-        alert(`Error: ${error.message}`);
+        addNotification(`Error: ${error.message}`, 'error');
     }
   };
 
@@ -473,12 +501,11 @@ const AppContent: React.FC = () => {
         if (event.employeeId !== eventData.employeeId) return false;
         const existingStart = new Date(event.startDate + 'T00:00:00').getTime();
         const existingEnd = new Date(event.endDate + 'T23:59:59').getTime();
-        // Check for overlap
         return newEventStart <= existingEnd && newEventEnd >= existingStart;
     });
 
     if (hasConflict) {
-        alert(`${employeeName} already has a calendar event during this time. Please check the dates.`);
+        addNotification(`${employeeName} already has a calendar event during this time.`, 'error');
         return;
     }
 
@@ -500,11 +527,11 @@ const AppContent: React.FC = () => {
   };
   
   const promptRemoveCalendarEvent = (event: CalendarEvent) => {
-    const employeeName = employees.find(e => e.id === event.employeeId)?.name || 'empleado desconocido';
+    const employeeName = employees.find(e => e.id === event.employeeId)?.name || 'unknown employee';
     setConfirmation({
         isOpen: true,
-        title: 'Confirmar Eliminación de Novedad',
-        message: `¿Estás seguro de que quieres eliminar la novedad "${event.type}" para ${employeeName} del ${event.startDate} al ${event.endDate}?`,
+        title: 'Confirm Event Deletion',
+        message: `Are you sure you want to delete the event "${event.type}" for ${employeeName} from ${event.startDate} to ${event.endDate}?`,
         onConfirm: () => handleConfirmRemoveCalendarEvent(event.id),
     });
   };
@@ -516,15 +543,6 @@ const AppContent: React.FC = () => {
   };
 
   const renderPage = () => {
-    if (!loggedInUser && isAuthenticated && !isOfflineMode) {
-        return (
-            <div className="text-center p-10">
-                <h2 className="text-2xl font-semibold text-bokara-grey">Waiting for data...</h2>
-                <p className="text-bokara-grey/70 mt-2">If this continues, check your Firestore connection and rules.</p>
-            </div>
-        );
-    }
-    
     const employeeDataForPage = userRole === 'employee' ? employees.filter(e => e.id === loggedInUser?.id) : employees;
     
     const allowedPagesForEmployee = ['tracker', 'chronolog', 'profile', 'calendar', 'messages', 'password'];
@@ -623,17 +641,7 @@ const AppContent: React.FC = () => {
     }
   };
 
-  if (!isAuthenticated) {
-    if (authPage === 'login') {
-      return <LoginPage onLogin={handleLogin} onNavigateToRegister={() => setAuthPage('register')} onNavigateToHome={() => setAuthPage('home')} />;
-    }
-    if (authPage === 'register') {
-      return <RegisterPage onRegister={handleRegister} onNavigateToLogin={() => setAuthPage('login')} onNavigateToHome={() => setAuthPage('home')} />;
-    }
-    return <HomePage onNavigateToLogin={() => setAuthPage('login')} onNavigateToRegister={() => setAuthPage('register')} />;
-  }
-
-  if (isLoading) {
+  if (!authInitialized || (isAuthenticated && isDataLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bright-white">
         <div className="text-center flex flex-col items-center gap-4">
@@ -646,6 +654,16 @@ const AppContent: React.FC = () => {
         </div>
       </div>
     );
+  }
+
+  if (!isAuthenticated) {
+    if (authPage === 'login') {
+      return <LoginPage onLogin={handleLogin} onNavigateToRegister={() => setAuthPage('register')} onNavigateToHome={() => setAuthPage('home')} />;
+    }
+    if (authPage === 'register') {
+      return <RegisterPage onRegister={handleRegister} onNavigateToLogin={() => setAuthPage('login')} onNavigateToHome={() => setAuthPage('home')} />;
+    }
+    return <HomePage onNavigateToLogin={() => setAuthPage('login')} onNavigateToRegister={() => setAuthPage('register')} />;
   }
 
   return (
@@ -662,7 +680,7 @@ const AppContent: React.FC = () => {
           />
           {isOfflineMode && (
             <div className="bg-amber-100 border-b-2 border-amber-300 text-amber-800 text-center p-2 text-sm font-semibold sticky top-[69px] z-10">
-                Running in offline mode. Data is mocked and will not be saved.
+                Running in offline mode. Data is saved locally in your browser.
             </div>
           )}
           <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">

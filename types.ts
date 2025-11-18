@@ -1,7 +1,9 @@
+
 export type EmployeeStatus = string;
 
 export interface Employee {
   id: string;
+  uid?: string; // UID from Firebase Authentication
   name: string;
   email: string;
   phone: string;
