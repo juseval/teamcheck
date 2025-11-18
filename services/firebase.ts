@@ -1,3 +1,4 @@
+
 // FIX: Removed reference to 'vite/client' as types are now globally handled by vite-env.d.ts to fix type resolution errors.
 
 // Import the functions you need from the SDKs you need
@@ -45,6 +46,16 @@ if (missingKeys.length === 0) {
     db = firebase.firestore();
     auth = firebase.auth();
     
+    // EXPLICITLY SET PERSISTENCE
+    // This ensures the user stays logged in even after refreshing the page
+    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+        .then(() => {
+             console.log("Firebase Auth persistence set to LOCAL");
+        })
+        .catch((error) => {
+             console.error("Error setting auth persistence:", error);
+        });
+
     // Enable offline persistence to handle temporary disconnects gracefully
     db.enablePersistence().catch((err) => {
         if (err.code == 'failed-precondition') {

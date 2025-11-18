@@ -110,19 +110,25 @@ const AppContent: React.FC = () => {
                     if (profile) {
                         setLoggedInUser(profile);
                     } else {
+                        // If profile is not found, it might be a delay in creation or a sync issue.
                         console.warn("Profile not found for user", user.uid);
-                        addNotification("Could not find employee profile. Logging out.", 'error');
-                        await api.logout();
+                        addNotification("Error: Profile not found. Please contact support.", 'error');
+                        // We do NOT force logout here immediately to allow for potential data sync latency or retry logic
+                        setLoggedInUser(null);
                     }
                 } catch (error) {
                     console.error("Error fetching profile", error);
+                    addNotification("Network error. Could not load profile.", 'error');
+                    // Do NOT log out on network error, just fail to set user.
+                    // This allows a retry if the user refreshes.
+                    setLoggedInUser(null);
                 }
             } else {
                 setLoggedInUser(null);
                 setEmployees([]);
                 setAttendanceLog([]);
             }
-            if (!authInitialized) setAuthInitialized(true);
+            setAuthInitialized(true);
         });
     } else {
         // Handle offline mode or Firebase not initialized
@@ -137,12 +143,11 @@ const AppContent: React.FC = () => {
                 localStorage.removeItem('teamcheck_mock_user');
             }
         }
-        
-        if (!authInitialized) setAuthInitialized(true);
+        setAuthInitialized(true);
     }
 
     return () => unsubscribeAuth();
-  }, [authInitialized, addNotification]);
+  }, [addNotification]);
   
   useEffect(() => {
     if (isAuthenticated && loggedInUser) {
@@ -218,7 +223,7 @@ const AppContent: React.FC = () => {
         setCurrentPage(userProfile.role === 'admin' ? 'dashboard' : 'tracker');
     } catch (error: any) {
         console.error("Login failed in App.tsx", error);
-        addNotification(error.message || "Invalid credentials. Please try again.", 'error');
+        // Re-throw to be handled by LoginPage
         throw error;
     }
   };
@@ -228,7 +233,14 @@ const AppContent: React.FC = () => {
         await api.registerWithEmailAndPassword(data.fullName, data.email, data.password);
     } catch (error: any) {
         console.error("Registration failed in App.tsx", error);
-        addNotification(error.message || 'Registration failed. The email might be in use.', 'error');
+        // Translate common registration errors
+         let msg = 'Registration failed.';
+         if (error.code === 'auth/email-already-in-use' || error.message.includes('email-already-in-use')) {
+             msg = 'Este correo electrónico ya está registrado.';
+         } else {
+             msg = error.message || 'Error al registrarse.';
+         }
+        addNotification(msg, 'error');
         throw error;
     }
   };

@@ -77,6 +77,7 @@ const createMockApi = () => {
         return Promise.resolve(newEmployee);
     },
     loginWithEmailAndPassword: async (email: string, password: string): Promise<Employee> => {
+        if (!email || !password) throw new Error("El correo y la contraseña son obligatorios.");
         const user = mockEmployees.find(e => e.email === email);
         if (user) {
             // In mock, any password is fine as long as not empty logic is handled by UI
@@ -273,17 +274,20 @@ const createRealApi = () => {
 
     return {
         registerWithEmailAndPassword: async (fullName: string, email: string, password: string): Promise<Employee> => {
+            if (!password) throw new Error("Se requiere una contraseña.");
+            
             const userCredential = await getAuth().createUserWithEmailAndPassword(email, password);
             const user = userCredential.user;
             if (!user) throw new Error("Failed to create auth user.");
 
-            const employeeData = {
+            const employeeData: Employee = {
+                id: user.uid,
                 uid: user.uid,
                 name: fullName,
                 email: email,
                 phone: '',
                 location: 'Main Office',
-                role: 'employee' as const,
+                role: 'employee',
                 status: 'Clocked Out',
                 lastClockInTime: null,
                 currentStatusStartTime: null,
@@ -291,17 +295,19 @@ const createRealApi = () => {
             };
 
             await getDb().collection('employees').doc(user.uid).set(employeeData);
-            return { ...employeeData, id: user.uid };
+            return employeeData;
         },
 
         loginWithEmailAndPassword: async (email: string, password: string): Promise<Employee> => {
+            if (!email || !password) throw new Error("El correo y la contraseña son obligatorios.");
+            
             const userCredential = await getAuth().signInWithEmailAndPassword(email, password);
             const user = userCredential.user;
             if (!user) throw new Error("Login failed, user not found in auth.");
 
             const profile = await getEmployeeProfile(user.uid);
             if (!profile) {
-                await getAuth().signOut();
+                // Do not sign out immediately here to avoid race conditions, let App.tsx handle profile logic
                 throw new Error("No employee profile found for this user.");
             }
             return profile;
