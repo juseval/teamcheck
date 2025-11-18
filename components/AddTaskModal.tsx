@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Task, Employee, TaskStatus } from '../types';
+import { Task, Employee, TaskStatus } from '../types.ts';
 
 interface AddTaskModalProps {
   isOpen: boolean;
@@ -35,7 +34,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onAddTask,
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const { name, value } = e.target;
-      setTaskData(prev => ({ ...prev, [name]: name === 'progress' ? Number(value) : value }));
+      setTaskData(prev => ({ ...prev, [name]: name === 'assigneeId' || name === 'progress' ? Number(value) : value }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {

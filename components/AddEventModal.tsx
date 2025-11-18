@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Employee, PayrollChangeType, CalendarEvent } from '../types';
+import { Employee, PayrollChangeType, CalendarEvent } from '../types.ts';
 
 interface AddEventModalProps {
   isOpen: boolean;
@@ -10,30 +9,22 @@ interface AddEventModalProps {
   payrollChangeTypes: PayrollChangeType[];
 }
 
-const getLocalISODate = () => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-};
-
 const AddEventModal: React.FC<AddEventModalProps> = ({ isOpen, onClose, onAddEvent, employees, payrollChangeTypes }) => {
   const [eventData, setEventData] = useState({
-      employeeId: employees.length > 0 ? employees[0].id : '',
+      employeeId: employees.length > 0 ? employees[0].id : 0,
       type: payrollChangeTypes.length > 0 ? payrollChangeTypes[0].name : '',
-      startDate: getLocalISODate(),
-      endDate: getLocalISODate(),
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: new Date().toISOString().split('T')[0],
   });
 
   useEffect(() => {
     // Reset form when modal is opened
     if (isOpen) {
         setEventData({
-            employeeId: employees.length > 0 ? employees[0].id : '',
+            employeeId: employees.length > 0 ? employees[0].id : 0,
             type: payrollChangeTypes.length > 0 ? payrollChangeTypes[0].name : '',
-            startDate: getLocalISODate(),
-            endDate: getLocalISODate(),
+            startDate: new Date().toISOString().split('T')[0],
+            endDate: new Date().toISOString().split('T')[0],
         });
     }
   }, [isOpen, employees, payrollChangeTypes]);
@@ -42,7 +33,7 @@ const AddEventModal: React.FC<AddEventModalProps> = ({ isOpen, onClose, onAddEve
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const { name, value } = e.target;
-      setEventData(prev => ({ ...prev, [name]: value }));
+      setEventData(prev => ({ ...prev, [name]: name === 'employeeId' ? Number(value) : value }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {

@@ -1,10 +1,9 @@
-
 import React, { useState } from 'react';
 import { ArrowLeftIcon } from '../components/Icons';
 import { useNotification } from '../contexts/NotificationContext';
 
 interface LoginPageProps {
-  onLogin: (credentials: { email: string; password: string; }) => Promise<void>;
+  onLogin: (credentials: { email: string; }) => Promise<void>;
   onNavigateToRegister: () => void;
   onNavigateToHome: () => void;
 }
@@ -17,42 +16,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!email.trim()) {
-        addNotification("Por favor ingresa tu correo electrónico.", 'error');
-        return;
-    }
-    
-    if (!password) {
-        // PREVENT SUBMISSION OF EMPTY PASSWORD
-        addNotification("Por favor ingresa tu contraseña.", 'error');
-        return;
-    }
-
-    setIsLoggingIn(true);
-    try {
-      await onLogin({ email, password });
-      // Successful login will unmount this component via App.tsx state change
-    } catch (error: any) {
-      console.error("Login error in page:", error);
-      
-      // Translate specific Firebase errors to Spanish
-      let errorMessage = "Error al iniciar sesión. Inténtalo de nuevo.";
-      if (error.code === 'auth/invalid-credential' || error.message.includes('invalid-credential')) {
-          errorMessage = "Correo o contraseña incorrectos.";
-      } else if (error.code === 'auth/user-not-found' || error.message.includes('user-not-found')) {
-          errorMessage = "No existe una cuenta con este correo.";
-      } else if (error.code === 'auth/wrong-password' || error.message.includes('wrong-password')) {
-          errorMessage = "Contraseña incorrecta.";
-      } else if (error.code === 'auth/too-many-requests') {
-          errorMessage = "Demasiados intentos fallidos. Inténtalo más tarde.";
-      } else if (error.message) {
-          // Fallback for other errors, but try to be user friendly if possible
-          errorMessage = error.message;
+    if (email && password) {
+      setIsLoggingIn(true);
+      try {
+        await onLogin({ email });
+        // Successful login will unmount this component, no need to setIsLoggingIn(false)
+      } catch (error) {
+        // The notification is handled by the `onLogin` function.
+        // We only need to reset the UI state here.
+        setIsLoggingIn(false);
       }
-
-      addNotification(errorMessage, 'error');
-      setIsLoggingIn(false);
     }
   };
 
@@ -61,7 +34,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
       <div className="absolute top-4 left-4 sm:top-8 sm:left-8">
         <button onClick={onNavigateToHome} className="flex items-center gap-2 text-bokara-grey/80 hover:text-bokara-grey font-semibold transition-colors">
             <ArrowLeftIcon className="w-5 h-5" />
-            <span>Volver al Inicio</span>
+            <span>Back to Home</span>
         </button>
       </div>
       <div className="w-full max-w-md">
@@ -69,14 +42,14 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
             <h1 className="text-5xl font-bold text-bokara-grey tracking-wider">
               Team<span className="text-lucius-lime">Check</span>
             </h1>
-            <p className="text-bokara-grey/70 mt-2">¡Bienvenido! Inicia sesión en tu cuenta.</p>
+            <p className="text-bokara-grey/70 mt-2">Welcome back! Please sign in to your account.</p>
         </div>
         
         <div className="bg-white rounded-xl shadow-md p-8 border border-bokara-grey/10">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-lucius-lime mb-2">
-                Correo Electrónico
+                Email Address
               </label>
               <input
                 id="email"
@@ -87,18 +60,18 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime"
-                placeholder="ejemplo@empresa.com"
+                placeholder="you@example.com"
               />
             </div>
 
             <div>
               <div className="flex items-center justify-between">
                 <label htmlFor="password" className="block text-sm font-medium text-lucius-lime mb-2">
-                  Contraseña
+                  Password
                 </label>
                 <div className="text-sm">
                   <a href="#" className="font-medium text-lucius-lime hover:text-lucius-lime/80">
-                    ¿Olvidaste tu contraseña?
+                    Forgot your password?
                   </a>
                 </div>
               </div>
@@ -121,16 +94,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
                 className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-bokara-grey bg-lucius-lime hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-lucius-lime transition-colors disabled:bg-lucius-lime/40 disabled:cursor-wait"
                 disabled={!email || !password || isLoggingIn}
               >
-                {isLoggingIn ? 'Iniciando Sesión...' : 'Iniciar Sesión'}
+                {isLoggingIn ? 'Signing In...' : 'Sign In'}
               </button>
             </div>
           </form>
         </div>
 
          <p className="mt-6 text-center text-sm text-bokara-grey/80">
-            ¿No tienes una cuenta?{' '}
+            Don't have an account?{' '}
             <button onClick={onNavigateToRegister} className="font-medium text-lucius-lime hover:text-lucius-lime/80 underline">
-              Regístrate
+              Sign up
             </button>
         </p>
       </div>
