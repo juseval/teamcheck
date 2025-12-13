@@ -1,14 +1,9 @@
 
-// FIX: Removed reference to 'vite/client' as types are now globally handled by vite-env.d.ts to fix type resolution errors.
-
-// Import the functions you need from the SDKs you need
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/firestore';
 import 'firebase/compat/auth';
 
-// Your web app's Firebase configuration
-// FIX: Switched from import.meta.env to process.env to resolve runtime errors.
-// Environment variables are now injected via Vite's `define` config.
+// Use process.env directly as they are injected via vite.config.ts define
 const firebaseConfig = {
   apiKey: process.env.VITE_FIREBASE_API_KEY,
   authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -23,20 +18,13 @@ let db: firebase.firestore.Firestore | null = null;
 let auth: firebase.auth.Auth | null = null;
 let isFirebaseEnabled = false;
 
-// Check for missing keys for better debugging
-// We check values instead of keys to ensure they are not undefined strings
-const requiredKeys = [
-  'apiKey',
-  'authDomain',
-  'projectId',
-  'storageBucket',
-  'messagingSenderId',
-  'appId'
-];
+// Check if critical keys are present
+const hasConfig = 
+    firebaseConfig.apiKey && 
+    firebaseConfig.authDomain && 
+    firebaseConfig.projectId;
 
-const missingKeys = requiredKeys.filter(key => !firebaseConfig[key as keyof typeof firebaseConfig]);
-
-if (missingKeys.length === 0) {
+if (hasConfig) {
   try {
     if (!firebase.apps.length) {
         app = firebase.initializeApp(firebaseConfig);
@@ -46,18 +34,11 @@ if (missingKeys.length === 0) {
     db = firebase.firestore();
     auth = firebase.auth();
     
-    // EXPLICITLY SET PERSISTENCE
-    // This ensures the user stays logged in even after refreshing the page
-    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-        .then(() => {
-             console.log("Firebase Auth persistence set to LOCAL");
-        })
-        .catch((error) => {
-             console.error("Error setting auth persistence:", error);
-        });
+    // Explicitly set persistence to LOCAL to maintain sessions across refreshes
+    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(console.error);
 
-    // Enable offline persistence to handle temporary disconnects gracefully
-    db.enablePersistence().catch((err) => {
+    // Enable offline persistence
+    db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
         if (err.code == 'failed-precondition') {
             console.warn('Firebase persistence failed: Multiple tabs open.');
         } else if (err.code == 'unimplemented') {
@@ -66,13 +47,12 @@ if (missingKeys.length === 0) {
     });
 
     isFirebaseEnabled = true;
-    console.log("Firebase initialized successfully connected to:", firebaseConfig.projectId);
+    console.log("Firebase initialized successfully");
   } catch (error) {
     console.error("Firebase initialization failed:", error);
   }
 } else {
-  console.warn("Running in OFFLINE/MOCK mode. Missing Firebase config keys:", missingKeys.join(', '));
-  console.warn("Please ensure your .env file exists and variables start with VITE_");
+  console.warn("Running in OFFLINE/MOCK mode. Missing Firebase config.");
 }
 
 export { db, auth, isFirebaseEnabled };

@@ -1,11 +1,26 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { ArrowLeftIcon } from '../components/Icons';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface RegisterPageProps {
-  onRegister: (data: { fullName: string; email: string; }) => Promise<void>;
+  onRegister: (data: { fullName: string; email: string; password: string; }) => Promise<void>;
   onNavigateToLogin: () => void;
   onNavigateToHome: () => void;
 }
+
+const DesktopNotSupported: React.FC<{ onNavigateToHome: () => void; }> = ({ onNavigateToHome }) => (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-bright-white p-6 text-center relative">
+        <svg className="w-20 h-20 text-bokara-grey/70 mb-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+        <h1 className="text-3xl font-bold text-bokara-grey">Acceso no disponible en móvil</h1>
+        <p className="text-bokara-grey/80 mt-3 max-w-sm leading-relaxed">
+            TeamCheck está diseñado para una experiencia óptima en computadoras. Por favor, acceda desde un navegador de escritorio.
+        </p>
+    </div>
+);
+
 
 const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLogin, onNavigateToHome }) => {
   const [fullName, setFullName] = useState('');
@@ -13,35 +28,42 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const { addNotification } = useNotification();
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const mobileCheck = /Mobi|Android|iPhone/i.test(navigator.userAgent);
+    if (mobileCheck) {
+        setIsMobile(true);
+    }
+  }, []);
 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
-        alert("Passwords do not match!");
+        addNotification("Las contraseñas no coinciden.", 'error');
         return;
     }
     setIsRegistering(true);
     try {
-        await onRegister({ fullName, email });
-        alert('Registration successful! You can now log in.');
+        await onRegister({ fullName, email, password });
+        addNotification('¡Registro exitoso! Ya puedes iniciar sesión.', 'success');
         onNavigateToLogin();
     } catch (error) {
-        alert('Registration failed. This email might already be in use.');
+        // Notification is handled by the `onRegister` function
         console.error("Registration failed", error);
     } finally {
         setIsRegistering(false);
     }
   };
 
+  if (isMobile) {
+      return <DesktopNotSupported onNavigateToHome={onNavigateToHome} />;
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-bright-white p-4 relative">
-       <div className="absolute top-4 left-4 sm:top-8 sm:left-8">
-        <button onClick={onNavigateToHome} className="flex items-center gap-2 text-bokara-grey/80 hover:text-bokara-grey font-semibold transition-colors">
-            <ArrowLeftIcon className="w-5 h-5" />
-            <span>Back to Home</span>
-        </button>
-      </div>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
             <h1 className="text-5xl font-bold text-bokara-grey tracking-wider">

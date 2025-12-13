@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Employee, WorkSchedule, ActivityStatus, CalendarEvent } from '../types.ts';
-import { PowerIcon, PhoneStatusIcon, CrossStatusIcon, CheckStatusIcon, SpeakerStatusIcon, FilterIcon } from './Icons';
+import { PowerIcon, PhoneStatusIcon, CrossStatusIcon, CheckStatusIcon, SpeakerStatusIcon } from './Icons';
 
 interface AgentStateDashboardProps {
   employees: Employee[];
@@ -194,13 +195,10 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
                         <tr>
                             <th scope="col" className="px-4 py-3">Full Name & Username</th>
                             <th scope="col" className="px-4 py-3">State</th>
-                            <th scope="col" className="px-4 py-3 flex items-center gap-1">
-                                <FilterIcon className="w-3.5 h-3.5" /> Reason Code
-                            </th>
+                            <th scope="col" className="px-4 py-3">Reason Code</th>
                             <th scope="col" className="px-4 py-3">State Duration</th>
                             <th scope="col" className="px-4 py-3 bg-blue-50/50">Call Type</th>
                             <th scope="col" className="px-4 py-3">Schedule</th>
-                            <th scope="col" className="px-4 py-3">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -229,9 +227,6 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
                                 </td>
                                 <td className={`px-4 py-2 font-semibold ${agent.callType !== '-' && agent.state !== 'Offline' ? 'text-blue-800 bg-blue-50/50' : ''}`}>{agent.callType}</td>
                                 <td className="px-4 py-2 font-mono">{agent.schedule}</td>
-                                <td className="px-4 py-2">
-                                     <button className={agent.state === 'Offline' ? 'text-gray-400' : 'text-bokara-grey/60'} disabled={agent.state === 'Offline'}>▼</button>
-                                </td>
                             </tr>
                         ))}
                     </tbody>

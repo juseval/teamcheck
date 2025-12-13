@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 const iconClass = "w-5 h-5 text-dark-hunter-green/70";
@@ -140,7 +141,7 @@ export const FilterIcon: React.FC<{className?: string}> = ({ className = 'w-4 h-
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L16 11.414V16l-4 2v-6.586L3.293 6.707A1 1 0 013 6V4z"></path></svg>
 );
 export const SortUpIcon: React.FC<{className?: string}> = ({ className = 'w-4 h-4' }) => (
-    <svg className={className} fill="currentColor" viewBox="0 0 20 20"><path d="M3 3a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 100 2h14a1 1 0 100-2H3zm0 4a1 1 0 100 2h14a1 1 0 100-2H3zm0 4a1 1 0 100 2h14a1 1 0 100-2H3z"></path></svg>
+    <svg className={className} fill="currentColor" viewBox="0 0 20 20"><path d="M3 3a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 100 2h14a1 1 0 100-2H3zm0 4a1 1 0 100 2h14a1 1 0 100-2H3z"></path></svg>
 );
 
 export const CheckCircleIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
@@ -152,5 +153,11 @@ export const CheckCircleIcon: React.FC<{className?: string}> = ({ className = 'w
 export const XCircleIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+    </svg>
+);
+
+export const TicketIcon: React.FC<{className?: string}> = ({ className = sideNavIconClass }) => (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z" />
     </svg>
 );

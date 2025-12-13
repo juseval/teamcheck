@@ -1,11 +1,13 @@
+
 import React, { useMemo } from 'react';
-import { Employee, AttendanceLogEntry, WorkSchedule } from '../types';
-import { FilterIcon } from './Icons';
+import { Employee, AttendanceLogEntry, WorkSchedule, ActivityStatus } from '../types';
+import { FilterIcon, AlertIcon } from './Icons';
 
 interface TimesheetOverviewProps {
   employees: Employee[];
   attendanceLog: AttendanceLogEntry[];
   workSchedules: WorkSchedule[];
+  activityStatuses: ActivityStatus[];
 }
 
 // Helper to format time from "HH:mm" to "h:mm AM/PM"
@@ -28,23 +30,80 @@ const formatClockInTime = (timestamp: number): string => {
   });
 };
 
-const TimesheetOverview: React.FC<TimesheetOverviewProps> = ({ employees, attendanceLog, workSchedules }) => {
+const formatDurationShort = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+};
+
+const TimesheetOverview: React.FC<TimesheetOverviewProps> = ({ employees, attendanceLog, workSchedules, activityStatuses }) => {
   
   const processedData = useMemo(() => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
     
-    // 1. Get today's first clock-in time for each employee
-    const todaysClockIns = new Map<string, number>();
+    // We need more detailed stats than just first clock in
+    const dailyStats = new Map<string, { 
+        firstClockIn: number | null, 
+        lastClockOut: number | null,
+        totalBreakSeconds: number 
+    }>();
+
+    // Group logs by employee for today
+    const logsByEmployee = new Map<string, AttendanceLogEntry[]>();
     attendanceLog.forEach(log => {
-      if (log.action === 'Clock In' && log.timestamp >= todayStart.getTime()) {
-        if (!todaysClockIns.has(log.employeeId) || log.timestamp < todaysClockIns.get(log.employeeId)!) {
-          todaysClockIns.set(log.employeeId, log.timestamp);
+        if (log.timestamp >= todayStart.getTime() && log.timestamp <= todayEnd.getTime()) {
+            if (!logsByEmployee.has(log.employeeId)) {
+                logsByEmployee.set(log.employeeId, []);
+            }
+            logsByEmployee.get(log.employeeId)!.push(log);
         }
-      }
     });
 
-    // 2. Group employees by their schedule
+    // Calculate stats per employee
+    logsByEmployee.forEach((logs, employeeId) => {
+        // Sort logs chronologically
+        logs.sort((a, b) => a.timestamp - b.timestamp);
+
+        let firstClockIn: number | null = null;
+        let lastClockOut: number | null = null;
+        let totalBreakSeconds = 0;
+
+        // Find first Clock In
+        const clockInLog = logs.find(l => l.action === 'Clock In');
+        if (clockInLog) firstClockIn = clockInLog.timestamp;
+
+        // Find last Clock Out (if exists)
+        const clockOutLog = [...logs].reverse().find(l => l.action === 'Clock Out');
+        if (clockOutLog) lastClockOut = clockOutLog.timestamp;
+
+        // Calculate Break Duration (Any "Start [Activity]" -> Next Log)
+        for (let i = 0; i < logs.length - 1; i++) {
+            const current = logs[i];
+            const next = logs[i+1];
+            
+            // Assuming any action starting with 'Start ' that isn't working is a break/activity
+            // Or strictly checks against activityStatuses. 
+            // Here we check if action starts with 'Start ' (e.g., Start Break, Start Lunch)
+            if (current.action.startsWith('Start ') && next) {
+                 totalBreakSeconds += (next.timestamp - current.timestamp) / 1000;
+            }
+        }
+        
+        // Handle ongoing break (last log is Start Break)
+        const lastLog = logs[logs.length - 1];
+        if (lastLog && lastLog.action.startsWith('Start ')) {
+            totalBreakSeconds += (Date.now() - lastLog.timestamp) / 1000;
+        }
+
+        dailyStats.set(employeeId, { firstClockIn, lastClockOut, totalBreakSeconds });
+    });
+
+
+    // Group employees by their schedule (existing logic)
     const scheduleMap = new Map<string, WorkSchedule>(workSchedules.map(s => [s.id, s]));
     const employeesBySchedule = new Map<string, Employee[]>();
     const unassignedEmployees: Employee[] = [];
@@ -61,11 +120,9 @@ const TimesheetOverview: React.FC<TimesheetOverviewProps> = ({ employees, attend
       }
     });
     
-    // Sort employees within each group alphabetically
     employeesBySchedule.forEach(empList => empList.sort((a, b) => a.name.localeCompare(b.name)));
     unassignedEmployees.sort((a, b) => a.name.localeCompare(b.name));
 
-    // 3. Structure the final data for rendering, ensuring schedules with employees appear
     const structuredData = workSchedules
       .filter(schedule => employeesBySchedule.has(schedule.id) && employeesBySchedule.get(schedule.id)!.length > 0)
       .map(schedule => ({
@@ -75,14 +132,17 @@ const TimesheetOverview: React.FC<TimesheetOverviewProps> = ({ employees, attend
     
     if (unassignedEmployees.length > 0) {
       structuredData.push({
-        // A bit of a hack to create a schedule-like object for unassigned
         schedule: { id: 'unassigned', name: 'Unassigned', startTime: '-', endTime: '-', days: [] },
         employees: unassignedEmployees,
       });
     }
       
-    return { structuredData, todaysClockIns };
+    return { structuredData, dailyStats };
   }, [employees, attendanceLog, workSchedules]);
+
+  // Thresholds
+  const GRACE_PERIOD_MINUTES = 5;
+  const MAX_BREAK_SECONDS = 3600; // 1 hour
 
   return (
     <div className="w-full bg-white rounded-xl shadow-md p-6 border border-bokara-grey/10">
@@ -92,26 +152,10 @@ const TimesheetOverview: React.FC<TimesheetOverviewProps> = ({ employees, attend
           <thead className="text-xs text-bokara-grey/80 uppercase bg-gray-50">
             <tr>
               <th scope="col" className="px-4 py-3">Employee Name</th>
-              <th scope="col" className="px-4 py-3">
-                <div className="flex items-center gap-1">
-                  <FilterIcon className="w-3.5 h-3.5"/> Entry Time
-                </div>
-              </th>
-              <th scope="col" className="px-4 py-3">
-                <div className="flex items-center gap-1">
-                  <FilterIcon className="w-3.5 h-3.5"/> Exit Time
-                </div>
-              </th>
-              <th scope="col" className="px-4 py-3">
-                <div className="flex items-center gap-1">
-                  <FilterIcon className="w-3.5 h-3.5"/> Clock In
-                </div>
-              </th>
-              <th scope="col" className="px-4 py-3">
-                <div className="flex items-center gap-1">
-                  <FilterIcon className="w-3.5 h-3.5"/> Clock In Status
-                </div>
-              </th>
+              <th scope="col" className="px-4 py-3">Entry Time</th>
+              <th scope="col" className="px-4 py-3">Exit Time</th>
+              <th scope="col" className="px-4 py-3">Breaks Total</th>
+              <th scope="col" className="px-4 py-3">Status</th>
             </tr>
           </thead>
           {processedData.structuredData.map(({ schedule, employees: employeeList }) => (
@@ -122,21 +166,91 @@ const TimesheetOverview: React.FC<TimesheetOverviewProps> = ({ employees, attend
                 </td>
               </tr>
               {employeeList.map(employee => {
-                const clockInTime = processedData.todaysClockIns.get(employee.id);
-                // "Not Ready" is any status that isn't working or clocked out
-                const isNotReady = employee.status !== 'Working' && employee.status !== 'Clocked Out';
+                const stats = processedData.dailyStats.get(employee.id);
+                const firstClockIn = stats?.firstClockIn;
+                const lastClockOut = stats?.lastClockOut;
+                const totalBreak = stats?.totalBreakSeconds || 0;
                 
+                // Logic for Late Arrival
+                let isLate = false;
+                if (firstClockIn && schedule.id !== 'unassigned') {
+                    const [h, m] = schedule.startTime.split(':').map(Number);
+                    const scheduleDate = new Date(firstClockIn);
+                    scheduleDate.setHours(h, m, 0, 0);
+                    // Add grace period
+                    scheduleDate.setMinutes(scheduleDate.getMinutes() + GRACE_PERIOD_MINUTES);
+                    if (firstClockIn > scheduleDate.getTime()) {
+                        isLate = true;
+                    }
+                }
+
+                // Logic for Early Departure
+                let isEarly = false;
+                if (lastClockOut && schedule.id !== 'unassigned') {
+                     const [h, m] = schedule.endTime.split(':').map(Number);
+                     const scheduleDate = new Date(lastClockOut);
+                     scheduleDate.setHours(h, m, 0, 0);
+                     // Allow leaving exactly on time or after. If before, check tolerance.
+                     // Example: Shift ends 17:00. Left 16:50 -> Early.
+                     if (lastClockOut < scheduleDate.getTime() - (GRACE_PERIOD_MINUTES * 60 * 1000)) {
+                         isEarly = true;
+                     }
+                }
+
+                // Logic for Excessive Break
+                const isExcessiveBreak = totalBreak > MAX_BREAK_SECONDS;
+
                 return (
-                  <tr key={employee.id} className={`border-b border-gray-200 hover:bg-gray-50 ${isNotReady ? 'bg-orange-100' : ''}`}>
+                  <tr key={employee.id} className={`border-b border-gray-200 hover:bg-gray-50`}>
                     <td className="px-4 py-3 font-medium whitespace-nowrap">{employee.name}</td>
-                    <td className="px-4 py-3">{formatScheduleTime(schedule.startTime)}</td>
-                    <td className="px-4 py-3">{formatScheduleTime(schedule.endTime)}</td>
-                    <td className={`px-4 py-3 font-mono ${!clockInTime ? 'text-gray-500' : ''}`}>
-                      {clockInTime ? formatClockInTime(clockInTime) : 'OFF'}
-                    </td>
+                    
+                    {/* Entry Time */}
                     <td className="px-4 py-3">
-                      <span className={`font-semibold ${clockInTime ? 'text-green-600' : 'text-red-600'}`}>
-                        {clockInTime ? 'Marcado' : 'Sin Marcar'}
+                        {firstClockIn ? (
+                            <div className="flex items-center gap-2">
+                                <span className={`font-mono ${isLate ? 'text-red-600 font-bold' : ''}`}>
+                                    {formatClockInTime(firstClockIn)}
+                                </span>
+                                {isLate && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200">Late</span>}
+                            </div>
+                        ) : (
+                            <span className="text-gray-400">-</span>
+                        )}
+                    </td>
+
+                    {/* Exit Time */}
+                    <td className="px-4 py-3">
+                         {lastClockOut ? (
+                            <div className="flex items-center gap-2">
+                                <span className={`font-mono ${isEarly ? 'text-amber-600 font-bold' : ''}`}>
+                                    {formatClockInTime(lastClockOut)}
+                                </span>
+                                {isEarly && <span className="text-[10px] bg-amber-100 text-amber-600 px-1.5 py-0.5 rounded border border-amber-200">Early</span>}
+                            </div>
+                        ) : (
+                            <span className="text-gray-400">Active</span>
+                        )}
+                    </td>
+
+                    {/* Total Break */}
+                    <td className="px-4 py-3">
+                        {totalBreak > 0 ? (
+                            <div className="flex items-center gap-2">
+                                <span className={`font-mono ${isExcessiveBreak ? 'text-red-600 font-bold' : ''}`}>
+                                    {formatDurationShort(totalBreak)}
+                                </span>
+                                {isExcessiveBreak && <span className="text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded border border-red-200">&gt;1h</span>}
+                            </div>
+                        ) : <span className="text-gray-400">-</span>}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                          firstClockIn 
+                            ? (lastClockOut ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-700') 
+                            : 'bg-red-50 text-red-500'
+                      }`}>
+                        {firstClockIn ? (lastClockOut ? 'Done' : 'Active') : 'Absent'}
                       </span>
                     </td>
                   </tr>

@@ -1,6 +1,8 @@
+
 import React, { useState, useMemo, Fragment } from 'react';
 import { Employee, AttendanceLogEntry, ActivityStatus, TimesheetEntry } from '../types';
 import { EditIcon } from '../components/Icons';
+import { exportTimesheet } from '../services/exportService';
 
 const formatDuration = (seconds: number, style: 'short' | 'long' = 'long') => {
     if (isNaN(seconds) || seconds < 0) return '00:00:00';
@@ -140,9 +142,23 @@ const TimesheetPage: React.FC<{
         return Object.values(results).filter(res => Object.keys(res.dailyData).length > 0);
     }, [employees, attendanceLog, activityStatuses, selectedEmployeeIds, startDate, endDate]);
 
+    const handleExport = () => {
+        exportTimesheet(timesheetData);
+    };
+
     return (
         <div className="w-full mx-auto animate-fade-in">
-            <h1 className="text-3xl font-bold text-bokara-grey mb-6">Timesheet</h1>
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold text-bokara-grey">Timesheet</h1>
+                <button
+                    onClick={handleExport}
+                    disabled={timesheetData.length === 0}
+                    className="bg-wet-sand hover:bg-opacity-80 disabled:bg-wet-sand/40 disabled:cursor-not-allowed text-bokara-grey font-bold py-2 px-4 rounded-lg transition-all duration-300 shadow-md flex items-center gap-2"
+                >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    <span>Export CSV</span>
+                </button>
+            </div>
             
             <div className="bg-white rounded-xl shadow-md p-6 border border-bokara-grey/10 mb-8">
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">

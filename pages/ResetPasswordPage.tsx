@@ -1,25 +1,39 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNotification } from '../contexts/NotificationContext';
-import { changePassword, getEmployeeProfile } from '../services/apiService';
-import { auth } from '../services/firebase';
+import { verifyPasswordResetCode, confirmPasswordReset } from '../services/apiService';
 
-const ChangePasswordPage: React.FC = () => {
+interface ResetPasswordPageProps {
+  oobCode: string;
+  onNavigateToLogin: () => void;
+}
+
+const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ oobCode, onNavigateToLogin }) => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
   const { addNotification } = useNotification();
 
   useEffect(() => {
-    // Get current user email for display
-    if (auth && auth.currentUser) {
-        setUserEmail(auth.currentUser.email || '');
-    }
-  }, []);
+    const verifyCode = async () => {
+        try {
+            const email = await verifyPasswordResetCode(oobCode);
+            setUserEmail(email);
+        } catch (error) {
+            console.error("Invalid reset code", error);
+            addNotification('El enlace de restablecimiento es inválido o ha expirado.', 'error');
+            setTimeout(onNavigateToLogin, 3000);
+        } finally {
+            setIsVerifying(false);
+        }
+    };
+    verifyCode();
+  }, [oobCode, addNotification, onNavigateToLogin]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,14 +50,12 @@ const ChangePasswordPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-        await changePassword(newPassword);
-        addNotification('Contraseña actualizada exitosamente.', 'success');
-        setNewPassword('');
-        setConfirmPassword('');
+        await confirmPasswordReset(oobCode, newPassword);
+        addNotification('Contraseña restablecida exitosamente. Inicia sesión.', 'success');
+        setTimeout(onNavigateToLogin, 2000);
     } catch (error: any) {
-        console.error('Error changing password:', error);
-        addNotification(error.message || 'Error al actualizar la contraseña.', 'error');
-    } finally {
+        console.error('Error confirming reset:', error);
+        addNotification(error.message || 'Error al restablecer la contraseña.', 'error');
         setIsSubmitting(false);
     }
   };
@@ -61,8 +73,20 @@ const ChangePasswordPage: React.FC = () => {
     )
   );
 
+  if (isVerifying) {
+      return (
+        <div className="w-full min-h-screen flex items-center justify-center bg-bright-white">
+            <div className="flex items-center space-x-2">
+                <div className="w-4 h-4 rounded-full bg-lucius-lime animate-pulse delay-75"></div>
+                <div className="w-4 h-4 rounded-full bg-lucius-lime animate-pulse delay-150"></div>
+                <div className="w-4 h-4 rounded-full bg-lucius-lime animate-pulse delay-300"></div>
+            </div>
+        </div>
+      );
+  }
+
   return (
-    <div className="w-full min-h-[80vh] flex items-center justify-center animate-fade-in px-4">
+    <div className="w-full min-h-screen flex items-center justify-center animate-fade-in px-4 bg-bright-white">
         <div className="w-full max-w-md bg-white rounded-xl shadow-md border border-bokara-grey/10 p-8">
             <h1 className="text-2xl font-bold text-bokara-grey mb-2">Cambiar la contraseña</h1>
             {userEmail && <p className="text-bokara-grey/80 mb-8 font-medium">de {userEmail}</p>}
@@ -123,4 +147,4 @@ const ChangePasswordPage: React.FC = () => {
   );
 };
 
-export default ChangePasswordPage;
+export default ResetPasswordPage;

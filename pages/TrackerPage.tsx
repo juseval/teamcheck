@@ -1,16 +1,20 @@
+
 import React, { useState, useMemo } from 'react';
-import { Employee, AttendanceLogEntry, AttendanceAction, ActivityStatus, WorkSchedule } from '../types.ts';
-import EmployeeCard from '../components/EmployeeCard.tsx';
-import AttendanceLog from '../components/AttendanceLog.tsx';
-import EmployeeTimeline from '../components/EmployeeTimeline.tsx';
+import { Employee, AttendanceLogEntry, AttendanceAction, ActivityStatus, WorkSchedule } from '../types';
+import EmployeeCard from '../components/EmployeeCard';
+import AttendanceLog from '../components/AttendanceLog';
+import EmployeeTimeline from '../components/EmployeeTimeline';
 
 interface TrackerPageProps {
   employees: Employee[];
   attendanceLog: AttendanceLogEntry[];
-  onEmployeeAction: (employeeId: number, action: AttendanceAction) => void;
+  // FIX: Changed employeeId type from number to string.
+  onEmployeeAction: (employeeId: string, action: AttendanceAction) => void;
   onAddEmployee: () => void;
-  onRemoveEmployee: (employeeId: number) => void;
-  onEditTime: (employeeId: number) => void;
+  // FIX: Changed employeeId type from number to string.
+  onRemoveEmployee: (employeeId: string) => void;
+  // FIX: Changed employeeId type from number to string.
+  onEditTime: (employeeId: string) => void;
   userRole: 'admin' | 'employee';
   activityStatuses: ActivityStatus[];
   workSchedules: WorkSchedule[];
@@ -155,7 +159,7 @@ const TrackerPage: React.FC<TrackerPageProps> = ({
             </div>
             
             {userRole === 'admin' && (
-                <div className="w-full max-w-6xl bg-white rounded-xl shadow-md p-6 border border-bokara-grey/10">
+                <div className="w-full max-w-6xl bg-white rounded-xl shadow-md p-6 border border-bokara-grey/10 transition-colors duration-300">
                      <EmployeeTimeline 
                         employees={employees} 
                         attendanceLog={attendanceLog} 

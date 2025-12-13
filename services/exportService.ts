@@ -1,4 +1,5 @@
-import { AttendanceLogEntry } from '../types.ts';
+
+import { AttendanceLogEntry, TimesheetEntry } from '../types';
 
 interface EmployeeTimeData {
   employeeName: string;
@@ -48,4 +49,32 @@ export function exportDashboardData(employeeData: EmployeeTimeData[]) {
     formatDurationForExport(data.breakSeconds),
   ]);
   exportToCsv("dashboard_export.csv", [headers, ...rows]);
+}
+
+export function exportTimesheet(timesheetData: any[]) {
+  const headers = ["Employee", "Date", "Day", "Type", "Time In", "Time Out", "Duration"];
+  const rows: string[][] = [];
+
+  timesheetData.forEach(data => {
+      // Sort days chronologically
+      const sortedDates = Object.keys(data.dailyData).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+      
+      sortedDates.forEach(date => {
+          const dailyInfo = data.dailyData[date];
+          if (dailyInfo && dailyInfo.entries) {
+              dailyInfo.entries.forEach((entry: TimesheetEntry) => {
+                  rows.push([
+                      `"${data.employeeName.replace(/"/g, '""')}"`,
+                      entry.date,
+                      entry.dayOfWeek,
+                      entry.type,
+                      new Date(entry.timeIn).toLocaleTimeString(),
+                      new Date(entry.timeOut).toLocaleTimeString(),
+                      formatDurationForExport(entry.duration)
+                  ]);
+              });
+          }
+      });
+  });
+  exportToCsv("timesheet_export.csv", [headers, ...rows]);
 }

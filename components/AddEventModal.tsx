@@ -1,6 +1,8 @@
 
+
+
 import React, { useState, useEffect } from 'react';
-import { Employee, PayrollChangeType, CalendarEvent } from '../types';
+import { Employee, PayrollChangeType, CalendarEvent } from '../types.ts';
 
 interface AddEventModalProps {
   isOpen: boolean;
@@ -10,58 +12,25 @@ interface AddEventModalProps {
   payrollChangeTypes: PayrollChangeType[];
 }
 
-const getLocalISODate = () => {
-    const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-};
-
 const AddEventModal: React.FC<AddEventModalProps> = ({ isOpen, onClose, onAddEvent, employees, payrollChangeTypes }) => {
   const [eventData, setEventData] = useState({
-      employeeId: '',
-      type: '',
-      startDate: getLocalISODate(),
-      endDate: getLocalISODate(),
+      employeeId: employees.length > 0 ? employees[0].id : '',
+      type: payrollChangeTypes.length > 0 ? payrollChangeTypes[0].name : '',
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: new Date().toISOString().split('T')[0],
   });
 
-  // Only reset defaults when the modal opens to avoid overwriting user input during re-renders
   useEffect(() => {
+    // Reset form when modal is opened
     if (isOpen) {
         setEventData({
             employeeId: employees.length > 0 ? employees[0].id : '',
             type: payrollChangeTypes.length > 0 ? payrollChangeTypes[0].name : '',
-            startDate: getLocalISODate(),
-            endDate: getLocalISODate(),
+            startDate: new Date().toISOString().split('T')[0],
+            endDate: new Date().toISOString().split('T')[0],
         });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen]);
-
-  // If employees load after modal is open and no employee is selected, select the first one
-  useEffect(() => {
-    if (isOpen && employees.length > 0) {
-        setEventData(prev => {
-            if (!prev.employeeId) {
-                return { ...prev, employeeId: employees[0].id };
-            }
-            return prev;
-        });
-    }
-  }, [employees, isOpen]); 
-
-  // If types load after modal is open and no type is selected, select the first one
-  useEffect(() => {
-    if (isOpen && payrollChangeTypes.length > 0) {
-        setEventData(prev => {
-            if (!prev.type) {
-                return { ...prev, type: payrollChangeTypes[0].name };
-            }
-            return prev;
-        });
-    }
-  }, [payrollChangeTypes, isOpen]);
+  }, [isOpen, employees, payrollChangeTypes]);
 
   if (!isOpen) return null;
 
@@ -69,16 +38,19 @@ const AddEventModal: React.FC<AddEventModalProps> = ({ isOpen, onClose, onAddEve
       const { name, value } = e.target;
       setEventData(prev => ({ ...prev, [name]: value }));
   };
+  
+  const isFormValid = eventData.employeeId && eventData.type && eventData.startDate && eventData.endDate && eventData.startDate <= eventData.endDate;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isFormValid) {
-      onAddEvent(eventData);
+      onAddEvent({
+        ...eventData,
+        status: 'approved' // Manually added events by admin are auto-approved
+      });
     }
   };
   
-  const isFormValid = eventData.employeeId && eventData.type && eventData.startDate && eventData.endDate && eventData.startDate <= eventData.endDate;
-
   return (
     <div className="fixed inset-0 bg-bokara-grey bg-opacity-50 flex items-center justify-center z-50 transition-opacity" onClick={onClose} aria-modal="true" role="dialog">
       <div className="bg-bright-white rounded-xl shadow-2xl p-6 w-full max-w-lg border border-bokara-grey/10" onClick={e => e.stopPropagation()}>

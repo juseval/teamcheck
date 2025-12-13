@@ -3,7 +3,7 @@ export type EmployeeStatus = string;
 
 export interface Employee {
   id: string;
-  uid?: string; // UID from Firebase Authentication or Mock ID
+  uid?: string; // UID from Firebase Authentication
   name: string;
   email: string;
   phone: string;
@@ -82,18 +82,23 @@ export interface Task {
   color: string;
 }
 
+export type EventStatus = 'pending' | 'approved' | 'rejected';
+
 export interface CalendarEvent {
   id: string;
   employeeId: string;
   type: string; // 'Vacation', 'Family Day', etc.
   startDate: string; // YYYY-MM-DD
   endDate: string; // YYYY-MM-DD
+  status: EventStatus;
 }
 
 export interface PayrollChangeType {
   id: string;
   name: string;
   color: string;
+  isExclusive?: boolean; // If true, only one person can have this approved per day
+  adminOnly?: boolean;   // If true, employees cannot request this type
 }
 
 export interface WorkSchedule {

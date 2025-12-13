@@ -1,13 +1,14 @@
+
 import React, { useState, useEffect } from 'react';
-import { Employee, AttendanceAction, ActivityStatus } from '../types.ts';
-import ActivityPickerModal from './ActivityPickerModal.tsx';
-import { EditIcon } from './Icons.tsx';
+import { Employee, AttendanceAction, ActivityStatus } from '../types';
+import ActivityPickerModal from './ActivityPickerModal';
+import { EditIcon } from './Icons';
 
 interface EmployeeCardProps {
   employee: Employee;
-  onAction: (employeeId: number, action: AttendanceAction) => void;
-  onRemove: (employeeId: number) => void;
-  onEditTime: (employeeId: number) => void;
+  onAction: (employeeId: string, action: AttendanceAction) => void;
+  onRemove: (employeeId: string) => void;
+  onEditTime: (employeeId: string) => void;
   activityStatuses: ActivityStatus[];
   userRole: 'admin' | 'employee';
 }

@@ -1,7 +1,8 @@
+
 import React from 'react';
-import { AttendanceLogEntry } from '../types.ts';
-import { exportActivityLog } from '../services/exportService.ts';
-import { EditIcon } from './Icons.tsx';
+import { AttendanceLogEntry } from '../types';
+import { exportActivityLog } from '../services/exportService';
+import { EditIcon } from './Icons';
 
 interface AttendanceLogProps {
   entries: AttendanceLogEntry[];
@@ -12,7 +13,21 @@ interface AttendanceLogProps {
 }
 
 const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    if (!timestamp) return 'N/A';
+    try {
+        return new Date(timestamp).toLocaleDateString([], { year: 'numeric', month: 'numeric', day: 'numeric' });
+    } catch (e) {
+        return 'Invalid Date';
+    }
+}
+
+const formatTime = (timestamp: number) => {
+    if (!timestamp) return 'N/A';
+    try {
+        return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch (e) {
+        return 'Invalid Time';
+    }
 }
 
 const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDateRangeChange, userRole, onEditEntry }) => {
@@ -32,7 +47,7 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDat
     );
 
     return (
-      <div className="w-full bg-white rounded-xl shadow-md p-6 border border-bokara-grey/10">
+      <div className="w-full bg-white rounded-xl shadow-md p-6 border border-bokara-grey/10 transition-colors duration-300">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-2xl font-bold text-bokara-grey">Today's Activity</h2>
         </div>
@@ -48,8 +63,8 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDat
               <tbody>
                 {todaysEntries.map((entry) => (
                   <tr key={entry.id} className="border-b border-gray-200">
-                    <td className="p-3 text-bokara-grey/80 font-mono">{formatDate(entry.timestamp)}</td>
-                    <td className={`p-3 text-bokara-grey ${entry.action.includes('Break') ? 'text-wet-sand' : ''}`}>{entry.action}</td>
+                    <td className="p-3 text-bokara-grey/80 font-mono">{formatTime(entry.timestamp)}</td>
+                    <td className={`p-3 text-bokara-grey ${(entry.action || '').includes('Break') ? 'text-wet-sand' : ''}`}>{entry.action || '-'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -63,7 +78,7 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDat
   }
 
   return (
-    <div className="w-full bg-white rounded-xl shadow-md p-6 border border-bokara-grey/10">
+    <div className="w-full bg-white rounded-xl shadow-md p-6 border border-bokara-grey/10 transition-colors duration-300">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
         <h2 className="text-2xl font-bold text-bokara-grey">Activity Log</h2>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -104,6 +119,7 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDat
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-bokara-grey/10">
+                <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider">Date</th>
                 <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider">Time</th>
                 <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider">Employee</th>
                 <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider">Action</th>
@@ -112,10 +128,11 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDat
             </thead>
             <tbody>
               {entries.map((entry) => (
-                <tr key={entry.id} className="border-b border-gray-200 hover:bg-whisper-white/40">
-                  <td className="p-3 text-bokara-grey/80 font-mono">{formatDate(entry.timestamp)}</td>
-                  <td className="p-3 text-bokara-grey">{entry.employeeName}</td>
-                  <td className={`p-3 text-bokara-grey ${entry.action.includes('Break') ? 'text-wet-sand' : ''}`}>{entry.action}</td>
+                <tr key={entry.id} className="border-b border-gray-200 hover:bg-whisper-white/40 transition-colors">
+                  <td className="p-3 text-bokara-grey/80 font-mono text-sm">{formatDate(entry.timestamp)}</td>
+                  <td className="p-3 text-bokara-grey/80 font-mono text-sm">{formatTime(entry.timestamp)}</td>
+                  <td className="p-3 text-bokara-grey">{entry.employeeName || 'Unknown'}</td>
+                  <td className={`p-3 text-bokara-grey ${(entry.action || '').includes('Break') ? 'text-wet-sand' : ''}`}>{entry.action || '-'}</td>
                   {onEditEntry && (
                     <td className="p-3 text-right">
                         <button onClick={() => onEditEntry(entry)} className="p-1.5 text-bokara-grey/50 hover:text-lucius-lime rounded-full hover:bg-whisper-white transition-colors" title="Edit Log Entry">

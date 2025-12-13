@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { Employee, AttendanceLogEntry, AttendanceAction, ActivityStatus, WorkSchedule, CalendarEvent } from '../types';
 import DashboardSummary from '../components/DashboardSummary';
@@ -93,6 +94,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ attendanceLog, employees,
         employees={employees}
         attendanceLog={attendanceLog}
         workSchedules={workSchedules}
+        activityStatuses={activityStatuses}
       />
 
       <AgentStateDashboard

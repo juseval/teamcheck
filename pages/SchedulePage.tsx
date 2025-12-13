@@ -1,5 +1,7 @@
+
+
 import React, { useState, useMemo } from 'react';
-import { CalendarEvent, Employee, PayrollChangeType } from '../types.ts';
+import { CalendarEvent, Employee, PayrollChangeType } from '../types';
 
 interface SchedulePageProps {
   events: CalendarEvent[];
@@ -8,6 +10,7 @@ interface SchedulePageProps {
   onAddEvent: () => void;
   onEditEvent: (event: CalendarEvent) => void;
   onRemoveEvent: (event: CalendarEvent) => void;
+  onUpdateEventStatus?: (event: CalendarEvent, status: 'approved' | 'rejected') => void;
 }
 
 // Define the structure for a day in the calendar grid
@@ -20,11 +23,13 @@ interface CalendarDay {
     event: CalendarEvent;
     employeeName: string;
     color: string;
+    isPending: boolean;
   }[];
 }
 
-const SchedulePage: React.FC<SchedulePageProps> = ({ events, employees, payrollChangeTypes, onAddEvent, onEditEvent, onRemoveEvent }) => {
+const SchedulePage: React.FC<SchedulePageProps> = ({ events, employees, payrollChangeTypes, onAddEvent, onEditEvent, onRemoveEvent, onUpdateEventStatus }) => {
     const [currentDate, setCurrentDate] = useState(new Date()); 
+    const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
 
     // Navigation handlers
     const handlePrevMonth = () => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
@@ -37,6 +42,10 @@ const SchedulePage: React.FC<SchedulePageProps> = ({ events, employees, payrollC
         payrollChangeTypes.forEach(p => map.set(p.name, p.color));
         return map;
     }, [payrollChangeTypes]);
+
+    const pendingRequests = useMemo(() => {
+        return events.filter(e => e.status === 'pending');
+    }, [events]);
 
     const calendarGrid = useMemo(() => {
         const year = currentDate.getFullYear();
@@ -96,6 +105,9 @@ const SchedulePage: React.FC<SchedulePageProps> = ({ events, employees, payrollC
 
         // Map events to the calendar days
         events.forEach(event => {
+            // Only show approved events in the main grid to avoid clutter, or visually distinguish pending
+            if (event.status === 'rejected') return;
+
             const startDate = new Date(event.startDate + 'T00:00:00');
             const endDate = new Date(event.endDate + 'T00:00:00');
             
@@ -106,7 +118,8 @@ const SchedulePage: React.FC<SchedulePageProps> = ({ events, employees, payrollC
                     dayInGrid.events.push({
                         event: event,
                         employeeName: employeeMap.get(event.employeeId) || 'Unknown',
-                        color: eventColorMap.get(event.type) || '#91A673'
+                        color: eventColorMap.get(event.type) || '#91A673',
+                        isPending: event.status === 'pending'
                     });
                 }
             }
@@ -143,6 +156,21 @@ const SchedulePage: React.FC<SchedulePageProps> = ({ events, employees, payrollC
                          </button>
                     </div>
                     <span className="text-lg font-semibold w-48 text-center capitalize">{monthName} {year}</span>
+                    
+                    {/* Pending Requests Button */}
+                    <button 
+                        onClick={() => setIsPendingModalOpen(true)}
+                        className="relative bg-white border border-bokara-grey/20 hover:bg-whisper-white text-bokara-grey font-medium py-2 px-4 rounded-lg transition-all duration-300 shadow-sm flex items-center gap-2"
+                    >
+                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                        <span>Solicitudes</span>
+                        {pendingRequests.length > 0 && (
+                            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white ring-2 ring-white">
+                                {pendingRequests.length}
+                            </span>
+                        )}
+                    </button>
+
                     <button onClick={onAddEvent} className="bg-lucius-lime hover:bg-opacity-80 text-bokara-grey font-bold py-2 px-4 rounded-lg transition-all duration-300 shadow-sm flex items-center gap-2">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
                         <span>Agregar Novedad</span>
@@ -166,28 +194,80 @@ const SchedulePage: React.FC<SchedulePageProps> = ({ events, employees, payrollC
                             </span>
                         </div>
                          <div className="mt-1 space-y-1 text-xs overflow-y-auto flex-grow">
-                            {day.events.map(({ event, employeeName, color }) => (
-                                <div key={`${event.id}-${day.date}`} className="group relative bg-white p-1 rounded-sm border-l-4 shadow-xs flex items-center justify-between cursor-pointer" style={{ borderColor: color }} onClick={() => onEditEvent(event)}>
+                            {day.events.map(({ event, employeeName, color, isPending }) => (
+                                <div 
+                                    key={`${event.id}-${day.date}`} 
+                                    className={`group relative bg-white p-1 rounded-sm border-l-4 shadow-xs flex items-center justify-between cursor-pointer ${isPending ? 'opacity-70 border-dashed' : ''}`} 
+                                    style={{ borderColor: color }} 
+                                    onClick={() => onEditEvent(event)}
+                                >
                                     <div className="w-full text-left overflow-hidden">
                                         <p className="font-medium text-bokara-grey truncate" title={employeeName}>{employeeName}</p>
-                                        <p className="text-bokara-grey/70">{event.type}</p>
+                                        <p className="text-bokara-grey/70 truncate">
+                                            {event.type} {isPending && '(P)'}
+                                        </p>
                                     </div>
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onRemoveEvent(event);
-                                        }}
-                                        className="absolute top-1 right-1 p-0.5 rounded-full bg-red-100 text-red-600 opacity-0 group-hover:opacity-100 hover:bg-red-200 transition-opacity"
-                                        aria-label="Remove event"
-                                    >
-                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                                    </button>
+                                    {!isPending && (
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onRemoveEvent(event);
+                                            }}
+                                            className="absolute top-1 right-1 p-0.5 rounded-full bg-red-100 text-red-600 opacity-0 group-hover:opacity-100 hover:bg-red-200 transition-opacity"
+                                            aria-label="Remove event"
+                                        >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                        </button>
+                                    )}
                                 </div>
                             ))}
                         </div>
                     </div>
                 ))}
             </div>
+
+            {/* Pending Requests Modal */}
+            {isPendingModalOpen && (
+                <div className="fixed inset-0 bg-bokara-grey bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setIsPendingModalOpen(false)}>
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold text-bokara-grey">Solicitudes Pendientes</h2>
+                            <button onClick={() => setIsPendingModalOpen(false)} className="text-bokara-grey/50 hover:text-bokara-grey">
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        
+                        {pendingRequests.length === 0 ? (
+                            <p className="text-center text-bokara-grey/60 py-8">No hay solicitudes pendientes.</p>
+                        ) : (
+                            <div className="space-y-4">
+                                {pendingRequests.map(request => (
+                                    <div key={request.id} className="bg-whisper-white/50 p-4 rounded-lg border border-bokara-grey/10 flex flex-col sm:flex-row justify-between items-center gap-4">
+                                        <div>
+                                            <p className="font-bold text-lg text-bokara-grey">{employeeMap.get(request.employeeId) || 'Desconocido'}</p>
+                                            <p className="text-bokara-grey/80"><span className="font-semibold">{request.type}</span>: {request.startDate} al {request.endDate}</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button 
+                                                onClick={() => onUpdateEventStatus && onUpdateEventStatus(request, 'rejected')}
+                                                className="px-3 py-1.5 bg-red-100 text-red-700 font-semibold rounded hover:bg-red-200 transition"
+                                            >
+                                                Rechazar
+                                            </button>
+                                            <button 
+                                                onClick={() => onUpdateEventStatus && onUpdateEventStatus(request, 'approved')}
+                                                className="px-3 py-1.5 bg-green-100 text-green-700 font-semibold rounded hover:bg-green-200 transition"
+                                            >
+                                                Aprobar
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

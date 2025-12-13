@@ -1,12 +1,13 @@
+
 import React, { useState } from 'react';
-import { ActivityStatus, PayrollChangeType, WorkSchedule } from '../types.ts';
+import { ActivityStatus, PayrollChangeType, WorkSchedule } from '../types';
 
 interface SettingsPageProps {
   statuses: ActivityStatus[];
   onAddStatus: (name: string, color: string) => Promise<void>;
   onRemoveStatus: (id: string) => Promise<void>;
   payrollChangeTypes: PayrollChangeType[];
-  onAddPayrollChangeType: (name: string, color: string) => Promise<void>;
+  onAddPayrollChangeType: (name: string, color: string, isExclusive: boolean, adminOnly: boolean) => Promise<void>;
   onUpdatePayrollChangeType: (id: string, updates: Partial<Omit<PayrollChangeType, 'id'>>) => Promise<void>;
   onRemovePayrollChangeType: (id: string) => Promise<void>;
   workSchedules: WorkSchedule[];
@@ -17,7 +18,7 @@ interface SettingsPageProps {
 
 // Helper to calculate duration
 const calculateDuration = (startTime: string, endTime: string): string => {
-    if (!startTime || !endTime) return "0 horas 0 minutos";
+    if (!startTime || !endTime) return "0 hours 0 minutes";
     
     const start = new Date(`1970-01-01T${startTime}:00`);
     const end = new Date(`1970-01-01T${endTime}:00`);
@@ -27,15 +28,15 @@ const calculateDuration = (startTime: string, endTime: string): string => {
     }
     
     const diffMs = end.getTime() - start.getTime();
-    if (isNaN(diffMs) || diffMs < 0) return "0 horas 0 minutos";
+    if (isNaN(diffMs) || diffMs < 0) return "0 hours 0 minutes";
     
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
-    return `${diffHours} horas ${diffMinutes} minutos`;
+    return `${diffHours} hours ${diffMinutes} minutes`;
 }
 
-const dayLabels = ['D', 'L', 'M', 'M', 'J', 'V', 'S'];
+const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 const DayPicker: React.FC<{ selectedDays: number[], onDayToggle: (dayIndex: number) => void }> = ({ selectedDays, onDayToggle }) => {
     return (
@@ -82,6 +83,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
     const [newPayrollChangeName, setNewPayrollChangeName] = useState('');
     const [newPayrollChangeColor, setNewPayrollChangeColor] = useState('#3B82F6');
+    const [newPayrollIsExclusive, setNewPayrollIsExclusive] = useState(false);
+    const [newPayrollAdminOnly, setNewPayrollAdminOnly] = useState(false);
     const [isPayrollSubmitting, setIsPayrollSubmitting] = useState(false);
 
     const [newScheduleName, setNewScheduleName] = useState('');
@@ -101,7 +104,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             setNewStatusColor('#888888');
         } catch (error) {
             console.error("Failed to add status", error);
-            // In a real app, show an error message to the user
         } finally {
             setIsSubmitting(false);
         }
@@ -113,9 +115,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
         setIsPayrollSubmitting(true);
         try {
-            await onAddPayrollChangeType(newPayrollChangeName.trim(), newPayrollChangeColor);
+            await onAddPayrollChangeType(newPayrollChangeName.trim(), newPayrollChangeColor, newPayrollIsExclusive, newPayrollAdminOnly);
             setNewPayrollChangeName('');
             setNewPayrollChangeColor('#3B82F6');
+            setNewPayrollIsExclusive(false);
+            setNewPayrollAdminOnly(false);
         } catch (error) {
             console.error("Failed to add payroll change type", error);
         } finally {
@@ -237,10 +241,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             </div>
         </div>
 
-        {/* Payroll Changes Section */}
+        {/* Payroll Changes Section (Tiquetera) */}
         <div className="bg-white rounded-xl shadow-md border border-bokara-grey/10 p-6">
-            <h2 className="text-2xl font-bold text-bokara-grey mb-2">Payroll Changes (Novedades)</h2>
-            <p className="text-bokara-grey/80 mb-6">Manage the types of events that affect payroll, such as vacation, sick days, etc.</p>
+            <h2 className="text-2xl font-bold text-bokara-grey mb-2">Ticket Types (Tiquetera)</h2>
+            <p className="text-bokara-grey/80 mb-6">Manage the types of events for ticketing (Vacation, Sick Day, etc.). Configure visibility and rules.</p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {/* Add New Form */}
@@ -269,6 +273,32 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                                 className="w-full h-10 p-1 bg-bright-white border border-bokara-grey/20 rounded-lg cursor-pointer"
                             />
                         </div>
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                            <label className="flex items-center gap-2 cursor-pointer bg-bright-white p-2 rounded-lg border border-bokara-grey/10 hover:bg-white transition-colors">
+                                <input 
+                                    type="checkbox" 
+                                    checked={newPayrollIsExclusive} 
+                                    onChange={(e) => setNewPayrollIsExclusive(e.target.checked)}
+                                    className="h-4 w-4 text-lucius-lime rounded focus:ring-lucius-lime"
+                                />
+                                <div className="text-xs">
+                                    <span className="block font-bold text-bokara-grey">Exclusive?</span>
+                                    <span className="text-bokara-grey/60">Single person per day</span>
+                                </div>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer bg-bright-white p-2 rounded-lg border border-bokara-grey/10 hover:bg-white transition-colors">
+                                <input 
+                                    type="checkbox" 
+                                    checked={newPayrollAdminOnly} 
+                                    onChange={(e) => setNewPayrollAdminOnly(e.target.checked)}
+                                    className="h-4 w-4 text-lucius-lime rounded focus:ring-lucius-lime"
+                                />
+                                <div className="text-xs">
+                                    <span className="block font-bold text-bokara-grey">Hide from Employee?</span>
+                                    <span className="text-bokara-grey/60">Visible only to Admin</span>
+                                </div>
+                            </label>
+                        </div>
                         <button 
                             type="submit"
                             disabled={!newPayrollChangeName.trim() || isPayrollSubmitting}
@@ -284,24 +314,46 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                     <h3 className="text-lg font-semibold text-lucius-lime mb-3">Existing Types</h3>
                     <div className="space-y-2 max-h-96 overflow-y-auto">
                         {payrollChangeTypes.length > 0 ? payrollChangeTypes.map(type => (
-                            <div key={type.id} className="flex items-center justify-between bg-whisper-white/60 p-2 rounded-lg border border-bokara-grey/10">
-                                <div className="flex items-center gap-3">
-                                    <input
-                                        type="color"
-                                        value={type.color}
-                                        onChange={(e) => onUpdatePayrollChangeType(type.id, { color: e.target.value })}
-                                        className="w-8 h-8 p-0 border-none rounded cursor-pointer bg-transparent"
-                                        aria-label={`Change color for ${type.name}`}
-                                    />
-                                    <span className="font-medium text-bokara-grey">{type.name}</span>
+                            <div key={type.id} className="flex flex-col bg-whisper-white/60 p-3 rounded-lg border border-bokara-grey/10 gap-2">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="color"
+                                            value={type.color}
+                                            onChange={(e) => onUpdatePayrollChangeType(type.id, { color: e.target.value })}
+                                            className="w-6 h-6 p-0 border-none rounded cursor-pointer bg-transparent"
+                                            aria-label={`Change color for ${type.name}`}
+                                        />
+                                        <span className="font-bold text-bokara-grey">{type.name}</span>
+                                    </div>
+                                    <button 
+                                        onClick={() => onRemovePayrollChangeType(type.id)}
+                                        className="text-red-500/70 hover:text-red-600 hover:bg-red-500/10 p-1 rounded-md"
+                                        aria-label={`Remove ${type.name}`}
+                                    >
+                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    </button>
                                 </div>
-                                <button 
-                                    onClick={() => onRemovePayrollChangeType(type.id)}
-                                    className="text-red-500/70 hover:text-red-600 hover:bg-red-500/10 p-1 rounded-md"
-                                    aria-label={`Remove ${type.name}`}
-                                >
-                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                                </button>
+                                <div className="flex gap-2">
+                                    <label className="flex items-center gap-1.5 text-xs bg-white px-2 py-1 rounded border border-bokara-grey/5 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={!!type.isExclusive} 
+                                            onChange={(e) => onUpdatePayrollChangeType(type.id, { isExclusive: e.target.checked })}
+                                            className="rounded text-lucius-lime focus:ring-0 w-3 h-3"
+                                        />
+                                        Exclusive
+                                    </label>
+                                    <label className="flex items-center gap-1.5 text-xs bg-white px-2 py-1 rounded border border-bokara-grey/5 cursor-pointer">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={!!type.adminOnly} 
+                                            onChange={(e) => onUpdatePayrollChangeType(type.id, { adminOnly: e.target.checked })}
+                                            className="rounded text-lucius-lime focus:ring-0 w-3 h-3"
+                                        />
+                                        Admin Only
+                                    </label>
+                                </div>
                             </div>
                         )) : (
                             <p className="text-bokara-grey/60 text-center py-8">No payroll change types added yet.</p>
@@ -313,33 +365,33 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
          {/* Work Schedule Blocks Section */}
         <div className="bg-white rounded-xl shadow-md border border-bokara-grey/10 p-6">
-            <h2 className="text-2xl font-bold text-bokara-grey mb-2">Bloques de Horarios</h2>
-            <p className="text-bokara-grey/80 mb-6">Define los diferentes turnos de trabajo para tu equipo.</p>
+            <h2 className="text-2xl font-bold text-bokara-grey mb-2">Work Schedules</h2>
+            <p className="text-bokara-grey/80 mb-6">Define the different work shifts for your team.</p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 {/* Add New Form */}
                 <div>
-                    <h3 className="text-lg font-semibold text-lucius-lime mb-3">Agregar Nuevo Horario</h3>
+                    <h3 className="text-lg font-semibold text-lucius-lime mb-3">Add New Schedule</h3>
                     <form onSubmit={handleScheduleSubmit} className="bg-whisper-white/60 p-4 rounded-lg border border-bokara-grey/10 space-y-4">
                         <div>
-                            <label htmlFor="scheduleName" className="block text-sm font-medium text-bokara-grey mb-1">Nombre del Horario</label>
+                            <label htmlFor="scheduleName" className="block text-sm font-medium text-bokara-grey mb-1">Schedule Name</label>
                             <input
                                 id="scheduleName"
                                 type="text"
                                 value={newScheduleName}
                                 onChange={(e) => setNewScheduleName(e.target.value)}
                                 className="w-full bg-bright-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime"
-                                placeholder="e.g., Horario A"
+                                placeholder="e.g., Shift A"
                                 required
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-bokara-grey mb-2">Días de la Semana</label>
+                            <label className="block text-sm font-medium text-bokara-grey mb-2">Days of the Week</label>
                             <DayPicker selectedDays={newScheduleDays} onDayToggle={handleNewScheduleDayToggle} />
                         </div>
                          <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label htmlFor="scheduleStart" className="block text-sm font-medium text-bokara-grey mb-1">Hora de Inicio</label>
+                                <label htmlFor="scheduleStart" className="block text-sm font-medium text-bokara-grey mb-1">Start Time</label>
                                 <input
                                     id="scheduleStart"
                                     type="time"
@@ -350,7 +402,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                                 />
                             </div>
                              <div>
-                                <label htmlFor="scheduleEnd" className="block text-sm font-medium text-bokara-grey mb-1">Hora de Fin</label>
+                                <label htmlFor="scheduleEnd" className="block text-sm font-medium text-bokara-grey mb-1">End Time</label>
                                 <input
                                     id="scheduleEnd"
                                     type="time"
@@ -369,14 +421,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                             disabled={!newScheduleName.trim() || newScheduleDays.length === 0 || isScheduleSubmitting}
                             className="w-full bg-lucius-lime hover:bg-opacity-80 text-bokara-grey font-bold py-2 px-4 rounded-lg transition-colors shadow-sm disabled:bg-lucius-lime/40 disabled:cursor-not-allowed"
                         >
-                            {isScheduleSubmitting ? 'Agregando...' : 'Agregar Horario'}
+                            {isScheduleSubmitting ? 'Adding...' : 'Add Schedule'}
                         </button>
                     </form>
                 </div>
 
                 {/* Existing List */}
                 <div>
-                    <h3 className="text-lg font-semibold text-lucius-lime mb-3">Horarios Existentes</h3>
+                    <h3 className="text-lg font-semibold text-lucius-lime mb-3">Existing Schedules</h3>
                     <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
                         {workSchedules.length > 0 ? workSchedules.map(schedule => (
                             <div key={schedule.id} className="bg-whisper-white/60 p-3 rounded-lg border border-bokara-grey/10 space-y-2">
@@ -418,7 +470,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                                 <DayPicker selectedDays={schedule.days} onDayToggle={(dayIndex) => handleExistingScheduleDayToggle(schedule, dayIndex)} />
                             </div>
                         )) : (
-                            <p className="text-bokara-grey/60 text-center py-8">No hay horarios definidos.</p>
+                            <p className="text-bokara-grey/60 text-center py-8">No schedules defined.</p>
                         )}
                     </div>
                 </div>
