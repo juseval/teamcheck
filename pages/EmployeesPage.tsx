@@ -35,7 +35,8 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
   const scheduleMap = new Map(workSchedules.map(s => [s.id, s.name]));
 
   // Generate Invite Link
-  const inviteLink = `${window.location.origin}/register?inviteCode=${currentUser.companyId}`;
+  // Use query param on root to ensure compatibility across hosting environments without strict rewrite rules
+  const inviteLink = `${window.location.origin}/?inviteCode=${currentUser.companyId}`;
 
   const copyToClipboard = () => {
       navigator.clipboard.writeText(inviteLink).then(() => {

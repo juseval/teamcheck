@@ -52,7 +52,14 @@ const AppContent: React.FC = () => {
   
   const [user, setUser] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState('home');
+  
+  // Initialize currentPage based on URL params immediately to prevent Auth race conditions
+  const [currentPage, setCurrentPage] = useState(() => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('inviteCode')) return 'register';
+      if (params.get('mode') === 'resetPassword') return 'reset-password';
+      return 'home';
+  });
 
   // Data State
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -100,14 +107,11 @@ const AppContent: React.FC = () => {
     const params = new URLSearchParams(window.location.search);
     const mode = params.get('mode');
     const oobCode = params.get('oobCode');
-    const inviteCode = params.get('inviteCode'); // Check for invite
-
+    
+    // inviteCode logic is now handled in useState initialization, 
+    // but we still need to capture reset password code
     if (mode === 'resetPassword' && oobCode) {
       setResetCode(oobCode);
-      setCurrentPage('reset-password');
-    } else if (inviteCode) {
-        // Direct link to register page with invite code
-        setCurrentPage('register');
     }
   }, []);
 
