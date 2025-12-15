@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Employee, WorkSchedule } from '../types';
 
 interface EmployeeScheduleBoardProps {
@@ -11,6 +11,12 @@ interface EmployeeScheduleBoardProps {
 const EmployeeScheduleBoard: React.FC<EmployeeScheduleBoardProps> = ({ employees, workSchedules, onUpdateEmployeeSchedule }) => {
   const [draggedEmployeeId, setDraggedEmployeeId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  
+  // Drag-to-Scroll State
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isDraggingBoard, setIsDraggingBoard] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
 
   // Group employees by schedule
   const columns = useMemo(() => {
@@ -37,10 +43,11 @@ const EmployeeScheduleBoard: React.FC<EmployeeScheduleBoardProps> = ({ employees
     return cols;
   }, [employees, workSchedules]);
 
+  // --- Employee Drag & Drop Handlers ---
   const handleDragStart = (e: React.DragEvent, employeeId: string) => {
+    e.stopPropagation(); // Prevent board drag
     setDraggedEmployeeId(employeeId);
     e.dataTransfer.effectAllowed = 'move';
-    // Transparent ghost image setup could go here if needed
   };
 
   const handleDragOver = (e: React.DragEvent, scheduleId: string) => {
@@ -60,20 +67,46 @@ const EmployeeScheduleBoard: React.FC<EmployeeScheduleBoardProps> = ({ employees
     }
   };
 
+  // --- Board Drag-to-Scroll Handlers ---
+  const handleMouseDown = (e: React.MouseEvent) => {
+      if (!scrollContainerRef.current) return;
+      setIsDraggingBoard(true);
+      setStartX(e.pageX - scrollContainerRef.current.offsetLeft);
+      setScrollLeft(scrollContainerRef.current.scrollLeft);
+  };
+
+  const handleMouseLeaveOrUp = () => {
+      setIsDraggingBoard(false);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+      if (!isDraggingBoard || !scrollContainerRef.current) return;
+      e.preventDefault();
+      const x = e.pageX - scrollContainerRef.current.offsetLeft;
+      const walk = (x - startX) * 2; // Scroll speed multiplier
+      scrollContainerRef.current.scrollLeft = scrollLeft - walk;
+  };
+
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
   };
 
   return (
-    <div className="flex gap-6 overflow-x-auto pb-4 h-[calc(100vh-220px)] items-start">
+    <div 
+        ref={scrollContainerRef}
+        className={`flex gap-6 overflow-x-auto pb-4 h-full w-full items-start select-none ${isDraggingBoard ? 'cursor-grabbing' : 'cursor-grab'}`}
+        onMouseDown={handleMouseDown}
+        onMouseLeave={handleMouseLeaveOrUp}
+        onMouseUp={handleMouseLeaveOrUp}
+        onMouseMove={handleMouseMove}
+    >
       {/* Render "Unassigned" Column First */}
       <div 
-        className={`flex-shrink-0 w-80 flex flex-col rounded-xl transition-colors duration-200 border ${
+        className={`flex-shrink-0 w-80 flex flex-col rounded-xl transition-colors duration-200 border h-full max-h-full ${
             dragOverColumn === 'unassigned' ? 'bg-gray-100 border-lucius-lime border-2 border-dashed' : 'bg-gray-50 border-gray-200'
         }`}
         onDragOver={(e) => handleDragOver(e, 'unassigned')}
         onDrop={(e) => handleDrop(e, 'unassigned')}
-        style={{ minHeight: '200px' }}
       >
         <div className="p-4 border-b border-gray-200 bg-gray-100 rounded-t-xl sticky top-0 z-10">
           <div className="flex justify-between items-center">
@@ -84,13 +117,14 @@ const EmployeeScheduleBoard: React.FC<EmployeeScheduleBoardProps> = ({ employees
           </div>
           <p className="text-xs text-gray-500 mt-1">Arrastra aquí para desasignar</p>
         </div>
-        <div className="p-3 flex-grow overflow-y-auto space-y-3 custom-scrollbar">
+        <div className="p-3 flex-grow overflow-y-auto space-y-3 custom-scrollbar min-h-0">
           {columns['unassigned'].map(employee => (
             <div
               key={employee.id}
               draggable
               onDragStart={(e) => handleDragStart(e, employee.id)}
               className="bg-white p-3 rounded-lg shadow-sm border border-gray-200 cursor-grab active:cursor-grabbing hover:shadow-md transition-all group"
+              onMouseDown={(e) => e.stopPropagation()} // Prevent board drag when clicking card
             >
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-600">
@@ -110,12 +144,11 @@ const EmployeeScheduleBoard: React.FC<EmployeeScheduleBoardProps> = ({ employees
       {workSchedules.map(schedule => (
         <div 
           key={schedule.id}
-          className={`flex-shrink-0 w-80 flex flex-col rounded-xl transition-colors duration-200 border ${
+          className={`flex-shrink-0 w-80 flex flex-col rounded-xl transition-colors duration-200 border h-full max-h-full ${
             dragOverColumn === schedule.id ? 'bg-lucius-lime/5 border-lucius-lime border-2 border-dashed' : 'bg-white border-bokara-grey/10 shadow-sm'
           }`}
           onDragOver={(e) => handleDragOver(e, schedule.id)}
           onDrop={(e) => handleDrop(e, schedule.id)}
-          style={{ minHeight: '200px' }}
         >
           <div className="p-4 border-b border-bokara-grey/10 bg-whisper-white/30 rounded-t-xl sticky top-0 z-10">
             <div className="flex justify-between items-center mb-1">
@@ -130,13 +163,14 @@ const EmployeeScheduleBoard: React.FC<EmployeeScheduleBoardProps> = ({ employees
             </div>
           </div>
           
-          <div className="p-3 flex-grow overflow-y-auto space-y-3 custom-scrollbar">
+          <div className="p-3 flex-grow overflow-y-auto space-y-3 custom-scrollbar min-h-0">
             {columns[schedule.id]?.map(employee => (
               <div
                 key={employee.id}
                 draggable
                 onDragStart={(e) => handleDragStart(e, employee.id)}
                 className="bg-white p-3 rounded-lg shadow-sm border-l-4 border-l-lucius-lime border-y border-r border-gray-100 cursor-grab active:cursor-grabbing hover:shadow-md transition-all"
+                onMouseDown={(e) => e.stopPropagation()} // Prevent board drag when clicking card
               >
                 <div className="flex items-center gap-3">
                     {employee.avatarUrl ? (
@@ -154,8 +188,8 @@ const EmployeeScheduleBoard: React.FC<EmployeeScheduleBoardProps> = ({ employees
               </div>
             ))}
             {columns[schedule.id]?.length === 0 && (
-                <div className="h-24 flex items-center justify-center border-2 border-dashed border-gray-100 rounded-lg">
-                    <p className="text-xs text-gray-400">Arrastra empleados aquí</p>
+                <div className="h-24 flex items-center justify-center border-2 border-dashed border-gray-100 rounded-lg select-none text-gray-300">
+                    <p className="text-xs">Arrastra empleados aquí</p>
                 </div>
             )}
           </div>

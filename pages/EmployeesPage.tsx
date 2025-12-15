@@ -59,7 +59,7 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
   };
 
   return (
-    <div className="w-full mx-auto animate-fade-in space-y-6 flex flex-col h-full">
+    <div className="w-full mx-auto animate-fade-in space-y-6 flex flex-col h-full overflow-hidden">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 flex-shrink-0">
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold text-bokara-grey">Employees</h1>
@@ -126,7 +126,7 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
       )}
       
       {viewMode === 'list' ? (
-        <div className="bg-white rounded-xl shadow-md border border-bokara-grey/10 overflow-hidden flex-grow">
+        <div className="bg-white rounded-xl shadow-md border border-bokara-grey/10 overflow-hidden flex-grow overflow-y-auto">
             <div className="overflow-x-auto">
             <table className="w-full text-left">
                 <thead>
@@ -179,7 +179,7 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
             </div>
         </div>
       ) : (
-          <div className="flex-grow overflow-hidden">
+          <div className="flex-grow flex flex-col h-0 min-h-0">
               <EmployeeScheduleBoard 
                 employees={employees} 
                 workSchedules={workSchedules} 
