@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface ConfirmationModalProps {
@@ -12,8 +13,8 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({ isOpen, onClose, 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-bokara-grey bg-opacity-75 flex items-center justify-center z-50 transition-opacity" onClick={onClose} aria-modal="true" role="dialog">
-      <div className="bg-bright-white rounded-xl shadow-2xl p-6 w-full max-w-sm border border-bokara-grey/10" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-bokara-grey bg-opacity-75 flex items-center justify-center z-[9999] transition-opacity" onClick={onClose} aria-modal="true" role="dialog">
+      <div className="bg-bright-white rounded-xl shadow-2xl p-6 w-full max-w-sm border border-bokara-grey/10 animate-fade-in" onClick={e => e.stopPropagation()}>
         <h2 className="text-2xl font-bold text-bokara-grey mb-4">{title}</h2>
         <p className="text-bokara-grey/90 mb-6">{message}</p>
         <div className="flex justify-end gap-3">

@@ -1,13 +1,17 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { CalendarEvent, PayrollChangeType, Employee } from '../types';
-import { FilterIcon } from '../components/Icons';
+import { FilterIcon, EditIcon } from '../components/Icons';
 
 interface TicketingPageProps {
   events: CalendarEvent[];
   currentUser: Employee;
   payrollChangeTypes: PayrollChangeType[];
+  employees: Employee[];
   onAddRequest: (requestData: Omit<CalendarEvent, 'id' | 'status'>) => void;
+  onUpdateRequest: (event: CalendarEvent) => void;
+  onRemoveRequest: (event: CalendarEvent) => void;
+  onUpdateEventStatus?: (event: CalendarEvent, status: 'approved' | 'rejected') => void;
 }
 
 interface CalendarDay {
@@ -24,12 +28,16 @@ interface CalendarDay {
   isBlocked?: boolean;
 }
 
-const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payrollChangeTypes, onAddRequest }) => {
+const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payrollChangeTypes, employees, onAddRequest, onUpdateRequest, onRemoveRequest, onUpdateEventStatus }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+    const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
     const [viewType, setViewType] = useState('');
+    
+    // State for Editing
+    const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
 
-    // New Request Form State
+    // Request Form State
     const [newRequestType, setNewRequestType] = useState('');
     const [newRequestStartDate, setNewRequestStartDate] = useState(new Date().toISOString().split('T')[0]);
     const [newRequestEndDate, setNewRequestEndDate] = useState(new Date().toISOString().split('T')[0]);
@@ -37,6 +45,8 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
     const handlePrevMonth = () => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
     const handleNextMonth = () => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1));
     const handleToday = () => setCurrentDate(new Date());
+
+    const employeeMap = useMemo(() => new Map((employees || []).map(e => [e.id, e.name])), [employees]);
 
     const eventColorMap = useMemo(() => {
         const map = new Map<string, string>();
@@ -46,9 +56,9 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
 
     // Filter available types based on user role (Hide adminOnly types from employees)
     const visibleTypes = useMemo(() => {
-        if (currentUser.role === 'admin') return payrollChangeTypes;
+        if (!currentUser || currentUser.role === 'admin') return payrollChangeTypes;
         return payrollChangeTypes.filter(t => !t.adminOnly);
-    }, [payrollChangeTypes, currentUser.role]);
+    }, [payrollChangeTypes, currentUser]);
 
     // Ensure viewType and newRequestType are valid when visibleTypes changes
     useEffect(() => {
@@ -56,31 +66,41 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
             if (!viewType || !visibleTypes.find(t => t.name === viewType)) {
                 setViewType(visibleTypes[0].name);
             }
-            if (!newRequestType || !visibleTypes.find(t => t.name === newRequestType)) {
+            if (!editingEvent && (!newRequestType || !visibleTypes.find(t => t.name === newRequestType))) {
                 setNewRequestType(visibleTypes[0].name);
             }
         }
-    }, [visibleTypes, viewType, newRequestType]);
+    }, [visibleTypes, viewType, newRequestType, editingEvent]);
 
     const openRequestModal = () => {
+        setEditingEvent(null);
+        setNewRequestStartDate(new Date().toISOString().split('T')[0]);
+        setNewRequestEndDate(new Date().toISOString().split('T')[0]);
         if (visibleTypes.length > 0) {
             setNewRequestType(visibleTypes[0].name);
         }
         setIsRequestModalOpen(true);
     };
 
+    const handleEditRequest = (event: CalendarEvent) => {
+        setEditingEvent(event);
+        setNewRequestType(event.type);
+        setNewRequestStartDate(event.startDate);
+        setNewRequestEndDate(event.endDate);
+        setIsRequestModalOpen(true);
+    };
+
     const handleDayClick = (date: Date) => {
-        // Format date to YYYY-MM-DD manually to avoid UTC issues
         const year = date.getFullYear();
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         const dateStr = `${year}-${month}-${day}`;
 
+        setEditingEvent(null);
         setNewRequestStartDate(dateStr);
         setNewRequestEndDate(dateStr);
         
         if (visibleTypes.length > 0) {
-            // If the current newRequestType is empty or invalid, set it to the first available one
             if (!newRequestType || !visibleTypes.find(t => t.name === newRequestType)) {
                  setNewRequestType(visibleTypes[0].name);
             }
@@ -119,7 +139,6 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
             days.push({ date, isCurrentMonth: false, isToday: false, dayOfMonth: date.getDate(), events: [] });
         }
 
-        // --- Availability Logic ---
         const selectedTypeConfig = payrollChangeTypes.find(t => t.name === viewType);
         const isViewTypeExclusive = !!selectedTypeConfig?.isExclusive;
 
@@ -135,14 +154,10 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                 const dayInGrid = days.find(day => day.date.toISOString().split('T')[0] === dayStr);
                 
                 if (dayInGrid) {
-                    // BLOCKING LOGIC:
-                    // If exclusive type selected, check if *anyone else* has this type approved.
-                    // If so, block the day.
                     if (!isMine && isViewTypeExclusive && event.type === viewType && event.status === 'approved') {
                         dayInGrid.isBlocked = true;
                     }
 
-                    // Display Logic: Show my events always.
                     if (isMine) {
                         const color = eventColorMap.get(event.type) || '#91A673';
                         let label = event.type;
@@ -164,12 +179,32 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
 
     const handleRequestSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        onAddRequest({
-            employeeId: currentUser.id,
-            type: newRequestType,
-            startDate: newRequestStartDate,
-            endDate: newRequestEndDate,
-        });
+        
+        if (editingEvent) {
+            if (typeof onUpdateRequest === 'function') {
+                onUpdateRequest({
+                    ...editingEvent,
+                    type: newRequestType,
+                    startDate: newRequestStartDate,
+                    endDate: newRequestEndDate,
+                    status: 'pending'
+                });
+            } else {
+                console.error("onUpdateRequest is not a function");
+            }
+        } else {
+            if (typeof onAddRequest === 'function') {
+                onAddRequest({
+                    employeeId: currentUser.id,
+                    type: newRequestType,
+                    startDate: newRequestStartDate,
+                    endDate: newRequestEndDate,
+                    status: 'pending'
+                } as any);
+            } else {
+                console.error("onAddRequest is not a function");
+            }
+        }
         setIsRequestModalOpen(false);
     };
 
@@ -179,28 +214,71 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
             .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
     }, [events, currentUser.id]);
 
+    const pendingRequests = useMemo(() => {
+        return (events || [])
+            .filter(e => e.status === 'pending')
+            .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    }, [events]);
+
     const monthName = currentDate.toLocaleString('en-US', { month: 'long' });
+
+    // Conflict Checking Logic
+    const getConflict = (request: CalendarEvent) => {
+        const typeConfig = payrollChangeTypes.find(t => t.name === request.type);
+        if (!typeConfig?.isExclusive) return null;
+
+        const reqStart = new Date(request.startDate).getTime();
+        const reqEnd = new Date(request.endDate).getTime();
+
+        const conflictingEvent = events.find(e => {
+            if (e.status !== 'approved' || e.type !== request.type || e.id === request.id) return false;
+            
+            const eStart = new Date(e.startDate).getTime();
+            const eEnd = new Date(e.endDate).getTime();
+
+            // Check if ranges overlap
+            return (reqStart <= eEnd) && (reqEnd >= eStart);
+        });
+
+        return conflictingEvent ? {
+            employeeName: employeeMap.get(conflictingEvent.employeeId) || 'Unknown',
+            event: conflictingEvent
+        } : null;
+    };
 
     return (
         <div className="w-full mx-auto animate-fade-in flex flex-col gap-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <h1 className="text-3xl font-bold text-bokara-grey">Ticket Management</h1>
-                <button 
-                    onClick={openRequestModal}
-                    className="bg-lucius-lime hover:bg-opacity-80 text-bokara-grey font-bold py-2 px-4 rounded-lg shadow-md transition-all flex items-center gap-2"
-                >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                    <span>New Request</span>
-                </button>
+                <div className="flex items-center gap-3">
+                    {/* Pending Requests Button */}
+                    {currentUser.role === 'admin' && (
+                        <button 
+                            onClick={() => setIsPendingModalOpen(true)}
+                            className="relative text-bokara-grey hover:bg-whisper-white p-2 rounded-lg transition-colors border border-transparent hover:border-bokara-grey/10"
+                            title="Solicitudes Pendientes"
+                        >
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                            {pendingRequests.length > 0 && (
+                                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>
+                            )}
+                        </button>
+                    )}
+                    <button 
+                        onClick={openRequestModal}
+                        className="bg-lucius-lime hover:bg-opacity-80 text-bokara-grey font-bold py-2 px-4 rounded-lg shadow-md transition-all flex items-center gap-2 cursor-pointer"
+                    >
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                        <span>New Request</span>
+                    </button>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Calendar Section */}
                 <div className="lg:col-span-2 bg-white rounded-xl shadow-md border border-bokara-grey/10 p-6 flex flex-col">
-                    
-                    {/* Enhanced View Filter: New Design */}
                     <div className="mb-6">
-                        <div className="bg-[#F3F0E9] p-3 sm:p-4 rounded-2xl border border-[#E5E0D6] flex items-center gap-4 w-full sm:max-w-md shadow-sm transition-all hover:shadow-md hover:border-[#D6D1C7]">
+                        <div className="bg-[#F3F0E9] p-3 sm:p-4 rounded-2xl border border-[#E5E0D6] flex items-center gap-4 w-full sm:max-w-md shadow-sm">
                             <div className="bg-white p-3 rounded-xl shadow-sm text-lucius-lime border border-[#E5E0D6] flex-shrink-0">
                                 <FilterIcon className="w-6 h-6" />
                             </div>
@@ -220,8 +298,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                                         ))}
                                         {visibleTypes.length === 0 && <option disabled>No options available</option>}
                                     </select>
-                                    {/* Custom Select Arrow */}
-                                    <div className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-bokara-grey/40 group-hover:text-lucius-lime transition-colors">
+                                    <div className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-bokara-grey/40">
                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
                                     </div>
                                 </div>
@@ -231,11 +308,11 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
 
                     <div className="flex justify-between items-center mb-4">
                         <div className="flex items-center gap-2">
-                             <button onClick={handlePrevMonth} className="p-1 rounded hover:bg-whisper-white transition-colors"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg></button>
+                             <button onClick={handlePrevMonth} className="p-1 rounded hover:bg-whisper-white transition-colors cursor-pointer"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg></button>
                              <span className="text-lg font-bold capitalize w-32 text-center text-bokara-grey">{monthName} {currentDate.getFullYear()}</span>
-                             <button onClick={handleNextMonth} className="p-1 rounded hover:bg-whisper-white transition-colors"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg></button>
+                             <button onClick={handleNextMonth} className="p-1 rounded hover:bg-whisper-white transition-colors cursor-pointer"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg></button>
                         </div>
-                        <button onClick={handleToday} className="text-sm text-lucius-lime font-bold hover:underline bg-lucius-lime/10 px-3 py-1 rounded-full transition-colors hover:bg-lucius-lime/20">Today</button>
+                        <button onClick={handleToday} className="text-sm text-lucius-lime font-bold hover:underline bg-lucius-lime/10 px-3 py-1 rounded-full transition-colors hover:bg-lucius-lime/20 cursor-pointer">Today</button>
                     </div>
 
                     <div className="grid grid-cols-7 text-center text-sm text-bokara-grey/60 mb-2 font-medium">
@@ -265,9 +342,15 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                                         {day.events.map((evt, i) => (
                                             <div 
                                                 key={i} 
-                                                className="text-[10px] p-1 rounded truncate font-medium text-white shadow-sm"
+                                                className="text-[10px] p-1 rounded truncate font-medium text-white shadow-sm cursor-pointer hover:brightness-110"
                                                 style={{ backgroundColor: evt.color }}
                                                 title={evt.label}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (evt.event.status === 'pending') {
+                                                        handleEditRequest(evt.event);
+                                                    }
+                                                }}
                                             >
                                                 {evt.label}
                                             </div>
@@ -285,7 +368,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                         <h3 className="font-bold text-bokara-grey mb-4 border-b border-bokara-grey/10 pb-2">My Recent Requests</h3>
                         <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
                             {myRequests.length > 0 ? myRequests.map(req => (
-                                <div key={req.id} className="p-3 bg-whisper-white/50 rounded-lg border border-bokara-grey/5 hover:bg-whisper-white transition-colors">
+                                <div key={req.id} className="p-3 bg-whisper-white/50 rounded-lg border border-bokara-grey/5 hover:bg-whisper-white transition-colors group">
                                     <div className="flex justify-between items-start mb-1">
                                         <span className="font-bold text-sm text-bokara-grey">{req.type}</span>
                                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
@@ -294,8 +377,47 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                                             'bg-yellow-100 text-yellow-700'
                                         }`}>{req.status === 'pending' ? 'Pending' : req.status === 'approved' ? 'Approved' : 'Rejected'}</span>
                                     </div>
-                                    <div className="text-xs text-bokara-grey/70 font-mono">
-                                        {req.startDate} <span className="text-lucius-lime mx-1">➜</span> {req.endDate}
+                                    <div className="text-xs text-bokara-grey/70 font-mono flex justify-between items-center mt-2">
+                                        <span>{req.startDate} <span className="text-lucius-lime mx-1">➜</span> {req.endDate}</span>
+                                        
+                                        {/* Edit/Delete Controls */}
+                                        <div className="flex gap-2">
+                                            {/* Edit: Only if Pending */}
+                                            {req.status === 'pending' && (
+                                                <button 
+                                                    type="button"
+                                                    onClick={(e) => { 
+                                                        e.preventDefault();
+                                                        e.stopPropagation(); 
+                                                        handleEditRequest(req); 
+                                                    }}
+                                                    className="p-1.5 bg-white border border-bokara-grey/10 text-bokara-grey/70 hover:text-lucius-lime hover:border-lucius-lime rounded-md transition-all shadow-sm cursor-pointer"
+                                                    title="Edit Request"
+                                                >
+                                                    <EditIcon className="w-4 h-4" />
+                                                </button>
+                                            )}
+                                            
+                                            {/* Delete: If Pending OR if Admin (for approved/rejected) */}
+                                            {(req.status === 'pending' || currentUser.role === 'admin') && (
+                                                <button 
+                                                    type="button"
+                                                    onClick={(e) => { 
+                                                        e.preventDefault();
+                                                        e.stopPropagation(); 
+                                                        if (typeof onRemoveRequest === 'function') {
+                                                            onRemoveRequest(req); 
+                                                        } else {
+                                                            console.error("onRemoveRequest is not a function");
+                                                        }
+                                                    }}
+                                                    className="p-1.5 bg-white border border-bokara-grey/10 text-bokara-grey/70 hover:text-red-500 hover:border-red-500 rounded-md transition-all shadow-sm cursor-pointer"
+                                                    title="Delete Request"
+                                                >
+                                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             )) : (
@@ -333,8 +455,8 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                 <div className="fixed inset-0 bg-bokara-grey bg-opacity-50 flex items-center justify-center z-50 p-4 transition-opacity">
                     <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md animate-fade-in border border-bokara-grey/10">
                         <div className="flex justify-between items-center mb-6">
-                            <h2 className="text-2xl font-bold text-bokara-grey">New Request</h2>
-                            <button onClick={() => setIsRequestModalOpen(false)} className="text-bokara-grey/40 hover:text-bokara-grey transition-colors">
+                            <h2 className="text-2xl font-bold text-bokara-grey">{editingEvent ? 'Edit Request' : 'New Request'}</h2>
+                            <button onClick={() => setIsRequestModalOpen(false)} className="text-bokara-grey/40 hover:text-bokara-grey transition-colors cursor-pointer">
                                 <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                             </button>
                         </div>
@@ -345,7 +467,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                                 {visibleTypes.length > 0 ? (
                                     <div className="relative">
                                         <select 
-                                            className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-bokara-grey focus:outline-none focus:ring-2 focus:ring-lucius-lime appearance-none"
+                                            className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-bokara-grey focus:outline-none focus:ring-2 focus:ring-lucius-lime appearance-none cursor-pointer"
                                             value={newRequestType}
                                             onChange={e => setNewRequestType(e.target.value)}
                                         >
@@ -368,7 +490,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                                     <label className="block text-sm font-bold text-lucius-lime mb-2">From</label>
                                     <input 
                                         type="date" 
-                                        className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-bokara-grey focus:outline-none focus:ring-2 focus:ring-lucius-lime"
+                                        className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-bokara-grey focus:outline-none focus:ring-2 focus:ring-lucius-lime cursor-pointer"
                                         value={newRequestStartDate}
                                         onChange={e => setNewRequestStartDate(e.target.value)}
                                         required
@@ -378,24 +500,97 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                                     <label className="block text-sm font-bold text-lucius-lime mb-2">To</label>
                                     <input 
                                         type="date" 
-                                        className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-bokara-grey focus:outline-none focus:ring-2 focus:ring-lucius-lime"
+                                        className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-bokara-grey focus:outline-none focus:ring-2 focus:ring-lucius-lime cursor-pointer"
                                         value={newRequestEndDate}
                                         onChange={e => setNewRequestEndDate(e.target.value)}
                                         required
                                     />
                                 </div>
                             </div>
+                            
+                            {editingEvent && (
+                                <div className="text-sm text-bokara-grey/60 bg-whisper-white/50 p-2 rounded">
+                                    <span className="font-bold">Note:</span> Editing this request will reset its status to <strong>Pending</strong>.
+                                </div>
+                            )}
+
                             <div className="flex justify-end gap-3 mt-8">
-                                <button type="button" onClick={() => setIsRequestModalOpen(false)} className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-bokara-grey font-medium rounded-lg transition-colors">Cancel</button>
+                                <button type="button" onClick={() => setIsRequestModalOpen(false)} className="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-bokara-grey font-medium rounded-lg transition-colors cursor-pointer">Cancel</button>
                                 <button 
                                     type="submit" 
-                                    className="px-5 py-2.5 bg-lucius-lime text-bokara-grey font-bold rounded-lg hover:bg-opacity-80 disabled:bg-lucius-lime/40 disabled:cursor-not-allowed shadow-md transition-all hover:translate-y-[-1px]"
+                                    className="px-5 py-2.5 bg-lucius-lime text-bokara-grey font-bold rounded-lg hover:bg-opacity-80 disabled:bg-lucius-lime/40 disabled:cursor-not-allowed shadow-md transition-all hover:translate-y-[-1px] cursor-pointer"
                                     disabled={visibleTypes.length === 0}
                                 >
-                                    Submit Request
+                                    {editingEvent ? 'Update Request' : 'Submit Request'}
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Pending Requests Modal (Admin View) */}
+            {isPendingModalOpen && (
+                <div className="fixed inset-0 bg-bokara-grey bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setIsPendingModalOpen(false)}>
+                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-6">
+                            <h2 className="text-2xl font-bold text-bokara-grey">Solicitudes Pendientes</h2>
+                            <button onClick={() => setIsPendingModalOpen(false)} className="text-bokara-grey/50 hover:text-bokara-grey">
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        
+                        {!pendingRequests || pendingRequests.length === 0 ? (
+                            <p className="text-center text-bokara-grey/60 py-8">No hay solicitudes pendientes.</p>
+                        ) : (
+                            <div className="space-y-4">
+                                {pendingRequests.map(request => {
+                                    const conflict = getConflict(request);
+                                    
+                                    return (
+                                        <div key={request.id} className="bg-whisper-white/50 p-4 rounded-lg border border-bokara-grey/10 flex flex-col gap-3 relative">
+                                            <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                                                <div>
+                                                    <p className="font-bold text-lg text-bokara-grey">{employeeMap.get(request.employeeId) || 'Desconocido'}</p>
+                                                    <p className="text-bokara-grey/80"><span className="font-semibold">{request.type}</span>: {request.startDate} al {request.endDate}</p>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button 
+                                                        onClick={() => onUpdateEventStatus && onUpdateEventStatus(request, 'rejected')}
+                                                        className="px-3 py-1.5 bg-red-100 text-red-700 font-semibold rounded hover:bg-red-200 transition"
+                                                    >
+                                                        Rechazar
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => onUpdateEventStatus && onUpdateEventStatus(request, 'approved')}
+                                                        className={`px-3 py-1.5 font-semibold rounded transition flex items-center gap-1 ${
+                                                            conflict 
+                                                                ? 'bg-gray-200 text-gray-400 cursor-not-allowed' 
+                                                                : 'bg-green-100 text-green-700 hover:bg-green-200'
+                                                        }`}
+                                                        disabled={!!conflict}
+                                                        title={conflict ? "Conflicto de disponibilidad" : "Aprobar solicitud"}
+                                                    >
+                                                        {conflict && <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>}
+                                                        Aprobar
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            
+                                            {/* Conflict Warning Area */}
+                                            {conflict && (
+                                                <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700 flex items-start gap-2 animate-pulse">
+                                                    <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                                                    <div>
+                                                        <strong>Conflicto detectado:</strong> Este tipo de novedad es exclusivo y <strong>{conflict.employeeName}</strong> ya tiene aprobado el mismo periodo.
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

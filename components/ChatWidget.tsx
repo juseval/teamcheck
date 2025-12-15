@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChatBubbleIcon, ArrowLeftIcon, TeamIcon } from './Icons.tsx';
-import { Employee, User, Message } from '../types.ts';
+import { ChatBubbleIcon, ArrowLeftIcon, TeamIcon } from './Icons';
+import { Employee, Message } from '../types';
 
 interface Conversation {
   id: string | number;
@@ -52,7 +52,7 @@ const mockConversationsData: { [key: string]: Conversation } = {
 
 interface ChatWidgetProps {
   employees: Employee[];
-  currentUser: User;
+  currentUser: Employee;
   userRole: 'admin' | 'employee';
 }
 

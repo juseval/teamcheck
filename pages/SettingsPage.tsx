@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { ActivityStatus, PayrollChangeType, WorkSchedule } from '../types';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface SettingsPageProps {
   statuses: ActivityStatus[];
@@ -11,7 +12,8 @@ interface SettingsPageProps {
   onUpdatePayrollChangeType: (id: string, updates: Partial<Omit<PayrollChangeType, 'id'>>) => Promise<void>;
   onRemovePayrollChangeType: (id: string) => Promise<void>;
   workSchedules: WorkSchedule[];
-  onAddWorkSchedule: (schedule: Omit<WorkSchedule, 'id'>) => Promise<void>;
+  // FIX: Exclude companyId from onAddWorkSchedule parameters as it is handled by the service/API.
+  onAddWorkSchedule: (schedule: Omit<WorkSchedule, 'id' | 'companyId'>) => Promise<void>;
   onUpdateWorkSchedule: (id: string, updates: Partial<Omit<WorkSchedule, 'id'>>) => Promise<void>;
   onRemoveWorkSchedule: (id: string) => Promise<void>;
 }
@@ -77,6 +79,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     onUpdateWorkSchedule,
     onRemoveWorkSchedule
 }) => {
+    const { addNotification } = useNotification();
     const [newStatusName, setNewStatusName] = useState('');
     const [newStatusColor, setNewStatusColor] = useState('#888888');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -92,7 +95,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     const [newScheduleEnd, setNewScheduleEnd] = useState('15:00');
     const [newScheduleDays, setNewScheduleDays] = useState<number[]>([1, 2, 3, 4, 5]);
     const [isScheduleSubmitting, setIsScheduleSubmitting] = useState(false);
-
+    
     const handleAddSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newStatusName.trim() || isSubmitting) return;
@@ -168,9 +171,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         }
     };
 
-
   return (
-    <div className="w-full max-w-6xl mx-auto animate-fade-in space-y-8">
+    <div className="w-full max-w-6xl mx-auto animate-fade-in space-y-8 pb-10">
         <h1 className="text-3xl font-bold text-bokara-grey">Settings</h1>
       
         {/* Custom Activity Statuses Section */}

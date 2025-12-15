@@ -1,9 +1,10 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { User } from '../types.ts';
-import { UserIcon, CalendarIcon, MessageIcon, PasswordIcon, ClockIcon, LogoutIcon } from './Icons.tsx';
+import { Employee } from '../types';
+import { UserIcon, CalendarIcon, PasswordIcon, LogoutIcon } from './Icons';
 
 interface ProfileDropdownProps {
-  user: User;
+  user: Employee;
   onNavigate: (page: string) => void;
   onLogout: () => void;
 }
@@ -49,13 +50,16 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user, onNavigate, onL
       >
         <span className="hidden sm:inline text-bokara-grey font-medium text-sm">{user.name}</span>
         <div className="relative flex-shrink-0">
-          <div className="w-10 h-10 bg-lucius-lime/20 rounded-full flex items-center justify-center border-2 border-lucius-lime">
-            <span className="text-md font-bold text-bokara-grey select-none">{initials}</span>
-          </div>
-          {user.messages > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white ring-2 ring-bright-white">
-              {user.messages}
-            </span>
+          {user.avatarUrl ? (
+             <img 
+                src={user.avatarUrl} 
+                alt={user.name} 
+                className="w-10 h-10 rounded-full border-2 border-lucius-lime object-cover"
+             />
+          ) : (
+            <div className="w-10 h-10 bg-lucius-lime/20 rounded-full flex items-center justify-center border-2 border-lucius-lime">
+              <span className="text-md font-bold text-bokara-grey select-none">{initials}</span>
+            </div>
           )}
            <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-bright-white bg-lucius-lime" title="Online"></span>
         </div>
@@ -74,9 +78,6 @@ const ProfileDropdown: React.FC<ProfileDropdownProps> = ({ user, onNavigate, onL
             </button>
             <button onClick={() => handleNavigation('calendar')} className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-bokara-grey hover:bg-whisper-white" role="menuitem">
               <CalendarIcon /> My Calendar
-            </button>
-            <button onClick={() => handleNavigation('messages')} className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-bokara-grey hover:bg-whisper-white" role="menuitem">
-              <MessageIcon /> Messages ({user.messages})
             </button>
             <button onClick={() => handleNavigation('password')} className="w-full text-left flex items-center gap-3 px-4 py-2 text-sm text-bokara-grey hover:bg-whisper-white" role="menuitem">
               <PasswordIcon /> Change Password

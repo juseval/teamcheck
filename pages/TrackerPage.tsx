@@ -50,7 +50,8 @@ const TrackerPage: React.FC<TrackerPageProps> = ({
     });
   }, [attendanceLog, dateRange]);
 
-  const pageTitle = userRole === 'admin' ? "Team Status" : "My Status";
+  // Ensure Admins see "Team Status"
+  const pageTitle = userRole === 'employee' ? "My Status" : "Team Status";
 
   // Grouping logic for admin view
   const employeesBySchedule = useMemo(() => {
@@ -81,7 +82,7 @@ const TrackerPage: React.FC<TrackerPageProps> = ({
 
   return (
     <>
-        <div className="flex flex-col items-center gap-8 pt-8">
+        <div className="flex flex-col items-center gap-8 pt-8 w-full max-w-full overflow-x-hidden">
             <div className={`w-full ${userRole === 'admin' ? 'max-w-6xl' : 'max-w-md'}`}>
                 <div className="flex justify-between items-center mb-6 px-2">
                     <h2 className="text-3xl font-bold text-bokara-grey">{pageTitle}</h2>
