@@ -205,7 +205,7 @@ const AppContent: React.FC = () => {
      try {
        await registerWithEmailAndPassword(data.fullName, data.email, data.password, data.companyName, data.inviteCode);
        // Note: inviteCode is passed if available
-       addNotification('Registro exitoso. Bienvenido.', 'success');
+       addNotification('Registro exitoso. Se ha enviado un correo de verificación.', 'success');
        // Auto login handled by auth listener usually, or we can force navigate if needed
      } catch (error: any) {
        addNotification(error.message || 'Registration failed', 'error');

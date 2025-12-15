@@ -34,15 +34,11 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
   
   const scheduleMap = new Map(workSchedules.map(s => [s.id, s.name]));
 
-  // Generate Invite Link
-  // Use query param on root to ensure compatibility across hosting environments without strict rewrite rules
-  const inviteLink = `${window.location.origin}/?inviteCode=${currentUser.companyId}`;
-
   const copyToClipboard = () => {
-      navigator.clipboard.writeText(inviteLink).then(() => {
-          addNotification("Enlace de invitación copiado al portapapeles.", 'success');
+      navigator.clipboard.writeText(currentUser.companyId).then(() => {
+          addNotification("Código de organización copiado.", 'success');
       }).catch(() => {
-          addNotification("Error al copiar el enlace.", 'error');
+          addNotification("Error al copiar el código.", 'error');
       });
   };
 
@@ -103,21 +99,28 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
       {currentUser.role === 'admin' && (
           <div className="bg-white rounded-xl shadow-sm border border-lucius-lime/30 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 flex-shrink-0">
               <div className="flex items-center gap-3">
-                  <div className="p-2 bg-lucius-lime/10 rounded-full text-lucius-lime">
-                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
+                  <div className="p-3 bg-lucius-lime/10 rounded-full text-lucius-lime">
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
                   </div>
                   <div>
-                      <h3 className="font-bold text-bokara-grey">Invite Employees</h3>
-                      <p className="text-xs text-bokara-grey/60">Share this link to let employees join your company directly.</p>
+                      <h3 className="font-bold text-bokara-grey">Vinculación de Empleados</h3>
+                      <p className="text-xs text-bokara-grey/60 max-w-lg">
+                          1. Crea el perfil del empleado usando el botón "Add Employee".<br/>
+                          2. Comparte este <strong>Código de Organización</strong> con ellos.<br/>
+                          3. Cuando se registren con su correo y este código, se vincularán automáticamente.
+                      </p>
                   </div>
               </div>
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <div className="bg-whisper-white/50 border border-bokara-grey/10 rounded-lg px-3 py-2 text-xs text-bokara-grey/70 truncate w-full sm:w-64 font-mono select-all">
-                      {inviteLink}
+              <div className="flex flex-col gap-1 w-full sm:w-auto">
+                  <span className="text-[10px] font-bold text-lucius-lime uppercase tracking-wider">Código de Organización</span>
+                  <div className="flex items-center gap-2">
+                      <div className="bg-whisper-white/50 border border-bokara-grey/10 rounded-lg px-4 py-2 text-lg font-mono font-bold text-bokara-grey select-all">
+                          {currentUser.companyId}
+                      </div>
+                      <button onClick={copyToClipboard} className="p-3 bg-white border border-bokara-grey/20 hover:bg-whisper-white rounded-lg text-bokara-grey transition-colors shadow-sm" title="Copiar Código">
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                      </button>
                   </div>
-                  <button onClick={copyToClipboard} className="p-2 bg-white border border-bokara-grey/20 hover:bg-whisper-white rounded-lg text-bokara-grey transition-colors" title="Copy Link">
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
-                  </button>
               </div>
           </div>
       )}

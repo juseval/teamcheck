@@ -66,19 +66,33 @@ const createMockApi = () => {
         return Promise.resolve(mockCompanies.find(c => c.id === companyId) || null);
     },
     registerWithEmailAndPassword: async (fullName: string, email: string, password: string, companyName: string, inviteCode?: string): Promise<Employee> => {
-        if (mockEmployees.some(e => e.email === email)) {
+        if (mockEmployees.some(e => e.email === email && e.uid && !e.uid.startsWith('manual_'))) {
             throw new Error("Email already in use.");
         }
         
+        // MOCK LOGIC FOR CLAIMING PROFILE
+        if (inviteCode) {
+            // Check if admin pre-created this user (Look for same email in company)
+            const existingPreCreated = mockEmployees.find(e => e.companyId === inviteCode && e.email === email && e.uid?.startsWith('manual_'));
+            
+            if (existingPreCreated) {
+                // UPDATE existing
+                const newUid = getNextId('user');
+                existingPreCreated.uid = newUid;
+                existingPreCreated.name = fullName; // Update name just in case
+                // MOCK: Don't auto-login to simulate verification flow
+                return Promise.resolve(existingPreCreated);
+            }
+        }
+
+        // Standard logic
         let companyId = inviteCode;
         let role: 'admin' | 'employee';
 
         if (inviteCode) {
-            // Case 1: Joining an existing company via Invite Link -> Role is EMPLOYEE
             role = 'employee';
             companyId = inviteCode;
         } else {
-            // Case 2: Creating a new company -> Role is ADMIN
             role = 'admin';
             companyId = getNextId('company');
             mockCompanies.push({
@@ -108,7 +122,7 @@ const createMockApi = () => {
             workScheduleId: null,
         };
         mockEmployees.push(newEmployee);
-        mockCurrentUser = { uid: newUser.uid, email: newUser.email }; // Auto login
+        // MOCK: No auto-login. Simulate user needs to go to login.
         return Promise.resolve(newEmployee);
     },
     loginWithEmailAndPassword: async (email: string, password: string): Promise<Employee> => {
@@ -163,7 +177,7 @@ const createMockApi = () => {
         const newEmployee: Employee = {
             ...employeeData,
             id: getNextId('employee'),
-            uid: getNextId('user'),
+            uid: `manual_${Date.now()}`, // Temporary UID for pre-created profiles
             status: 'Clocked Out',
             lastClockInTime: null,
             currentStatusStartTime: null,
@@ -439,11 +453,47 @@ const createRealApi = () => {
             const user = userCredential.user;
             if (!user) throw new Error("Failed to create auth user.");
 
+            // 1. Send Verification Email
+            await user.sendEmailVerification();
+
             let companyId = inviteCode;
             let role: 'admin' | 'employee';
-
+            
+            // Check if user is JOINING (has invite code)
             if (inviteCode) {
-                // Case 1: Joining an existing company via Invite Link -> Role is EMPLOYEE
+                // IMPORTANT: Check if a pre-created profile exists for this email in this company
+                // This allows Admin to pre-configure Schedule, Role, etc.
+                const preCreatedQuery = await getDb().collection('employees')
+                    .where('companyId', '==', inviteCode)
+                    .where('email', '==', email)
+                    .get();
+
+                if (!preCreatedQuery.empty) {
+                    // FOUND A MATCH! Claim this profile.
+                    const existingDoc = preCreatedQuery.docs[0];
+                    const existingData = existingDoc.data();
+                    
+                    // We delete the old doc and recreate it with the REAL Auth UID as ID
+                    // Firestore best practice for Auth integration: Doc ID = Auth UID
+                    
+                    const newProfileData = {
+                        ...existingData,
+                        uid: user.uid, // Link to real auth
+                        name: fullName, // Update name if provided differently
+                    };
+
+                    const batch = getDb().batch();
+                    batch.delete(existingDoc.ref);
+                    batch.set(getDb().collection('employees').doc(user.uid), newProfileData);
+                    await batch.commit();
+
+                    // Force Sign Out to enforce verification
+                    await getAuth().signOut();
+
+                    return { ...(newProfileData as Omit<Employee, 'id'>), id: user.uid };
+                }
+
+                // If not found, create standard employee profile
                 role = 'employee';
                 companyId = inviteCode;
             } else {
@@ -464,7 +514,7 @@ const createRealApi = () => {
                 await batch.commit();
             }
 
-            // 2. Create the Employee Document
+            // 2. Create the Employee Document (Standard Flow)
             const employeeData = {
                 uid: user.uid,
                 companyId: companyId,
@@ -481,6 +531,9 @@ const createRealApi = () => {
 
             await getDb().collection('employees').doc(user.uid).set(employeeData);
             
+            // 3. Force Sign Out to enforce verification
+            await getAuth().signOut();
+            
             return { ...employeeData, id: user.uid };
         },
         
@@ -492,6 +545,12 @@ const createRealApi = () => {
             const userCredential = await getAuth().signInWithEmailAndPassword(email, password);
             const user = userCredential.user;
             if (!user) throw new Error("Login failed, user not found in auth.");
+
+            // 4. Check Verification Status
+            if (!user.emailVerified) {
+                await getAuth().signOut();
+                throw new Error("Tu cuenta no ha sido verificada. Por favor revisa tu correo electrónico.");
+            }
 
             const profile = await getEmployeeProfile(user.uid);
             
@@ -577,7 +636,7 @@ const createRealApi = () => {
         addEmployee: async (employeeData: Omit<Employee, 'id' | 'status' | 'lastClockInTime' | 'currentStatusStartTime' | 'uid'>): Promise<Employee> => {
              const newEmployeeData = {
               ...employeeData,
-              uid: `manual_${Date.now()}`, // Placeholder
+              uid: `manual_${Date.now()}`, // Placeholder for pre-created profiles
               status: 'Clocked Out',
               lastClockInTime: null,
               currentStatusStartTime: null,
