@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Employee, WorkSchedule, ActivityStatus, CalendarEvent } from '../types.ts';
+import { Employee, WorkSchedule, ActivityStatus, CalendarEvent } from '../types';
 import { PowerIcon, PhoneStatusIcon, CrossStatusIcon, CheckStatusIcon, SpeakerStatusIcon } from './Icons';
 
 interface AgentStateDashboardProps {
@@ -58,7 +58,12 @@ const StateIcon: React.FC<{ state: AgentState | string, reasonCode: string }> = 
     }
 };
 
-const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, workSchedules, activityStatuses, calendarEvents }) => {
+const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ 
+    employees = [], 
+    workSchedules = [], 
+    activityStatuses = [], 
+    calendarEvents = [] 
+}) => {
     const [tick, setTick] = useState(0);
 
     useEffect(() => {
@@ -68,9 +73,12 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
         return () => clearInterval(timer);
     }, []);
 
-    const scheduleMap = useMemo(() => new Map(workSchedules.map(s => [s.id, s])), [workSchedules]);
+    const scheduleMap = useMemo(() => new Map((workSchedules || []).map(s => [s.id, s])), [workSchedules]);
     
     const agents = useMemo(() => {
+        // Safety check for critical data
+        if (!employees || !Array.isArray(employees)) return [];
+
         const now = new Date();
         const todayStr = now.toISOString().split('T')[0];
         const todayDayOfWeek = now.getDay();
@@ -78,7 +86,7 @@ const AgentStateDashboard: React.FC<AgentStateDashboardProps> = ({ employees, wo
 
         // FIX: Changed Map key type from number to string.
         const todaysEventsMap = new Map<string, CalendarEvent>();
-        for (const event of calendarEvents) {
+        for (const event of (calendarEvents || [])) {
             const startDate = new Date(event.startDate + 'T00:00:00');
             const endDate = new Date(event.endDate + 'T23:59:59');
             if (now >= startDate && now <= endDate) {

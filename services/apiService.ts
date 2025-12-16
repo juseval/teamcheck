@@ -1,6 +1,5 @@
 
-// ... keep imports as they are ...
-import { Employee, AttendanceLogEntry, ActivityStatus, Task, CalendarEvent, PayrollChangeType, WorkSchedule, Company } from '../types';
+import { Employee, AttendanceLogEntry, ActivityStatus, CalendarEvent, PayrollChangeType, WorkSchedule, Company } from '../types';
 import { db, auth, isFirebaseEnabled } from './firebase';
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/storage';
@@ -21,11 +20,371 @@ const getCurrentUserCompanyId = async (): Promise<string | null> => {
     }
 };
 
+// --- REAL API IMPLEMENTATION ---
+const createRealApi = () => {
+    if (!db || !auth) throw new Error("Firebase not initialized");
+
+    const getCompanyId = async (): Promise<string> => {
+        const cid = await getCurrentUserCompanyId();
+        if (!cid) throw new Error("No company ID found for user");
+        return cid;
+    };
+
+    return {
+        joinCompany: async (inviteCode: string): Promise<boolean> => {
+            const user = auth!.currentUser;
+            if (!user) throw new Error("Must be logged in");
+            
+            // Validate company exists
+            const companyDoc = await db!.collection('companies').doc(inviteCode).get();
+            if (!companyDoc.exists) throw new Error("Company not found");
+
+            // Update user profile
+            await db!.collection('employees').doc(user.uid).update({
+                companyId: inviteCode,
+                role: 'employee', // Reset role to employee when joining new company
+                workScheduleId: null // Reset schedule
+            });
+            return true;
+        },
+        migrateLegacyData: async (): Promise<number> => { return 0; },
+        getCompanyDetails: async (companyId: string): Promise<Company | null> => {
+            const doc = await db!.collection('companies').doc(companyId).get();
+            return doc.exists ? { id: doc.id, ...doc.data() } as Company : null;
+        },
+        registerWithEmailAndPassword: async (fullName: string, email: string, password: string, companyName: string, inviteCode?: string): Promise<Employee> => {
+            const userCredential = await auth!.createUserWithEmailAndPassword(email, password);
+            const user = userCredential.user;
+            if (!user) throw new Error("Registration failed");
+
+            await user.sendEmailVerification();
+
+            let companyId = inviteCode;
+            let role: 'admin' | 'employee' = inviteCode ? 'employee' : 'admin';
+
+            // Create Company if new
+            if (!companyId) {
+                const companyRef = db!.collection('companies').doc();
+                companyId = companyRef.id;
+                await companyRef.set({
+                    id: companyId,
+                    name: companyName,
+                    ownerId: user.uid,
+                    createdAt: Date.now()
+                });
+                
+                // Create default statuses for new company
+                const defaultStatuses = [
+                    { name: 'Break', color: '#AE8F60' },
+                    { name: 'Training', color: '#3B82F6' },
+                    { name: 'Lunch', color: '#10B981' }
+                ];
+                const batch = db!.batch();
+                defaultStatuses.forEach(s => {
+                    const ref = db!.collection('activityStatuses').doc();
+                    batch.set(ref, { ...s, companyId, id: ref.id });
+                });
+                await batch.commit();
+            }
+
+            const newEmployee: Employee = {
+                id: user.uid,
+                uid: user.uid,
+                companyId: companyId!,
+                name: fullName,
+                email,
+                phone: '',
+                location: 'Oficina Principal',
+                role,
+                status: 'Clocked Out',
+                lastClockInTime: null,
+                currentStatusStartTime: null,
+                workScheduleId: null
+            };
+
+            await db!.collection('employees').doc(user.uid).set(newEmployee);
+            return newEmployee;
+        },
+        loginWithEmailAndPassword: async (email: string, password: string): Promise<Employee> => {
+            const userCredential = await auth!.signInWithEmailAndPassword(email, password);
+            const user = userCredential.user;
+            if (!user) throw new Error("Login failed");
+
+            const doc = await db!.collection('employees').doc(user.uid).get();
+            if (!doc.exists) {
+                // If auth exists but no firestore doc (rare inconsistency), create basic doc? 
+                // Or throw error. Let's throw for now.
+                throw new Error("User profile not found.");
+            }
+            return { id: doc.id, ...doc.data() } as Employee;
+        },
+        logout: async () => {
+            await auth!.signOut();
+        },
+        sendPasswordResetEmail: async (email: string) => {
+            await auth!.sendPasswordResetEmail(email);
+        },
+        verifyPasswordResetCode: async (oobCode: string): Promise<string> => {
+            // BYPASS FOR DEMO
+            if (oobCode === 'demo_code') return 'usuario_demo@ejemplo.com';
+            return await auth!.verifyPasswordResetCode(oobCode);
+        },
+        confirmPasswordReset: async (oobCode: string, newPassword: string) => {
+            // BYPASS FOR DEMO
+            if (oobCode === 'demo_code') {
+                // In a real demo, we might update the current user's password if logged in, 
+                // but since reset usually happens logged out, we just simulate success.
+                return Promise.resolve(); 
+            }
+            await auth!.confirmPasswordReset(oobCode, newPassword);
+        },
+        verifyEmail: async (oobCode: string) => {
+            await auth!.applyActionCode(oobCode);
+        },
+        changePassword: async (password: string) => {
+            const user = auth!.currentUser;
+            if (!user) throw new Error("No user logged in");
+            await user.updatePassword(password);
+        },
+        getEmployeeProfile: async (uid: string): Promise<Employee | null> => {
+            const doc = await db!.collection('employees').doc(uid).get();
+            return doc.exists ? { id: doc.id, ...doc.data() } as Employee : null;
+        },
+        streamEmployees: (callback: (employees: Employee[]) => void) => {
+            // Only stream employees for the current user's company
+            // We need the companyId first. This is tricky inside a pure stream function 
+            // if we don't pass companyId. 
+            // Workaround: Listen to auth state to get company, then stream.
+            // For simplicity in this structure, we'll assume the component handles the wait for auth
+            // or we do a one-time fetch of companyId then subscribe.
+            
+            const user = auth!.currentUser;
+            if (!user) return () => {};
+
+            // We need to fetch the user's companyId first to filter
+            let unsubscribe = () => {};
+            
+            db!.collection('employees').doc(user.uid).get().then(doc => {
+                if(doc.exists) {
+                    const companyId = doc.data()?.companyId;
+                    if(companyId) {
+                        unsubscribe = db!.collection('employees')
+                            .where('companyId', '==', companyId)
+                            .onSnapshot(snapshot => {
+                                const emps = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Employee));
+                                callback(emps);
+                            });
+                    }
+                }
+            });
+
+            return () => unsubscribe();
+        },
+        addEmployee: async (employeeData: Omit<Employee, 'id' | 'status' | 'lastClockInTime' | 'currentStatusStartTime' | 'uid'>) => {
+            // Admin adds an employee. 
+            // In Firebase Auth, we can't easily create a user without logging them in (unless using Admin SDK).
+            // Workaround: Create a "Shadow" employee document. The actual user must register themselves 
+            // and we link them via email or an invite code logic. 
+            // For this app's "Add Employee" modal, we'll creates a placeholder doc.
+            
+            // If companyId is not passed in data, try to get from current user
+            let companyId = employeeData.companyId;
+            if (!companyId) {
+                companyId = await getCompanyId();
+            }
+
+            const newRef = db!.collection('employees').doc(); // Auto ID
+            const newEmployee = {
+                ...employeeData,
+                id: newRef.id, // Use doc ID as ID
+                uid: newRef.id, // Placeholder UID matches Doc ID until real register
+                companyId,
+                status: 'Clocked Out',
+                lastClockInTime: null,
+                currentStatusStartTime: null
+            };
+            await newRef.set(newEmployee);
+            return newEmployee as Employee;
+        },
+        streamAttendanceLog: (callback: (log: AttendanceLogEntry[]) => void) => {
+            const user = auth!.currentUser;
+            if (!user) return () => {};
+
+            let unsubscribe = () => {};
+            db!.collection('employees').doc(user.uid).get().then(doc => {
+                if (doc.exists) {
+                    const companyId = doc.data()?.companyId;
+                    if (companyId) {
+                        unsubscribe = db!.collection('attendanceLog')
+                            .where('companyId', '==', companyId)
+                            .orderBy('timestamp', 'desc')
+                            .limit(500) // Safety limit
+                            .onSnapshot(snapshot => {
+                                const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLogEntry));
+                                callback(logs);
+                            });
+                    }
+                }
+            });
+            return () => unsubscribe();
+        },
+        getEmployees: async (): Promise<Employee[]> => {
+            const cid = await getCompanyId();
+            const snapshot = await db!.collection('employees').where('companyId', '==', cid).get();
+            return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Employee));
+        },
+        removeEmployee: async (employeeId: string) => {
+            await db!.collection('employees').doc(employeeId).delete();
+            return { success: true };
+        },
+        updateEmployeeStatus: async (employeeToUpdate: Employee) => {
+            await db!.collection('employees').doc(employeeToUpdate.id).update({
+                status: employeeToUpdate.status,
+                lastClockInTime: employeeToUpdate.lastClockInTime,
+                currentStatusStartTime: employeeToUpdate.currentStatusStartTime
+            });
+            return employeeToUpdate;
+        },
+        updateEmployeeDetails: async (employeeToUpdate: Employee) => {
+            // Exclude fields that shouldn't be overwritten blindly if passed incorrectly
+            const { id, ...data } = employeeToUpdate;
+            await db!.collection('employees').doc(id).update(data);
+            return employeeToUpdate;
+        },
+        uploadProfilePicture: async (userId: string, file: File): Promise<string> => {
+            const storageRef = firebase.storage().ref();
+            const fileRef = storageRef.child(`avatars/${userId}/${file.name}`);
+            await fileRef.put(file);
+            const url = await fileRef.getDownloadURL();
+            
+            await db!.collection('employees').doc(userId).update({ avatarUrl: url });
+            return url;
+        },
+        addAttendanceLogEntry: async (logEntry: Omit<AttendanceLogEntry, 'id'>) => {
+            const ref = db!.collection('attendanceLog').doc();
+            const newLog = { ...logEntry, id: ref.id };
+            await ref.set(newLog);
+            return newLog;
+        },
+        updateAttendanceLogEntry: async (logId: string, updates: { action: string, timestamp: number }) => {
+            await db!.collection('attendanceLog').doc(logId).update(updates);
+            const doc = await db!.collection('attendanceLog').doc(logId).get();
+            return { id: doc.id, ...doc.data() } as AttendanceLogEntry;
+        },
+        updateEmployeeCurrentSession: async (employeeId: string, newStartTime: number) => {
+            const employeeRef = db!.collection('employees').doc(employeeId);
+            const empDoc = await employeeRef.get();
+            if (!empDoc.exists) throw new Error("Employee not found");
+            
+            const employee = empDoc.data() as Employee;
+            const originalStartTime = employee.currentStatusStartTime;
+            
+            if (!originalStartTime) throw new Error("No active session");
+
+            // Find matching log
+            const logsQuery = await db!.collection('attendanceLog')
+                .where('employeeId', '==', employeeId)
+                .where('timestamp', '==', originalStartTime)
+                .limit(1)
+                .get();
+            
+            if (logsQuery.empty) throw new Error("Log not found");
+            const logDoc = logsQuery.docs[0];
+
+            const batch = db!.batch();
+            
+            batch.update(employeeRef, {
+                currentStatusStartTime: newStartTime,
+                lastClockInTime: employee.lastClockInTime === originalStartTime ? newStartTime : employee.lastClockInTime
+            });
+            batch.update(logDoc.ref, { timestamp: newStartTime });
+            
+            await batch.commit();
+            
+            const updatedEmp = (await employeeRef.get()).data() as Employee;
+            const updatedLog = (await logDoc.ref.get()).data() as AttendanceLogEntry;
+            
+            return { updatedEmployee: updatedEmp, updatedLog };
+        },
+        // Config & Settings
+        getActivityStatuses: async () => {
+            const cid = await getCompanyId();
+            const snap = await db!.collection('activityStatuses').where('companyId', '==', cid).get();
+            return snap.docs.map(d => ({ id: d.id, ...d.data() } as ActivityStatus));
+        },
+        addActivityStatus: async (name, color) => {
+            const cid = await getCompanyId();
+            const ref = db!.collection('activityStatuses').doc();
+            await ref.set({ id: ref.id, companyId: cid, name, color });
+        },
+        removeActivityStatus: async (id) => {
+            await db!.collection('activityStatuses').doc(id).delete();
+        },
+        getWorkSchedules: async () => {
+            const cid = await getCompanyId();
+            const snap = await db!.collection('workSchedules').where('companyId', '==', cid).get();
+            return snap.docs.map(d => ({ id: d.id, ...d.data() } as WorkSchedule));
+        },
+        addWorkSchedule: async (schedule) => {
+            const cid = await getCompanyId();
+            const ref = db!.collection('workSchedules').doc();
+            await ref.set({ ...schedule, id: ref.id, companyId: cid });
+        },
+        updateWorkSchedule: async (id, updates) => {
+            await db!.collection('workSchedules').doc(id).update(updates);
+        },
+        removeWorkSchedule: async (id) => {
+            await db!.collection('workSchedules').doc(id).delete();
+        },
+        getPayrollChangeTypes: async () => {
+            const cid = await getCompanyId();
+            const snap = await db!.collection('payrollChangeTypes').where('companyId', '==', cid).get();
+            return snap.docs.map(d => ({ id: d.id, ...d.data() } as PayrollChangeType));
+        },
+        addPayrollChangeType: async (name, color, isExclusive, adminOnly) => {
+            const cid = await getCompanyId();
+            const ref = db!.collection('payrollChangeTypes').doc();
+            await ref.set({ id: ref.id, companyId: cid, name, color, isExclusive, adminOnly });
+        },
+        updatePayrollChangeType: async (id, updates) => {
+            await db!.collection('payrollChangeTypes').doc(id).update(updates);
+        },
+        removePayrollChangeType: async (id) => {
+            await db!.collection('payrollChangeTypes').doc(id).delete();
+        },
+        getCalendarEvents: async () => {
+            const cid = await getCompanyId();
+            const snap = await db!.collection('calendarEvents').where('companyId', '==', cid).get();
+            return snap.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent));
+        },
+        addCalendarEvent: async (event) => {
+            const cid = await getCompanyId();
+            const ref = db!.collection('calendarEvents').doc();
+            await ref.set({ ...event, id: ref.id, companyId: cid });
+        },
+        updateCalendarEvent: async (event) => {
+            await db!.collection('calendarEvents').doc(event.id).update(event);
+        },
+        removeCalendarEvent: async (id) => {
+            await db!.collection('calendarEvents').doc(id).delete();
+        },
+        updateTimesheetEntry: async (employeeId, startLogId, endLogId, newStartTime, newEndTime) => {
+            const batch = db!.batch();
+            const startRef = db!.collection('attendanceLog').doc(startLogId);
+            const endRef = db!.collection('attendanceLog').doc(endLogId);
+            
+            batch.update(startRef, { timestamp: newStartTime });
+            batch.update(endRef, { timestamp: newEndTime });
+            
+            await batch.commit();
+        }
+    };
+};
+
 // --- MOCK API IMPLEMENTATION ---
 const createMockApi = () => {
-  // ... existing mock data ...
+  // ... mock data initialization ...
   let mockEmployees: Employee[] = JSON.parse(JSON.stringify(initialEmployees));
-  // Assign a mock company ID to initial employees
   mockEmployees.forEach(e => e.companyId = 'mock_company_id');
 
   let mockCompanies: Company[] = [
@@ -45,21 +404,24 @@ const createMockApi = () => {
   let mockWorkSchedules: WorkSchedule[] = [
     { id: '1', name: 'Morning Shift', startTime: '08:00', endTime: '16:00', days: [1,2,3,4,5], companyId: 'mock_company_id' },
   ];
-  let mockTasks: Task[] = [];
   let mockCalendarEvents: CalendarEvent[] = [];
 
-  // Implement mock auth functions
   let mockCurrentUser: { uid: string, email: string } | null = null;
   
   const getNextId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
+  // Internal helper to simulate listeners
+  const listeners: { employees: Function[], logs: Function[] } = { employees: [], logs: [] };
+  const notifyListeners = () => {
+      listeners.employees.forEach(cb => cb([...mockEmployees]));
+      listeners.logs.forEach(cb => cb([...mockAttendanceLog]));
+  };
+
   return {
     joinCompany: async (inviteCode: string): Promise<boolean> => {
-        // Just mock it
         return Promise.resolve(true);
     },
     migrateLegacyData: async (): Promise<number> => {
-        // Mock implementation: just pretend we updated things
         return Promise.resolve(0);
     },
     getCompanyDetails: async (companyId: string): Promise<Company | null> => {
@@ -70,22 +432,6 @@ const createMockApi = () => {
             throw new Error("Email already in use.");
         }
         
-        // MOCK LOGIC FOR CLAIMING PROFILE
-        if (inviteCode) {
-            // Check if admin pre-created this user (Look for same email in company)
-            const existingPreCreated = mockEmployees.find(e => e.companyId === inviteCode && e.email === email && e.uid?.startsWith('manual_'));
-            
-            if (existingPreCreated) {
-                // UPDATE existing
-                const newUid = getNextId('user');
-                existingPreCreated.uid = newUid;
-                existingPreCreated.name = fullName; // Update name just in case
-                // MOCK: Don't auto-login to simulate verification flow
-                return Promise.resolve(existingPreCreated);
-            }
-        }
-
-        // Standard logic
         let companyId = inviteCode;
         let role: 'admin' | 'employee';
 
@@ -122,7 +468,7 @@ const createMockApi = () => {
             workScheduleId: null,
         };
         mockEmployees.push(newEmployee);
-        // MOCK: No auto-login. Simulate user needs to go to login.
+        notifyListeners();
         return Promise.resolve(newEmployee);
     },
     loginWithEmailAndPassword: async (email: string, password: string): Promise<Employee> => {
@@ -140,24 +486,23 @@ const createMockApi = () => {
         return Promise.resolve();
     },
     sendPasswordResetEmail: async (email: string): Promise<void> => {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        if (!email.includes('@')) throw new Error("Invalid email address.");
-        console.log(`[Mock API] Password reset email sent to: ${email}`);
+        await new Promise(resolve => setTimeout(resolve, 500));
         return Promise.resolve();
     },
     verifyPasswordResetCode: async (oobCode: string): Promise<string> => {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        if (oobCode === 'invalid') throw new Error('Invalid code');
-        return "mockuser@example.com";
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return "usuario_demo@ejemplo.com";
     },
     confirmPasswordReset: async (oobCode: string, newPassword: string): Promise<void> => {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        console.log(`[Mock API] Password reset confirmed for code ${oobCode}. New password: ${newPassword}`);
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return Promise.resolve();
+    },
+    verifyEmail: async (oobCode: string): Promise<void> => {
+        await new Promise(resolve => setTimeout(resolve, 500));
         return Promise.resolve();
     },
     changePassword: async (password: string): Promise<void> => {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        console.log(`[Mock API] Password changed to: ${password}`);
+        await new Promise(resolve => setTimeout(resolve, 500));
         return Promise.resolve();
     },
     getEmployeeProfile: async (uid: string): Promise<Employee | null> => {
@@ -165,46 +510,45 @@ const createMockApi = () => {
         return Promise.resolve(user || null);
     },
     streamEmployees: (callback: (employees: Employee[]) => void): (() => void) => {
-        const currentUser = mockEmployees.find(e => e.uid === mockCurrentUser?.uid);
-        if (currentUser) {
-             callback(mockEmployees.filter(e => e.companyId === currentUser.companyId));
-        } else {
-             callback(mockEmployees);
-        }
-        return () => {};
+        listeners.employees.push(callback);
+        callback([...mockEmployees]);
+        return () => {
+            listeners.employees = listeners.employees.filter(cb => cb !== callback);
+        };
     },
     addEmployee: async (employeeData: Omit<Employee, 'id' | 'status' | 'lastClockInTime' | 'currentStatusStartTime' | 'uid'>): Promise<Employee> => {
         const newEmployee: Employee = {
             ...employeeData,
             id: getNextId('employee'),
-            uid: `manual_${Date.now()}`, // Temporary UID for pre-created profiles
+            uid: `manual_${Date.now()}`,
             status: 'Clocked Out',
             lastClockInTime: null,
             currentStatusStartTime: null,
         };
         mockEmployees.push(newEmployee);
+        notifyListeners();
         return Promise.resolve(newEmployee);
     },
     streamAttendanceLog: (callback: (log: AttendanceLogEntry[]) => void): (() => void) => {
-      const currentUser = mockEmployees.find(e => e.uid === mockCurrentUser?.uid);
-      if (currentUser) {
-          callback(mockAttendanceLog.filter(l => l.companyId === currentUser.companyId));
-      } else {
-          callback(mockAttendanceLog);
-      }
-      return () => {};
+      listeners.logs.push(callback);
+      callback([...mockAttendanceLog]);
+      return () => {
+          listeners.logs = listeners.logs.filter(cb => cb !== callback);
+      };
     },
     getEmployees: async (): Promise<Employee[]> => {
       return Promise.resolve([...mockEmployees]);
     },
     removeEmployee: async (employeeId: string): Promise<{ success: boolean }> => {
       mockEmployees = mockEmployees.filter(e => e.id !== employeeId);
+      notifyListeners();
       return Promise.resolve({ success: true });
     },
     updateEmployeeStatus: async (employeeToUpdate: Employee): Promise<Employee> => {
       const index = mockEmployees.findIndex(e => e.id === employeeToUpdate.id);
       if (index > -1) {
         mockEmployees[index] = employeeToUpdate;
+        notifyListeners();
       }
       return Promise.resolve(employeeToUpdate);
     },
@@ -212,33 +556,36 @@ const createMockApi = () => {
       const index = mockEmployees.findIndex(e => e.id === employeeToUpdate.id);
       if (index > -1) {
         mockEmployees[index] = employeeToUpdate;
+        notifyListeners();
       }
       return Promise.resolve(employeeToUpdate);
     },
     uploadProfilePicture: async (userId: string, file: File): Promise<string> => {
-        // Mock implementation: Convert to base64 to display locally
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             const reader = new FileReader();
-            reader.readAsDataURL(file);
             reader.onload = () => {
                 const base64 = reader.result as string;
-                // Update mock data
                 const emp = mockEmployees.find(e => e.id === userId);
-                if (emp) emp.avatarUrl = base64;
+                if (emp) {
+                    emp.avatarUrl = base64;
+                    notifyListeners();
+                }
                 resolve(base64);
             };
-            reader.onerror = error => reject(error);
+            reader.readAsDataURL(file);
         });
     },
     addAttendanceLogEntry: async (logEntry: Omit<AttendanceLogEntry, 'id'>): Promise<AttendanceLogEntry> => {
       const newLog: AttendanceLogEntry = { ...logEntry, id: getNextId('log') };
       mockAttendanceLog.push(newLog);
+      notifyListeners();
       return Promise.resolve(newLog);
     },
     updateAttendanceLogEntry: async (logId: string, updates: { action: string, timestamp: number }): Promise<AttendanceLogEntry> => {
       const log = mockAttendanceLog.find(l => l.id === logId);
       if (!log) throw new Error("Log not found");
       Object.assign(log, updates);
+      notifyListeners();
       return Promise.resolve(log);
     },
     updateEmployeeCurrentSession: async (employeeId: string, newStartTime: number): Promise<{ updatedEmployee: Employee, updatedLog: AttendanceLogEntry }> => {
@@ -252,608 +599,83 @@ const createMockApi = () => {
 
       employee.currentStatusStartTime = newStartTime;
       if (employee.lastClockInTime === originalStartTime) {
-        employee.lastClockInTime = newStartTime;
+          employee.lastClockInTime = newStartTime;
       }
+      
       log.timestamp = newStartTime;
-
+      notifyListeners();
+      
       return Promise.resolve({ updatedEmployee: employee, updatedLog: log });
     },
-    updateTimesheetEntry: async (employeeId: string, startLogId: string, endLogId: string, newStartTime: number, newEndTime: number): Promise<{ updatedLogs: AttendanceLogEntry[] }> => {
-        const startLog = mockAttendanceLog.find(l => l.id === startLogId);
-        const endLog = mockAttendanceLog.find(l => l.id === endLogId);
-        if (!startLog || !endLog) throw new Error("Log entries not found");
-        startLog.timestamp = newStartTime;
-        endLog.timestamp = newEndTime;
-        return Promise.resolve({ updatedLogs: [startLog, endLog] });
-    },
+    // Config
     getActivityStatuses: async (): Promise<ActivityStatus[]> => Promise.resolve(mockActivityStatuses),
-    addActivityStatus: async (name: string, color: string): Promise<ActivityStatus> => {
-        const currentUser = mockEmployees.find(e => e.uid === mockCurrentUser?.uid);
-        const newStatus = { id: getNextId('status'), name, color, companyId: currentUser?.companyId || 'mock_company_id' };
-        mockActivityStatuses.push(newStatus);
-        return Promise.resolve(newStatus);
+    addActivityStatus: async (name: string, color: string): Promise<void> => {
+        mockActivityStatuses.push({ id: getNextId('status'), name, color, companyId: 'mock_company_id' });
+        return Promise.resolve();
     },
-    removeActivityStatus: async (id: string): Promise<{ success: boolean }> => {
+    removeActivityStatus: async (id: string): Promise<void> => {
         mockActivityStatuses = mockActivityStatuses.filter(s => s.id !== id);
-        return Promise.resolve({ success: true });
-    },
-    getPayrollChangeTypes: async (): Promise<PayrollChangeType[]> => Promise.resolve(mockPayrollChangeTypes),
-    addPayrollChangeType: async (name: string, color: string, isExclusive: boolean, adminOnly: boolean): Promise<PayrollChangeType> => {
-        const currentUser = mockEmployees.find(e => e.uid === mockCurrentUser?.uid);
-        const newType = { id: getNextId('payroll'), name, color, isExclusive, adminOnly, companyId: currentUser?.companyId || 'mock_company_id' };
-        mockPayrollChangeTypes.push(newType);
-        return Promise.resolve(newType);
-    },
-    updatePayrollChangeType: async (id: string, updates: Partial<Omit<PayrollChangeType, 'id'>>): Promise<PayrollChangeType> => {
-        const type = mockPayrollChangeTypes.find(t => t.id === id);
-        if (!type) throw new Error("Payroll change type not found");
-        Object.assign(type, updates);
-        return Promise.resolve(type);
-    },
-    removePayrollChangeType: async (id: string): Promise<{ success: boolean }> => {
-        mockPayrollChangeTypes = mockPayrollChangeTypes.filter(t => t.id !== id);
-        return Promise.resolve({ success: true });
+        return Promise.resolve();
     },
     getWorkSchedules: async (): Promise<WorkSchedule[]> => Promise.resolve(mockWorkSchedules),
-    addWorkSchedule: async (scheduleData: Omit<WorkSchedule, 'id' | 'companyId'>): Promise<WorkSchedule> => {
-        const currentUser = mockEmployees.find(e => e.uid === mockCurrentUser?.uid);
-        const newSchedule = { ...scheduleData, id: getNextId('schedule'), companyId: currentUser?.companyId || 'mock_company_id' };
-        mockWorkSchedules.push(newSchedule);
-        return Promise.resolve(newSchedule);
+    addWorkSchedule: async (schedule: Omit<WorkSchedule, 'id' | 'companyId'>): Promise<void> => {
+        mockWorkSchedules.push({ ...schedule, id: getNextId('schedule'), companyId: 'mock_company_id' });
+        return Promise.resolve();
     },
-    updateWorkSchedule: async (id: string, updates: Partial<Omit<WorkSchedule, 'id'>>): Promise<WorkSchedule> => {
-        const schedule = mockWorkSchedules.find(s => s.id === id);
-        if (!schedule) throw new Error("Work schedule not found");
-        Object.assign(schedule, updates);
-        return Promise.resolve(schedule);
+    updateWorkSchedule: async (id: string, updates: Partial<WorkSchedule>): Promise<void> => {
+        const idx = mockWorkSchedules.findIndex(s => s.id === id);
+        if (idx > -1) mockWorkSchedules[idx] = { ...mockWorkSchedules[idx], ...updates };
+        return Promise.resolve();
     },
-    removeWorkSchedule: async (id: string): Promise<{ success: boolean }> => {
+    removeWorkSchedule: async (id: string): Promise<void> => {
         mockWorkSchedules = mockWorkSchedules.filter(s => s.id !== id);
-        return Promise.resolve({ success: true });
+        return Promise.resolve();
     },
-    getTasks: async (): Promise<Task[]> => Promise.resolve(mockTasks),
-    addTask: async (taskData: Omit<Task, 'id' | 'companyId'>): Promise<Task> => {
-        const currentUser = mockEmployees.find(e => e.uid === mockCurrentUser?.uid);
-        const newTask = { ...taskData, id: getNextId('task'), companyId: currentUser?.companyId || 'mock_company_id' };
-        mockTasks.push(newTask);
-        return Promise.resolve(newTask);
+    getPayrollChangeTypes: async (): Promise<PayrollChangeType[]> => Promise.resolve(mockPayrollChangeTypes),
+    addPayrollChangeType: async (name: string, color: string, isExclusive: boolean, adminOnly: boolean): Promise<void> => {
+        mockPayrollChangeTypes.push({ id: getNextId('payroll'), name, color, isExclusive, adminOnly, companyId: 'mock_company_id' });
+        return Promise.resolve();
     },
+    updatePayrollChangeType: async (id: string, updates: Partial<PayrollChangeType>): Promise<void> => {
+        const idx = mockPayrollChangeTypes.findIndex(p => p.id === id);
+        if (idx > -1) mockPayrollChangeTypes[idx] = { ...mockPayrollChangeTypes[idx], ...updates };
+        return Promise.resolve();
+    },
+    removePayrollChangeType: async (id: string): Promise<void> => {
+        mockPayrollChangeTypes = mockPayrollChangeTypes.filter(p => p.id !== id);
+        return Promise.resolve();
+    },
+    // Calendar
     getCalendarEvents: async (): Promise<CalendarEvent[]> => Promise.resolve(mockCalendarEvents),
-    addCalendarEvent: async (eventData: Omit<CalendarEvent, 'id' | 'status' | 'companyId'> & { status?: 'pending' | 'approved' | 'rejected' }): Promise<CalendarEvent> => {
-        const currentUser = mockEmployees.find(e => e.uid === mockCurrentUser?.uid);
-        const newEvent: CalendarEvent = { 
-            ...eventData, 
-            id: getNextId('event'),
-            status: eventData.status || 'approved',
-            companyId: currentUser?.companyId || 'mock_company_id'
-        };
-        mockCalendarEvents.push(newEvent);
-        return Promise.resolve(newEvent);
+    addCalendarEvent: async (event: Omit<CalendarEvent, 'id' | 'companyId'>): Promise<void> => {
+        mockCalendarEvents.push({ ...event, id: getNextId('event'), companyId: 'mock_company_id' });
+        return Promise.resolve();
     },
-    updateCalendarEvent: async (eventData: CalendarEvent): Promise<CalendarEvent> => {
-        const index = mockCalendarEvents.findIndex(e => e.id === eventData.id);
-        if (index > -1) {
-            mockCalendarEvents[index] = eventData;
-        }
-        return Promise.resolve(eventData);
+    updateCalendarEvent: async (event: CalendarEvent): Promise<void> => {
+        const idx = mockCalendarEvents.findIndex(e => e.id === event.id);
+        if (idx > -1) mockCalendarEvents[idx] = event;
+        return Promise.resolve();
     },
-    removeCalendarEvent: async (eventId: string): Promise<{ success: boolean }> => {
-        mockCalendarEvents = mockCalendarEvents.filter(e => e.id !== eventId);
-        return Promise.resolve({ success: true });
+    removeCalendarEvent: async (id: string): Promise<void> => {
+        mockCalendarEvents = mockCalendarEvents.filter(e => e.id !== id);
+        return Promise.resolve();
     },
+    // Timesheet
+    updateTimesheetEntry: async (employeeId: string, startLogId: string, endLogId: string, newStartTime: number, newEndTime: number): Promise<void> => {
+        const startLog = mockAttendanceLog.find(l => l.id === startLogId);
+        const endLog = mockAttendanceLog.find(l => l.id === endLogId);
+        if (startLog) startLog.timestamp = newStartTime;
+        if (endLog) endLog.timestamp = newEndTime;
+        
+        notifyListeners();
+        return Promise.resolve();
+    }
   };
 };
 
-// --- REAL API IMPLEMENTATION ---
-const createRealApi = () => {
-    const getDb = () => {
-        if (!db) throw new Error("Firestore is not initialized.");
-        return db;
-    }
-    const getAuth = () => {
-        if (!auth) throw new Error("Firebase Auth is not initialized.");
-        return auth;
-    }
+const api = isFirebaseEnabled ? createRealApi() : createMockApi();
 
-    return {
-        // ... (auth methods)
-        joinCompany: async (inviteCode: string): Promise<boolean> => {
-            const user = getAuth().currentUser;
-            if (!user) throw new Error("Debes iniciar sesión.");
-
-            // Basic parsing: remove potential URL parts
-            let companyId = inviteCode.trim();
-            if (companyId.includes('inviteCode=')) {
-                companyId = companyId.split('inviteCode=')[1].split('&')[0];
-            }
-
-            // 1. Verify Company Exists
-            const companyDoc = await getDb().collection('companies').doc(companyId).get();
-            if (!companyDoc.exists) {
-                throw new Error("El código de invitación no es válido.");
-            }
-
-            // 2. Update Employee Profile
-            // We reset workSchedule and status because they are specific to the old company
-            await getDb().collection('employees').doc(user.uid).update({
-                companyId: companyId,
-                workScheduleId: null, 
-                status: 'Clocked Out',
-                lastClockInTime: null,
-                currentStatusStartTime: null,
-                role: 'employee' // Force to employee role when joining via code
-            });
-
-            return true;
-        },
-        migrateLegacyData: async (): Promise<number> => {
-            const companyId = await getCurrentUserCompanyId();
-            if (!companyId) throw new Error("No active company found for the current user.");
-
-            const collections = [
-                'employees',
-                'attendanceLog',
-                'activityStatuses',
-                'workSchedules',
-                'payrollChangeTypes',
-                'calendarEvents',
-                'tasks',
-                'companies' // Usually doesn't need it, but good for completeness if custom logic exists
-            ];
-
-            let totalUpdated = 0;
-            const batch = getDb().batch();
-            let opCount = 0;
-            const COMMIT_THRESHOLD = 450; // Firestore batch limit is 500
-
-            // Helper to commit and reset batch
-            const checkCommit = async () => {
-                if (opCount >= COMMIT_THRESHOLD) {
-                    await batch.commit();
-                    opCount = 0;
-                    // Reset batch is not directly possible, we just commit. 
-                    // To do truly massive updates, we need to create a new batch object, 
-                    // but for this scope, let's assume we commit chunks.
-                    // However, `batch` object is single-use. 
-                    // Simplified strategy: We will fetch and update individually for safety in this specific "migration tool" context
-                    // or use Promise.all which is easier for the "frontend script" nature of this.
-                }
-            };
-
-            // Using Promise.all for simplicity and to avoid complex batch management in this snippet
-            // Fetch all docs from all collections that MISS companyId
-            // Note: Firestore queries for "missing field" are not direct.
-            // We fetch all and check locally.
-            
-            for (const colName of collections) {
-                const snapshot = await getDb().collection(colName).get();
-                const updates = [];
-                
-                for (const doc of snapshot.docs) {
-                    const data = doc.data();
-                    if (!data.companyId) {
-                        updates.push(doc.ref.update({ companyId }));
-                        totalUpdated++;
-                    }
-                }
-                await Promise.all(updates);
-            }
-
-            return totalUpdated;
-        },
-        getCompanyDetails: async (companyId: string): Promise<Company | null> => {
-            const doc = await getDb().collection('companies').doc(companyId).get();
-            if (doc.exists) {
-                return { ...(doc.data() as Omit<Company, 'id'>), id: doc.id };
-            }
-            return null;
-        },
-        registerWithEmailAndPassword: async (fullName: string, email: string, password: string, companyName: string, inviteCode?: string): Promise<Employee> => {
-            const userCredential = await getAuth().createUserWithEmailAndPassword(email, password);
-            const user = userCredential.user;
-            if (!user) throw new Error("Failed to create auth user.");
-
-            // 1. Send Verification Email
-            await user.sendEmailVerification();
-
-            let companyId = inviteCode;
-            let role: 'admin' | 'employee';
-            
-            // Check if user is JOINING (has invite code)
-            if (inviteCode) {
-                // IMPORTANT: Check if a pre-created profile exists for this email in this company
-                // This allows Admin to pre-configure Schedule, Role, etc.
-                const preCreatedQuery = await getDb().collection('employees')
-                    .where('companyId', '==', inviteCode)
-                    .where('email', '==', email)
-                    .get();
-
-                if (!preCreatedQuery.empty) {
-                    // FOUND A MATCH! Claim this profile.
-                    const existingDoc = preCreatedQuery.docs[0];
-                    const existingData = existingDoc.data();
-                    
-                    // We delete the old doc and recreate it with the REAL Auth UID as ID
-                    // Firestore best practice for Auth integration: Doc ID = Auth UID
-                    
-                    const newProfileData = {
-                        ...existingData,
-                        uid: user.uid, // Link to real auth
-                        name: fullName, // Update name if provided differently
-                    };
-
-                    const batch = getDb().batch();
-                    batch.delete(existingDoc.ref);
-                    batch.set(getDb().collection('employees').doc(user.uid), newProfileData);
-                    await batch.commit();
-
-                    // Force Sign Out to enforce verification
-                    await getAuth().signOut();
-
-                    return { ...(newProfileData as Omit<Employee, 'id'>), id: user.uid };
-                }
-
-                // If not found, create standard employee profile
-                role = 'employee';
-                companyId = inviteCode;
-            } else {
-                // Case 2: Creating a new company -> Role is ADMIN
-                role = 'admin';
-                const companyData = {
-                    name: companyName,
-                    ownerId: user.uid,
-                    createdAt: Date.now()
-                };
-                const companyRef = await getDb().collection('companies').add(companyData);
-                companyId = companyRef.id;
-                
-                // Create default data for the NEW company
-                const batch = getDb().batch();
-                const statusRef = getDb().collection('activityStatuses').doc();
-                batch.set(statusRef, { name: 'Break', color: '#AE8F60', companyId });
-                await batch.commit();
-            }
-
-            // 2. Create the Employee Document (Standard Flow)
-            const employeeData = {
-                uid: user.uid,
-                companyId: companyId,
-                name: fullName,
-                email: email,
-                phone: '',
-                location: 'Main Office',
-                role: role, // Explicitly set role
-                status: 'Clocked Out',
-                lastClockInTime: null,
-                currentStatusStartTime: null,
-                workScheduleId: null,
-            };
-
-            await getDb().collection('employees').doc(user.uid).set(employeeData);
-            
-            // 3. Force Sign Out to enforce verification
-            await getAuth().signOut();
-            
-            return { ...employeeData, id: user.uid };
-        },
-        
-        // ... all other methods remain the same as previous (login, logout, data streams, etc.)
-        loginWithEmailAndPassword: async (email: string, password: string): Promise<Employee> => {
-            if (!email || !password) {
-                throw new Error("Cannot login: Email and password must be provided.");
-            }
-            const userCredential = await getAuth().signInWithEmailAndPassword(email, password);
-            const user = userCredential.user;
-            if (!user) throw new Error("Login failed, user not found in auth.");
-
-            // 4. Check Verification Status
-            if (!user.emailVerified) {
-                await getAuth().signOut();
-                throw new Error("Tu cuenta no ha sido verificada. Por favor revisa tu correo electrónico.");
-            }
-
-            const profile = await getEmployeeProfile(user.uid);
-            
-            if (!profile) {
-                // Handle legacy users or errors
-                console.warn("User authenticated but no Firestore profile found.");
-                throw new Error("User profile not found.");
-            }
-            
-            return profile;
-        },
-
-        logout: async (): Promise<void> => {
-            await getAuth().signOut();
-        },
-
-        sendPasswordResetEmail: async (email: string): Promise<void> => {
-            await getAuth().sendPasswordResetEmail(email);
-        },
-
-        verifyPasswordResetCode: async (oobCode: string): Promise<string> => {
-            return await getAuth().verifyPasswordResetCode(oobCode);
-        },
-
-        confirmPasswordReset: async (oobCode: string, newPassword: string): Promise<void> => {
-            return await getAuth().confirmPasswordReset(oobCode, newPassword);
-        },
-
-        changePassword: async (password: string): Promise<void> => {
-            const user = getAuth().currentUser;
-            if (user) {
-                await user.updatePassword(password);
-            } else {
-                throw new Error("No user currently logged in.");
-            }
-        },
-        
-        // ... (data methods)
-        getEmployeeProfile: async (uid: string): Promise<Employee | null> => {
-            const userDoc = await getDb().collection('employees').doc(uid).get();
-            if (!userDoc.exists) return null;
-            return { ...(userDoc.data() as Omit<Employee, 'id'>), id: userDoc.id };
-        },
-
-        streamEmployees: (callback: (employees: Employee[]) => void): (() => void) => {
-            const user = getAuth().currentUser;
-            if (!user) return () => {};
-
-            getDb().collection('employees').doc(user.uid).get().then(doc => {
-                const companyId = doc.data()?.companyId;
-                if (!companyId) return;
-
-                const q = getDb().collection('employees').where('companyId', '==', companyId);
-                return q.onSnapshot((querySnapshot) => {
-                    const employees = querySnapshot.docs.map(doc => ({ ...(doc.data() as Omit<Employee, 'id'>), id: doc.id }));
-                    callback(employees);
-                });
-            });
-            return () => {}; 
-        },
-        streamAttendanceLog: (callback: (log: AttendanceLogEntry[]) => void): (() => void) => {
-             const user = getAuth().currentUser;
-            if (!user) return () => {};
-
-            getDb().collection('employees').doc(user.uid).get().then(doc => {
-                const companyId = doc.data()?.companyId;
-                if (!companyId) return;
-
-                const q = getDb().collection('attendanceLog').where('companyId', '==', companyId);
-                return q.onSnapshot((querySnapshot) => {
-                    const log = querySnapshot.docs.map(doc => ({ ...(doc.data() as Omit<AttendanceLogEntry, 'id'>), id: doc.id }));
-                    callback(log);
-                });
-            });
-            return () => {};
-        },
-        getEmployees: async (): Promise<Employee[]> => {
-            const companyId = await getCurrentUserCompanyId();
-            if (!companyId) return [];
-            const snapshot = await getDb().collection('employees').where('companyId', '==', companyId).get();
-            return snapshot.docs.map(doc => ({ ...(doc.data() as Omit<Employee, 'id'>), id: doc.id }));
-        },
-        addEmployee: async (employeeData: Omit<Employee, 'id' | 'status' | 'lastClockInTime' | 'currentStatusStartTime' | 'uid'>): Promise<Employee> => {
-             const newEmployeeData = {
-              ...employeeData,
-              uid: `manual_${Date.now()}`, // Placeholder for pre-created profiles
-              status: 'Clocked Out',
-              lastClockInTime: null,
-              currentStatusStartTime: null,
-            };
-            const docRef = await getDb().collection('employees').add(newEmployeeData);
-            return { ...newEmployeeData, id: docRef.id };
-        },
-        removeEmployee: async (employeeId: string): Promise<{ success: boolean }> => {
-            await getDb().collection('employees').doc(employeeId).delete();
-            return { success: true };
-        },
-        updateEmployeeStatus: async (employeeToUpdate: Employee): Promise<Employee> => {
-            const { id, ...data } = employeeToUpdate;
-            await getDb().collection('employees').doc(id).update(data);
-            return employeeToUpdate;
-        },
-        updateEmployeeDetails: async (employeeToUpdate: Employee): Promise<Employee> => {
-            const { id, ...data } = employeeToUpdate;
-            await getDb().collection('employees').doc(id).update(data);
-            return employeeToUpdate;
-        },
-        uploadProfilePicture: async (userId: string, file: File): Promise<string> => {
-            const storage = firebase.storage();
-            const storageRef = storage.ref();
-            const fileExtension = file.name.split('.').pop();
-            const fileName = `profile_${Date.now()}.${fileExtension}`;
-            const profileRef = storageRef.child(`avatars/${userId}/${fileName}`);
-            
-            await profileRef.put(file);
-            const downloadUrl = await profileRef.getDownloadURL();
-            
-            // Update the user's profile with the new avatar URL
-            await getDb().collection('employees').doc(userId).update({
-                avatarUrl: downloadUrl
-            });
-            
-            return downloadUrl;
-        },
-        addAttendanceLogEntry: async (logEntry: Omit<AttendanceLogEntry, 'id'>): Promise<AttendanceLogEntry> => {
-            const docRef = await getDb().collection('attendanceLog').add(logEntry);
-            return { ...logEntry, id: docRef.id };
-        },
-        updateAttendanceLogEntry: async (logId: string, updates: { action: string, timestamp: number }): Promise<AttendanceLogEntry> => {
-            const logRef = getDb().collection('attendanceLog').doc(logId);
-            await logRef.update(updates);
-            const updatedDoc = await logRef.get();
-            return { ...(updatedDoc.data() as Omit<AttendanceLogEntry, 'id'>), id: logId };
-        },
-        updateEmployeeCurrentSession: async (employeeId: string, newStartTime: number): Promise<{ updatedEmployee: Employee, updatedLog: AttendanceLogEntry }> => {
-            const employeeRef = getDb().collection('employees').doc(employeeId);
-            const employeeDoc = await employeeRef.get();
-            if (!employeeDoc.exists) throw new Error("Employee not found");
-            const employee = { ...(employeeDoc.data() as Omit<Employee, 'id'>), id: employeeDoc.id };
-            
-            if (!employee.currentStatusStartTime) throw new Error("Employee has no active session");
-            const originalStartTime = employee.currentStatusStartTime;
-
-            const logQuery = getDb().collection('attendanceLog').where("employeeId", "==", employeeId).where("timestamp", "==", originalStartTime);
-            const logSnapshot = await logQuery.get();
-            if (logSnapshot.empty) throw new Error("Log entry for current session not found");
-
-            const logDoc = logSnapshot.docs[0];
-            const logRef = getDb().collection('attendanceLog').doc(logDoc.id);
-
-            const updatedEmployeeData: Partial<Employee> = { currentStatusStartTime: newStartTime };
-            if (employee.lastClockInTime === originalStartTime) {
-                updatedEmployeeData.lastClockInTime = newStartTime;
-            }
-            
-            const batch = getDb().batch();
-            batch.update(logRef, { timestamp: newStartTime });
-            batch.update(employeeRef, updatedEmployeeData);
-            await batch.commit();
-
-            return {
-                updatedEmployee: { ...employee, ...updatedEmployeeData },
-                updatedLog: { ...(logDoc.data() as Omit<AttendanceLogEntry, 'id'>), timestamp: newStartTime, id: logDoc.id }
-            };
-        },
-        updateTimesheetEntry: async (employeeId: string, startLogId: string, endLogId: string, newStartTime: number, newEndTime: number): Promise<{ updatedLogs: AttendanceLogEntry[] }> => {
-            const batch = getDb().batch();
-            const startLogRef = getDb().collection('attendanceLog').doc(startLogId);
-            const endLogRef = getDb().collection('attendanceLog').doc(endLogId);
-
-            const startLogDoc = await startLogRef.get();
-            const endLogDoc = await endLogRef.get();
-
-            if (!startLogDoc.exists || !endLogDoc.exists) throw new Error("Log entries not found");
-            
-            batch.update(startLogRef, { timestamp: newStartTime });
-            batch.update(endLogRef, { timestamp: newEndTime });
-            await batch.commit();
-            
-            return { 
-                updatedLogs: [
-                    { ...(startLogDoc.data() as Omit<AttendanceLogEntry, 'id'>), id: startLogDoc.id, timestamp: newStartTime },
-                    { ...(endLogDoc.data() as Omit<AttendanceLogEntry, 'id'>), id: endLogDoc.id, timestamp: newEndTime },
-                ]
-            };
-        },
-        getActivityStatuses: async (): Promise<ActivityStatus[]> => {
-            const companyId = await getCurrentUserCompanyId();
-            if (!companyId) return [];
-            const snapshot = await getDb().collection('activityStatuses').where('companyId', '==', companyId).get();
-            return snapshot.docs.map(doc => ({ ...(doc.data() as Omit<ActivityStatus, 'id'>), id: doc.id }));
-        },
-        addActivityStatus: async (name: string, color: string): Promise<ActivityStatus> => {
-            const companyId = await getCurrentUserCompanyId();
-            if (!companyId) throw new Error("No company context");
-            const docRef = await getDb().collection('activityStatuses').add({ name, color, companyId });
-            return { id: docRef.id, name, color, companyId };
-        },
-        removeActivityStatus: async (id: string): Promise<{ success: boolean }> => {
-            await getDb().collection('activityStatuses').doc(id).delete();
-            return { success: true };
-        },
-        getPayrollChangeTypes: async (): Promise<PayrollChangeType[]> => {
-            const companyId = await getCurrentUserCompanyId();
-            if (!companyId) return [];
-            const snapshot = await getDb().collection('payrollChangeTypes').where('companyId', '==', companyId).get();
-            return snapshot.docs.map(doc => ({ ...(doc.data() as Omit<PayrollChangeType, 'id'>), id: doc.id }));
-        },
-        addPayrollChangeType: async (name: string, color: string, isExclusive: boolean, adminOnly: boolean): Promise<PayrollChangeType> => {
-            const companyId = await getCurrentUserCompanyId();
-            if (!companyId) throw new Error("No company context");
-            const docRef = await getDb().collection('payrollChangeTypes').add({ name, color, isExclusive, adminOnly, companyId });
-            return { id: docRef.id, name, color, isExclusive, adminOnly, companyId };
-        },
-        updatePayrollChangeType: async (id: string, updates: Partial<Omit<PayrollChangeType, 'id'>>): Promise<PayrollChangeType> => {
-            const typeRef = getDb().collection('payrollChangeTypes').doc(id);
-            await typeRef.update(updates);
-            const updatedDoc = await typeRef.get();
-            return { ...(updatedDoc.data() as Omit<PayrollChangeType, 'id'>), id } as PayrollChangeType;
-        },
-        removePayrollChangeType: async (id: string): Promise<{ success: boolean }> => {
-            await getDb().collection('payrollChangeTypes').doc(id).delete();
-            return { success: true };
-        },
-        // ... (Work schedule, tasks, calendar events methods unchanged)
-        getWorkSchedules: async (): Promise<WorkSchedule[]> => {
-            const companyId = await getCurrentUserCompanyId();
-            if (!companyId) return [];
-            const snapshot = await getDb().collection('workSchedules').where('companyId', '==', companyId).get();
-            return snapshot.docs.map(doc => ({ ...(doc.data() as Omit<WorkSchedule, 'id'>), id: doc.id }));
-        },
-        addWorkSchedule: async (scheduleData: Omit<WorkSchedule, 'id' | 'companyId'>): Promise<WorkSchedule> => {
-            const companyId = await getCurrentUserCompanyId();
-            if (!companyId) throw new Error("No company context");
-            const docWithCompany = { ...scheduleData, companyId };
-            const docRef = await getDb().collection('workSchedules').add(docWithCompany);
-            return { ...docWithCompany, id: docRef.id };
-        },
-        updateWorkSchedule: async (id: string, updates: Partial<Omit<WorkSchedule, 'id'>>): Promise<WorkSchedule> => {
-            const scheduleRef = getDb().collection('workSchedules').doc(id);
-            await scheduleRef.update(updates);
-            const updatedDoc = await scheduleRef.get();
-            return { ...(updatedDoc.data() as Omit<WorkSchedule, 'id'>), id } as WorkSchedule;
-        },
-        removeWorkSchedule: async (id: string): Promise<{ success: boolean }> => {
-            await getDb().collection('workSchedules').doc(id).delete();
-            return { success: true };
-        },
-        getTasks: async (): Promise<Task[]> => {
-            const companyId = await getCurrentUserCompanyId();
-            if (!companyId) return [];
-            const snapshot = await getDb().collection('tasks').where('companyId', '==', companyId).get();
-            return snapshot.docs.map(doc => ({ ...(doc.data() as Omit<Task, 'id'>), id: doc.id }));
-        },
-        addTask: async (taskData: Omit<Task, 'id' | 'companyId'>): Promise<Task> => {
-            const companyId = await getCurrentUserCompanyId();
-            if (!companyId) throw new Error("No company context");
-            const docWithCompany = { ...taskData, companyId };
-            const docRef = await getDb().collection('tasks').add(docWithCompany);
-            return { ...docWithCompany, id: docRef.id };
-        },
-        getCalendarEvents: async (): Promise<CalendarEvent[]> => {
-            const companyId = await getCurrentUserCompanyId();
-            if (!companyId) return [];
-            const snapshot = await getDb().collection('calendarEvents').where('companyId', '==', companyId).get();
-            return snapshot.docs.map(doc => ({ 
-                ...(doc.data() as Omit<CalendarEvent, 'id'>), 
-                id: doc.id,
-                status: (doc.data() as any).status || 'approved'
-            }));
-        },
-        addCalendarEvent: async (eventData: Omit<CalendarEvent, 'id' | 'status' | 'companyId'> & { status?: 'pending' | 'approved' | 'rejected' }): Promise<CalendarEvent> => {
-            const user = getAuth().currentUser;
-            if (!user) throw new Error("User not authenticated");
-
-            const doc = await getDb().collection('employees').doc(user.uid).get();
-            const companyId = doc.data()?.companyId;
-            
-            if (!companyId) throw new Error("Company context missing for user");
-
-            const eventWithStatus = {
-                ...eventData,
-                status: eventData.status || 'approved',
-                companyId: companyId
-            };
-            const docRef = await getDb().collection('calendarEvents').add(eventWithStatus);
-            return { ...eventWithStatus, id: docRef.id };
-        },
-        updateCalendarEvent: async (eventData: CalendarEvent): Promise<CalendarEvent> => {
-            const { id, ...data } = eventData;
-            await getDb().collection('calendarEvents').doc(id).update(data);
-            return eventData;
-        },
-        removeCalendarEvent: async (eventId: string): Promise<{ success: boolean }> => {
-            await getDb().collection('calendarEvents').doc(eventId).delete();
-            return { success: true };
-        },
-    };
-};
-
-const mockApi = createMockApi();
-const realApi = isFirebaseEnabled ? createRealApi() : ({} as ReturnType<typeof createRealApi>);
-
+// Exporting individual functions for App.tsx usage
 export const {
     joinCompany,
     migrateLegacyData,
@@ -862,14 +684,15 @@ export const {
     loginWithEmailAndPassword,
     logout,
     sendPasswordResetEmail,
-    changePassword,
     verifyPasswordResetCode,
     confirmPasswordReset,
+    verifyEmail,
+    changePassword,
     getEmployeeProfile,
     streamEmployees,
+    addEmployee,
     streamAttendanceLog,
     getEmployees,
-    addEmployee,
     removeEmployee,
     updateEmployeeStatus,
     updateEmployeeDetails,
@@ -877,22 +700,20 @@ export const {
     addAttendanceLogEntry,
     updateAttendanceLogEntry,
     updateEmployeeCurrentSession,
-    updateTimesheetEntry,
     getActivityStatuses,
     addActivityStatus,
     removeActivityStatus,
-    getPayrollChangeTypes,
-    addPayrollChangeType,
-    updatePayrollChangeType,
-    removePayrollChangeType,
     getWorkSchedules,
     addWorkSchedule,
     updateWorkSchedule,
     removeWorkSchedule,
-    getTasks,
-    addTask,
+    getPayrollChangeTypes,
+    addPayrollChangeType,
+    updatePayrollChangeType,
+    removePayrollChangeType,
     getCalendarEvents,
     addCalendarEvent,
     updateCalendarEvent,
     removeCalendarEvent,
-} = isFirebaseEnabled ? realApi : mockApi;
+    updateTimesheetEntry
+} = api;

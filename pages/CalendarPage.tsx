@@ -118,7 +118,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({ events, currentUser, payrol
               {calendarGrid.map((day, idx) => (
                   <div 
                       key={idx} 
-                      className={`min-h-[120px] bg-white p-2 relative flex flex-col gap-1 transition-colors ${
+                      className={`min-h-[120px] h-auto bg-white p-2 relative flex flex-col gap-1 transition-colors ${
                           !day.isCurrentMonth ? 'bg-gray-50/50 text-gray-400' : 'text-bokara-grey'
                       } ${day.isToday ? 'bg-lucius-lime/5' : ''}`}
                   >
@@ -130,7 +130,7 @@ const CalendarPage: React.FC<CalendarPageProps> = ({ events, currentUser, payrol
                           </span>
                       </div>
                       
-                      <div className="flex-grow flex flex-col gap-1 mt-1 overflow-y-auto custom-scrollbar max-h-[100px]">
+                      <div className="flex-grow flex flex-col gap-1 mt-1">
                           {day.events.map((event, i) => {
                               const color = eventColorMap.get(event.type) || '#91A673';
                               return (

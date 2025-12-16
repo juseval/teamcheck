@@ -19,6 +19,10 @@ interface EmployeesPageProps {
 const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee, onEditEmployee, onRemoveEmployee, workSchedules, currentUser }) => {
   const { addNotification } = useNotification();
   
+  // Defensive checks
+  const safeEmployees = Array.isArray(employees) ? employees : [];
+  const safeWorkSchedules = Array.isArray(workSchedules) ? workSchedules : [];
+
   // Initialize state from localStorage if available, otherwise default to 'list'
   const [viewMode, setViewMode] = useState<'list' | 'board'>(() => {
       const savedMode = localStorage.getItem('employeesViewMode');
@@ -30,9 +34,9 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
       localStorage.setItem('employeesViewMode', viewMode);
   }, [viewMode]);
   
-  const tableHeaders = ["Name", "Email", "Phone", "Primary Location", "Role", "Horario", "Status", "Actions"];
+  const tableHeaders = ["Nombre", "Correo", "Teléfono", "Ubicación", "Rol", "Horario", "Estado", "Acciones"];
   
-  const scheduleMap = new Map(workSchedules.map(s => [s.id, s.name]));
+  const scheduleMap = new Map(safeWorkSchedules.map(s => [s.id, s.name]));
 
   const copyToClipboard = () => {
       navigator.clipboard.writeText(currentUser.companyId).then(() => {
@@ -43,7 +47,7 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
   };
 
   const handleUpdateSchedule = async (employeeId: string, newScheduleId: string | null) => {
-      const employee = employees.find(e => e.id === employeeId);
+      const employee = safeEmployees.find(e => e.id === employeeId);
       if (!employee) return;
 
       try {
@@ -62,8 +66,8 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
     <div className="w-full mx-auto animate-fade-in space-y-6 flex flex-col h-full overflow-hidden">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 flex-shrink-0">
         <div className="flex items-center gap-4">
-          <h1 className="text-3xl font-bold text-bokara-grey">Employees</h1>
-          <span className="bg-lucius-lime/20 text-bokara-grey text-lg font-bold px-3 py-1 rounded-full">{employees.length}</span>
+          <h1 className="text-3xl font-bold text-bokara-grey">Collaborators</h1>
+          <span className="bg-lucius-lime/20 text-bokara-grey text-lg font-bold px-3 py-1 rounded-full">{safeEmployees.length}</span>
         </div>
         
         <div className="flex items-center gap-3">
@@ -72,14 +76,14 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
                 <button 
                     onClick={() => setViewMode('list')}
                     className={`p-2 rounded-md transition-all ${viewMode === 'list' ? 'bg-bokara-grey text-white shadow-sm' : 'text-bokara-grey/50 hover:bg-whisper-white'}`}
-                    title="List View"
+                    title="Vista de Lista"
                 >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
                 </button>
                 <button 
                     onClick={() => setViewMode('board')}
                     className={`p-2 rounded-md transition-all ${viewMode === 'board' ? 'bg-bokara-grey text-white shadow-sm' : 'text-bokara-grey/50 hover:bg-whisper-white'}`}
-                    title="Board View (Schedule)"
+                    title="Vista de Tablero (Horarios)"
                 >
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                 </button>
@@ -90,7 +94,7 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
             className="bg-lucius-lime hover:bg-opacity-80 text-bokara-grey font-bold py-2 px-4 rounded-lg transition-all duration-300 shadow-md flex items-center gap-2"
             >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
-            <span className="hidden sm:inline">Add Employee</span>
+            <span className="hidden sm:inline">Add Collaborator</span>
             </button>
         </div>
       </div>
@@ -103,9 +107,9 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
                       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
                   </div>
                   <div>
-                      <h3 className="font-bold text-bokara-grey">Vinculación de Empleados</h3>
+                      <h3 className="font-bold text-bokara-grey">Vinculación de Colaboradores</h3>
                       <p className="text-xs text-bokara-grey/60 max-w-lg">
-                          1. Crea el perfil del empleado usando el botón "Add Employee".<br/>
+                          1. Crea el perfil del colaborador usando el botón "Add Collaborator".<br/>
                           2. Comparte este <strong>Código de Organización</strong> con ellos.<br/>
                           3. Cuando se registren con su correo y este código, se vincularán automáticamente.
                       </p>
@@ -139,14 +143,16 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
                 </tr>
                 </thead>
                 <tbody>
-                {employees.length > 0 ? (
-                    employees.map(employee => (
+                {safeEmployees.length > 0 ? (
+                    safeEmployees.map(employee => (
                     <tr key={employee.id} className="border-b border-bokara-grey/10 hover:bg-whisper-white/40">
                         <td className="p-4 whitespace-nowrap font-semibold text-bokara-grey">{employee.name}</td>
                         <td className="p-4 whitespace-nowrap text-bokara-grey/90">{employee.email}</td>
                         <td className="p-4 whitespace-nowrap text-bokara-grey/90">{employee.phone}</td>
                         <td className="p-4 whitespace-nowrap text-bokara-grey/90">{employee.location}</td>
-                        <td className="p-4 whitespace-nowrap text-bokara-grey/90 capitalize">{employee.role}</td>
+                        <td className="p-4 whitespace-nowrap text-bokara-grey/90 capitalize">
+                            {employee.role === 'admin' ? 'Administrador' : 'Colaborador'}
+                        </td>
                         <td className="p-4 whitespace-nowrap text-bokara-grey/90">{employee.workScheduleId ? scheduleMap.get(employee.workScheduleId) : 'N/A'}</td>
                         <td className="p-4 whitespace-nowrap">
                         <span className={`px-2 py-0.5 text-xs font-semibold rounded-full ${
@@ -159,9 +165,9 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
                         </td>
                         <td className="p-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
-                            <button onClick={() => onEditEmployee(employee.id)} className="text-lucius-lime hover:text-lucius-lime/80 font-semibold text-sm">Edit</button>
+                            <button onClick={() => onEditEmployee(employee.id)} className="text-lucius-lime hover:text-lucius-lime/80 font-semibold text-sm">Editar</button>
                             <span className="text-bokara-grey/20">|</span>
-                            <button onClick={() => onRemoveEmployee(employee.id)} className="text-red-500 hover:text-red-700 font-semibold text-sm">Delete</button>
+                            <button onClick={() => onRemoveEmployee(employee.id)} className="text-red-500 hover:text-red-700 font-semibold text-sm">Eliminar</button>
                         </div>
                         </td>
                     </tr>
@@ -169,8 +175,8 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
                 ) : (
                     <tr>
                     <td colSpan={tableHeaders.length} className="text-center p-16">
-                        <p className="text-bokara-grey/60">No employee data to display.</p>
-                        <p className="text-bokara-grey/50 text-sm mt-2">Click 'Add Employee' to get started.</p>
+                        <p className="text-bokara-grey/60">No hay datos de colaboradores.</p>
+                        <p className="text-bokara-grey/50 text-sm mt-2">Haz clic en 'Add Collaborator' para comenzar.</p>
                     </td>
                     </tr>
                 )}
@@ -181,8 +187,8 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
       ) : (
           <div className="flex-grow flex flex-col h-0 min-h-0">
               <EmployeeScheduleBoard 
-                employees={employees} 
-                workSchedules={workSchedules} 
+                employees={safeEmployees} 
+                workSchedules={safeWorkSchedules} 
                 onUpdateEmployeeSchedule={handleUpdateSchedule}
               />
           </div>

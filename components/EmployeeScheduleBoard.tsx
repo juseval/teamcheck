@@ -132,7 +132,9 @@ const EmployeeScheduleBoard: React.FC<EmployeeScheduleBoardProps> = ({ employees
                 </div>
                 <div className="overflow-hidden">
                   <p className="font-bold text-bokara-grey truncate text-sm">{employee.name}</p>
-                  <p className="text-xs text-gray-500 truncate">{employee.role}</p>
+                  <p className="text-xs text-gray-500 truncate">
+                      {employee.role === 'admin' ? 'Administrador' : 'Colaborador'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -189,7 +191,7 @@ const EmployeeScheduleBoard: React.FC<EmployeeScheduleBoardProps> = ({ employees
             ))}
             {columns[schedule.id]?.length === 0 && (
                 <div className="h-24 flex items-center justify-center border-2 border-dashed border-gray-100 rounded-lg select-none text-gray-300">
-                    <p className="text-xs">Arrastra empleados aquí</p>
+                    <p className="text-xs">Arrastra colaboradores aquí</p>
                 </div>
             )}
           </div>

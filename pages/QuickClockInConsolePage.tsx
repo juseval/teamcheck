@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { Employee, AttendanceAction } from '../types';
 
 interface QuickClockInConsolePageProps {
   employees: Employee[];
-  onEmployeeAction: (employeeId: number, action: AttendanceAction) => void;
+  // FIX: Changed employeeId type from number to string.
+  onEmployeeAction: (employeeId: string, action: AttendanceAction) => void;
 }
 
 const formatTime = (totalSeconds: number): string => {
@@ -22,14 +24,19 @@ const StatusIndicator: React.FC<{ status: Employee['status'] }> = ({ status }) =
       return <span className={`${baseClasses} bg-wet-sand/20 text-wet-sand`}>On Break</span>;
     case 'Clocked Out':
       return <span className={`${baseClasses} bg-bokara-grey/40 text-whisper-white/60`}>Clocked Out</span>;
+    default:
+        return <span className={`${baseClasses} bg-bokara-grey/20 text-bokara-grey/60`}>{status}</span>;
   }
 };
 
 const QuickClockInConsolePage: React.FC<QuickClockInConsolePageProps> = ({ employees, onEmployeeAction }) => {
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(employees.length > 0 ? employees[0].id : null);
+  const safeEmployees = Array.isArray(employees) ? employees : [];
+  
+  // FIX: Changed selectedEmployeeId state type to string to match Employee ID type.
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(() => (safeEmployees.length > 0) ? safeEmployees[0].id : null);
   const [elapsedTime, setElapsedTime] = useState(0);
 
-  const selectedEmployee = employees.find(e => e.id === selectedEmployeeId);
+  const selectedEmployee = safeEmployees.find(e => e.id === selectedEmployeeId);
 
   useEffect(() => {
     if (selectedEmployee?.status !== 'Clocked Out' && selectedEmployee?.currentStatusStartTime) {
@@ -85,10 +92,11 @@ const QuickClockInConsolePage: React.FC<QuickClockInConsolePageProps> = ({ emplo
         <select
           id="employee-select"
           value={selectedEmployeeId ?? ''}
-          onChange={(e) => setSelectedEmployeeId(Number(e.target.value))}
+          // FIX: Removed Number() conversion as ID is now a string.
+          onChange={(e) => setSelectedEmployeeId(e.target.value)}
           className="w-full bg-bokara-grey/50 border border-wet-sand/40 text-bright-white rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime"
         >
-          {employees.map(emp => (
+          {safeEmployees.map(emp => (
             <option key={emp.id} value={emp.id}>{emp.name}</option>
           ))}
         </select>

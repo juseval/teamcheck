@@ -27,12 +27,17 @@ interface CalendarDay {
   }[];
 }
 
+const MAX_VISIBLE_EVENTS = 3;
+
 const SchedulePage: React.FC<SchedulePageProps> = ({ events = [], employees = [], payrollChangeTypes = [], onAddEvent, onEditEvent, onRemoveEvent, onUpdateEventStatus }) => {
     const [currentDate, setCurrentDate] = useState(new Date()); 
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [viewMode, setViewMode] = useState<'calendar' | 'report'>('calendar');
     const [searchTerm, setSearchTerm] = useState('');
     const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
+    
+    // Modal state for viewing full day details
+    const [dayModalData, setDayModalData] = useState<CalendarDay | null>(null);
 
     // --- Derived Data & Helpers ---
 
@@ -75,8 +80,6 @@ const SchedulePage: React.FC<SchedulePageProps> = ({ events = [], employees = []
             typeCounts[e.type] = (typeCounts[e.type] || 0) + 1;
         });
 
-        // Calculate days duration for accuracy (optional, simpler to count events for now based on prompt)
-        // For the stats list
         const statsList = Object.entries(typeCounts)
             .map(([type, count]) => ({
                 type,
@@ -92,9 +95,6 @@ const SchedulePage: React.FC<SchedulePageProps> = ({ events = [], employees = []
 
     // --- Report Matrix Logic (Table View) ---
     const reportMatrix = useMemo(() => {
-        // Employees rows
-        // If search is active, only show matching employees. If not, show all (or just those with events?)
-        // Let's show all employees matching filter to allow seeing "0" absences.
         const relevantEmployees = searchTerm 
             ? employees.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase()))
             : employees;
@@ -126,7 +126,7 @@ const SchedulePage: React.FC<SchedulePageProps> = ({ events = [], employees = []
                 totalDays: total,
                 breakdown: counts
             };
-        }).sort((a, b) => b.totalDays - a.totalDays); // Sort by most active
+        }).sort((a, b) => b.totalDays - a.totalDays); 
 
         return matrix;
     }, [employees, events, selectedYear, searchTerm]);
@@ -375,33 +375,51 @@ const SchedulePage: React.FC<SchedulePageProps> = ({ events = [], employees = []
                                 </div>
                             ))}
 
-                            {calendarGrid.flat().map((day, index) => (
-                                <div key={index} className={`relative p-2 border-b border-r border-bokara-grey/20 min-h-[120px] flex flex-col transition-colors ${!day.isCurrentMonth ? 'bg-gray-50/50' : 'bg-white'}`}>
-                                    <div className="flex-shrink-0 mb-1">
+                            {calendarGrid.flat().map((day, index) => {
+                                const visibleEvents = day.events.slice(0, MAX_VISIBLE_EVENTS);
+                                const hiddenCount = day.events.length - MAX_VISIBLE_EVENTS;
+
+                                return (
+                                <div 
+                                    key={index} 
+                                    onClick={() => setDayModalData(day)}
+                                    className={`relative p-2 border-b border-r border-bokara-grey/20 min-h-[140px] flex flex-col transition-colors cursor-pointer hover:bg-blue-50/20 ${!day.isCurrentMonth ? 'bg-gray-50/50' : 'bg-white'}`}
+                                >
+                                    <div className="flex-shrink-0 mb-1 flex justify-between items-start">
                                         <span className={`text-sm inline-flex items-center justify-center w-7 h-7 rounded-full ${day.isToday ? 'bg-red-500 text-white font-bold shadow-sm' : (day.isCurrentMonth ? 'text-bokara-grey/80 font-semibold' : 'text-bokara-grey/40')}`}>
                                         {day.dayOfMonth}
                                         </span>
                                     </div>
-                                    <div className="space-y-1 text-xs overflow-y-auto flex-grow max-h-[150px] custom-scrollbar">
-                                        {day.events.map(({ event, employeeName, color, isPending }) => (
+                                    
+                                    <div className="flex-grow flex flex-col gap-1 overflow-hidden">
+                                        {visibleEvents.map(({ event, employeeName, color, isPending }) => (
                                             <div 
                                                 key={`${event.id}-${day.date}`} 
-                                                className={`group relative bg-white p-1 pl-2 rounded-sm border-l-4 shadow-sm flex items-center justify-between cursor-pointer hover:shadow-md transition-all hover:translate-x-0.5 ${isPending ? 'opacity-70 border-dashed' : ''}`} 
-                                                style={{ borderColor: color }} 
-                                                onClick={() => onEditEvent(event)}
+                                                className={`group relative px-2 py-1 rounded text-xs font-medium shadow-sm flex items-center justify-between cursor-pointer hover:opacity-80 transition-all ${isPending ? 'border border-dashed border-bokara-grey/40' : 'text-white'}`} 
+                                                style={{ backgroundColor: isPending ? '#f3f4f6' : color, color: isPending ? '#374151' : 'white' }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onEditEvent(event);
+                                                }}
                                                 title={`${employeeName}: ${event.type}`}
                                             >
-                                                <div className="w-full text-left overflow-hidden">
-                                                    <p className="font-bold text-bokara-grey truncate text-[10px] sm:text-xs leading-tight">{employeeName}</p>
-                                                    <p className="text-bokara-grey/70 truncate text-[9px] sm:text-[10px]">
-                                                        {event.type} {isPending && '(P)'}
-                                                    </p>
-                                                </div>
+                                                <span className="truncate w-full flex gap-1">
+                                                    <span className="font-bold truncate">{employeeName}</span>
+                                                    <span className="opacity-90 truncate flex-shrink-0 font-normal">- {event.type}</span>
+                                                </span>
                                             </div>
                                         ))}
+                                        
+                                        {hiddenCount > 0 && (
+                                            <div className="mt-auto pt-1">
+                                                <span className="text-[10px] font-bold text-bokara-grey/60 bg-bokara-grey/5 hover:bg-bokara-grey/10 px-2 py-1 rounded w-full block text-center transition-colors">
+                                                    + {hiddenCount} más
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
-                            ))}
+                            )})}
                         </div>
                     </div>
                 )}
@@ -507,6 +525,64 @@ const SchedulePage: React.FC<SchedulePageProps> = ({ events = [], employees = []
                                 ))}
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Day Details Modal */}
+            {dayModalData && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-bokara-grey/50 backdrop-blur-sm" onClick={() => setDayModalData(null)}>
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-fade-in" onClick={e => e.stopPropagation()}>
+                        <div className="bg-whisper-white p-4 border-b border-bokara-grey/10 flex justify-between items-center">
+                            <div>
+                                <h3 className="text-xl font-bold text-bokara-grey capitalize">
+                                    {dayModalData.date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                                </h3>
+                                <p className="text-sm text-bokara-grey/60">{dayModalData.events.length} Novedades</p>
+                            </div>
+                            <button onClick={() => setDayModalData(null)} className="p-2 hover:bg-white rounded-full transition-colors text-bokara-grey/60 hover:text-bokara-grey">
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+                        <div className="p-4 max-h-[60vh] overflow-y-auto space-y-3">
+                            {dayModalData.events.length === 0 ? (
+                                <p className="text-center text-bokara-grey/50 py-8">No hay novedades para este día.</p>
+                            ) : (
+                                dayModalData.events.map(({ event, employeeName, color, isPending }, i) => (
+                                    <div key={i} className="flex items-center gap-3 p-3 rounded-lg border border-bokara-grey/5 bg-white shadow-sm hover:shadow-md transition-shadow">
+                                        <div className="w-1.5 h-10 rounded-full" style={{ backgroundColor: color }}></div>
+                                        <div className="flex-grow">
+                                            <h4 className="font-bold text-bokara-grey">{employeeName}</h4>
+                                            <p className="text-sm text-bokara-grey/70">{event.type}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            {isPending && <span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-1 rounded-full uppercase">Pendiente</span>}
+                                            <button 
+                                                onClick={() => {
+                                                    setDayModalData(null);
+                                                    onEditEvent(event);
+                                                }}
+                                                className="ml-2 text-xs text-lucius-lime hover:underline font-bold"
+                                            >
+                                                Editar
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                        <div className="p-4 bg-gray-50 border-t border-bokara-grey/10 flex justify-end">
+                            <button 
+                                onClick={() => {
+                                    setDayModalData(null);
+                                    onAddEvent();
+                                }}
+                                className="text-sm font-bold text-bokara-grey hover:text-lucius-lime transition-colors flex items-center gap-1"
+                            >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+                                Agregar Novedad
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

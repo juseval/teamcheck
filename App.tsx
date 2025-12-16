@@ -24,6 +24,7 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
+import EmailVerificationPage from './pages/EmailVerificationPage';
 import DashboardPage from './pages/DashboardPage';
 import TrackerPage from './pages/TrackerPage';
 import TimesheetPage from './pages/TimesheetPage';
@@ -44,7 +45,6 @@ import EditTimeModal from './components/EditTimeModal';
 import EditTimesheetEntryModal from './components/EditTimesheetEntryModal';
 import AddEventModal from './components/AddEventModal';
 import EditEventModal from './components/EditEventModal';
-import LateArrivalsWidget from './components/LateArrivalsWidget';
 import ConfirmationModal from './components/ConfirmationModal';
 
 const AppContent: React.FC = () => {
@@ -58,8 +58,12 @@ const AppContent: React.FC = () => {
       const params = new URLSearchParams(window.location.search);
       if (params.get('inviteCode')) return 'register';
       if (params.get('mode') === 'resetPassword') return 'reset-password';
+      if (params.get('mode') === 'verifyEmail') return 'verify-email';
       return 'home';
   });
+
+  // UI State
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // Data State
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -91,8 +95,8 @@ const AppContent: React.FC = () => {
     onConfirm: () => {},
   });
 
-  // URL Params for Reset Password
-  const [resetCode, setResetCode] = useState<string | null>(null);
+  // URL Params for Auth Actions
+  const [actionCode, setActionCode] = useState<string | null>(null);
   
   // Ref to track if auth has initialized to prevent redirect loops
   const hasInitializedAuth = useRef(false);
@@ -108,10 +112,14 @@ const AppContent: React.FC = () => {
     const mode = params.get('mode');
     const oobCode = params.get('oobCode');
     
-    // inviteCode logic is now handled in useState initialization, 
-    // but we still need to capture reset password code
-    if (mode === 'resetPassword' && oobCode) {
-      setResetCode(oobCode);
+    if (oobCode) {
+        if (mode === 'resetPassword') {
+            setCurrentPage('reset-password');
+            setActionCode(oobCode);
+        } else if (mode === 'verifyEmail') {
+            setCurrentPage('verify-email');
+            setActionCode(oobCode);
+        }
     }
   }, []);
 
@@ -134,7 +142,7 @@ const AppContent: React.FC = () => {
             setUser(normalizedUser);
             // Only redirect to tracker on the very first load/auth check
             // and ONLY if we aren't in a special flow like password reset
-            if (!hasInitializedAuth.current && currentPageRef.current !== 'reset-password') {
+            if (!hasInitializedAuth.current && currentPageRef.current !== 'reset-password' && currentPageRef.current !== 'verify-email') {
                 setCurrentPage('tracker');
             }
           }
@@ -145,7 +153,7 @@ const AppContent: React.FC = () => {
         setUser(null);
         // Redirect to home on logout, unless on public pages
         const current = currentPageRef.current;
-        if (current !== 'reset-password' && current !== 'register') {
+        if (current !== 'reset-password' && current !== 'verify-email' && current !== 'register') {
             setCurrentPage('home');
         }
       }
@@ -296,7 +304,8 @@ const AppContent: React.FC = () => {
   
   if (currentPage === 'login') return <LoginPage onLogin={handleLogin} onNavigateToRegister={() => setCurrentPage('register')} onNavigateToHome={() => setCurrentPage('home')} onForgotPassword={handleForgotPassword} />;
   if (currentPage === 'register') return <RegisterPage onRegister={handleRegister} onNavigateToLogin={() => setCurrentPage('login')} onNavigateToHome={() => setCurrentPage('home')} />;
-  if (currentPage === 'reset-password' && resetCode) return <ResetPasswordPage oobCode={resetCode} onNavigateToLogin={() => setCurrentPage('login')} />;
+  if (currentPage === 'reset-password' && actionCode) return <ResetPasswordPage oobCode={actionCode} onNavigateToLogin={() => setCurrentPage('login')} />;
+  if (currentPage === 'verify-email' && actionCode) return <EmailVerificationPage oobCode={actionCode} onNavigateToLogin={() => setCurrentPage('login')} />;
 
   if (!user) return (
     <HomePage 
@@ -308,10 +317,23 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-bright-white overflow-hidden font-sans text-bokara-grey">
-      <SideNav currentPage={currentPage} onNavigate={setCurrentPage} userRole={user.role} />
+      <SideNav 
+        currentPage={currentPage} 
+        onNavigate={setCurrentPage} 
+        userRole={user.role} 
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+      />
       
       <div className="flex-1 flex flex-col overflow-hidden relative">
-        <Header currentPage={currentPage} onNavigate={setCurrentPage} user={user} userRole={user.role} onLogout={handleLogout} />
+        <Header 
+            currentPage={currentPage} 
+            onNavigate={setCurrentPage} 
+            user={user} 
+            userRole={user.role} 
+            onLogout={handleLogout} 
+            onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        />
         
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-whisper-white/30 p-4 sm:p-6 lg:p-8 scroll-smooth">
           {currentPage === 'tracker' && (
@@ -443,8 +465,6 @@ const AppContent: React.FC = () => {
           {currentPage === 'password' && <ChangePasswordPage />}
 
         </main>
-        
-        {user.role === 'admin' && <LateArrivalsWidget employees={employees} attendanceLog={attendanceLog} workSchedules={workSchedules} />}
         
         {/* Modals */}
         <AddEmployeeModal isOpen={isAddEmployeeModalOpen} onClose={() => setIsAddEmployeeModalOpen(false)} workSchedules={workSchedules} onAddEmployee={async (data) => {

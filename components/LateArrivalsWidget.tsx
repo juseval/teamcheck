@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Employee, AttendanceLogEntry, WorkSchedule } from '../types';
 import { AlertIcon, PaperAirplaneIcon } from './Icons';
@@ -9,7 +10,8 @@ interface LateArrivalsWidgetProps {
 }
 
 interface LateEmployee {
-  id: number;
+  // FIX: Changed id type from number to string.
+  id: string;
   name: string;
   minutesLate: number;
 }

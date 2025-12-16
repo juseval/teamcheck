@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { Employee, PayrollChangeType, CalendarEvent } from '../types.ts';
+import { Employee, PayrollChangeType, CalendarEvent } from '../types';
 
 interface EditEventModalProps {
   isOpen: boolean;
@@ -23,7 +24,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ isOpen, onClose, onUpda
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setEventData(prev => prev ? { ...prev, [name]: name === 'employeeId' ? Number(value) : value } : null);
+    setEventData(prev => prev ? { ...prev, [name]: value } : null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -41,7 +42,7 @@ const EditEventModal: React.FC<EditEventModalProps> = ({ isOpen, onClose, onUpda
         <h2 className="text-2xl font-bold text-bokara-grey mb-6">Edit Novedad</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-                <label htmlFor="edit_employeeId" className="block text-sm font-medium text-lucius-lime mb-1">Empleado</label>
+                <label htmlFor="edit_employeeId" className="block text-sm font-medium text-lucius-lime mb-1">Colaborador</label>
                 <select id="edit_employeeId" name="employeeId" value={eventData.employeeId} onChange={handleChange} className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime">
                     {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
                 </select>

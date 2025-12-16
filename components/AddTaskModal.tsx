@@ -1,10 +1,12 @@
+
 import React, { useState, useEffect } from 'react';
-import { Task, Employee, TaskStatus } from '../types.ts';
+import { Task, Employee, TaskStatus } from '../types';
 
 interface AddTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddTask: (taskData: Omit<Task, 'id'>) => void;
+  // FIX: Exclude companyId from onAddTask parameters as it is handled by the service/API.
+  onAddTask: (taskData: Omit<Task, 'id' | 'companyId'>) => void;
   employees: Employee[];
   initialStatus: TaskStatus | null;
 }
@@ -34,7 +36,7 @@ const AddTaskModal: React.FC<AddTaskModalProps> = ({ isOpen, onClose, onAddTask,
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       const { name, value } = e.target;
-      setTaskData(prev => ({ ...prev, [name]: name === 'assigneeId' || name === 'progress' ? Number(value) : value }));
+      setTaskData(prev => ({ ...prev, [name]: name === 'progress' ? Number(value) : value }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {

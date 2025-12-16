@@ -121,7 +121,7 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDat
               <tr className="border-b border-bokara-grey/10">
                 <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider">Date</th>
                 <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider">Time</th>
-                <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider">Employee</th>
+                <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider">Colaborador</th>
                 <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider">Action</th>
                 {onEditEntry && <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider text-right">Actions</th>}
               </tr>
@@ -145,7 +145,7 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDat
             </tbody>
           </table>
         ) : (
-          <p className="text-center text-bokara-grey/60 py-8">{(dateRange.startDate || dateRange.endDate) ? 'No activity found for this date range.' : 'No activity yet. Clock in an employee to start the log.'}</p>
+          <p className="text-center text-bokara-grey/60 py-8">{(dateRange.startDate || dateRange.endDate) ? 'No activity found for this date range.' : 'No activity yet. Clock in a collaborator to start the log.'}</p>
         )}
       </div>
     </div>

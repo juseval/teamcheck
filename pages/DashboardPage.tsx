@@ -8,12 +8,12 @@ import AgentStateDashboard from '../components/AgentStateDashboard';
 import TimesheetOverview from '../components/TimesheetOverview';
 
 interface DashboardPageProps {
-  attendanceLog: AttendanceLogEntry[];
-  employees: Employee[];
+  attendanceLog?: AttendanceLogEntry[];
+  employees?: Employee[];
   onEmployeeAction: (employeeId: string, action: AttendanceAction) => void;
-  activityStatuses: ActivityStatus[];
-  workSchedules: WorkSchedule[];
-  calendarEvents: CalendarEvent[];
+  activityStatuses?: ActivityStatus[];
+  workSchedules?: WorkSchedule[];
+  calendarEvents?: CalendarEvent[];
 }
 
 const formatTime = (totalSeconds: number): string => {
@@ -38,19 +38,37 @@ const StatusIndicator: React.FC<{ status: Employee['status'] }> = ({ status }) =
 };
 
 
-const DashboardPage: React.FC<DashboardPageProps> = ({ attendanceLog, employees, onEmployeeAction, activityStatuses, workSchedules, calendarEvents }) => {
+const DashboardPage: React.FC<DashboardPageProps> = ({ 
+    attendanceLog, 
+    employees, 
+    onEmployeeAction, 
+    activityStatuses, 
+    workSchedules, 
+    calendarEvents 
+}) => {
+  // Defensive checks: Ensure we always work with arrays
+  const safeEmployees = Array.isArray(employees) ? employees : [];
+  const safeAttendanceLog = Array.isArray(attendanceLog) ? attendanceLog : [];
+  const safeWorkSchedules = Array.isArray(workSchedules) ? workSchedules : [];
+  const safeActivityStatuses = Array.isArray(activityStatuses) ? activityStatuses : [];
+  const safeCalendarEvents = Array.isArray(calendarEvents) ? calendarEvents : [];
   
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(employees.length > 0 ? employees[0].id : null);
+  // Defensive initializer for selectedEmployeeId
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(() => {
+      return (safeEmployees && safeEmployees.length > 0) ? safeEmployees[0].id : null;
+  });
+  
   const [elapsedTime, setElapsedTime] = useState(0);
 
-  const selectedEmployee = employees.find(e => e.id === selectedEmployeeId);
+  const selectedEmployee = useMemo(() => safeEmployees.find(e => e.id === selectedEmployeeId), [safeEmployees, selectedEmployeeId]);
   
   const teamOverviewStats = useMemo(() => {
-    const working = employees.filter(e => e.status === 'Working').length;
-    const clockedOut = employees.filter(e => e.status === 'Clocked Out').length;
-    const onActivity = employees.length - working - clockedOut;
+    if (!safeEmployees) return { working: 0, onActivity: 0, clockedOut: 0 };
+    const working = safeEmployees.filter(e => e.status === 'Working').length;
+    const clockedOut = safeEmployees.filter(e => e.status === 'Clocked Out').length;
+    const onActivity = safeEmployees.length - working - clockedOut;
     return { working, onActivity, clockedOut };
-  }, [employees]);
+  }, [safeEmployees]);
 
   useEffect(() => {
     if (selectedEmployee?.status !== 'Clocked Out' && selectedEmployee?.currentStatusStartTime) {
@@ -91,32 +109,32 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ attendanceLog, employees,
   return (
     <div className="flex flex-col items-center gap-8 pt-8">
       <TimesheetOverview
-        employees={employees}
-        attendanceLog={attendanceLog}
-        workSchedules={workSchedules}
-        activityStatuses={activityStatuses}
+        employees={safeEmployees}
+        attendanceLog={safeAttendanceLog}
+        workSchedules={safeWorkSchedules}
+        activityStatuses={safeActivityStatuses}
       />
 
       <AgentStateDashboard
-        employees={employees}
-        workSchedules={workSchedules}
-        activityStatuses={activityStatuses}
-        calendarEvents={calendarEvents}
+        employees={safeEmployees}
+        workSchedules={safeWorkSchedules}
+        activityStatuses={safeActivityStatuses}
+        calendarEvents={safeCalendarEvents}
       />
 
        {/* Live Console Section */}
       <div className="w-full max-w-6xl bg-white rounded-xl shadow-md p-6 border border-bokara-grey/10">
-        <h2 className="text-3xl font-bold text-bokara-grey mb-2">Live Console</h2>
-        <p className="text-bokara-grey/80 mb-6">Select an employee to perform quick actions.</p>
+        <h2 className="text-3xl font-bold text-bokara-grey mb-2">Consola en Vivo</h2>
+        <p className="text-bokara-grey/80 mb-6">Selecciona un colaborador para acciones rápidas.</p>
         <div className="mb-6">
-          <label htmlFor="employee-select" className="block text-sm font-medium text-lucius-lime mb-2">Select Employee</label>
+          <label htmlFor="employee-select" className="block text-sm font-medium text-lucius-lime mb-2">Seleccionar Colaborador</label>
           <select
             id="employee-select"
             value={selectedEmployeeId ?? ''}
             onChange={(e) => setSelectedEmployeeId(e.target.value)}
             className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime"
           >
-            {employees.map(emp => (
+            {safeEmployees.map(emp => (
               <option key={emp.id} value={emp.id}>{emp.name}</option>
             ))}
           </select>
@@ -138,7 +156,7 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ attendanceLog, employees,
               </div>
           </div>
         ) : (
-          <p className="text-center text-bokara-grey/60 py-16">No employees available. Add an employee on the Tracker page.</p>
+          <p className="text-center text-bokara-grey/60 py-16">No hay colaboradores disponibles. Agrega uno en la página de Tracker.</p>
         )}
       </div>
 
@@ -185,13 +203,13 @@ const DashboardPage: React.FC<DashboardPageProps> = ({ attendanceLog, employees,
                 </p>
             </div>
        
-        <DashboardSummary attendanceLog={attendanceLog} />
+        <DashboardSummary attendanceLog={safeAttendanceLog} />
 
         <div className="mt-8 border-t border-bokara-grey/10 pt-6">
              <EmployeeTimeline 
-                employees={employees} 
-                attendanceLog={attendanceLog} 
-                activityStatuses={activityStatuses} 
+                employees={safeEmployees} 
+                attendanceLog={safeAttendanceLog} 
+                activityStatuses={safeActivityStatuses} 
             />
         </div>
 

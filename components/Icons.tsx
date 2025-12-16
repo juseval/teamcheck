@@ -110,6 +110,10 @@ export const EditIcon: React.FC<{className?: string}> = ({ className }) => (
     </svg>
 );
 
+export const SearchIcon: React.FC<{className?: string}> = ({ className = 'w-5 h-5' }) => (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+);
+
 export const AlertIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -119,6 +123,13 @@ export const AlertIcon: React.FC<{className?: string}> = ({ className }) => (
 export const PaperAirplaneIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg className={className} fill="currentColor" viewBox="0 0 20 20">
         <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.428A1 1 0 0010 16.5V3a1 1 0 00-.894-.447z" />
+    </svg>
+);
+
+// Menu Icon
+export const MenuIcon: React.FC<{className?: string}> = ({ className = "w-6 h-6" }) => (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
     </svg>
 );
 

@@ -1,6 +1,8 @@
+
 import React from 'react';
 import ProfileDropdown from './ProfileDropdown';
 import { Employee } from '../types';
+import { MenuIcon } from './Icons';
 
 interface HeaderProps {
   currentPage: string;
@@ -8,29 +10,32 @@ interface HeaderProps {
   user: Employee;
   userRole: 'admin' | 'employee';
   onLogout: () => void;
+  onMenuClick?: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, user, userRole, onLogout }) => {
+const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, user, userRole, onLogout, onMenuClick }) => {
 
   return (
     <header className="py-4 px-4 sm:px-8 bg-bright-white/80 backdrop-blur-md shadow-sm w-full flex justify-between items-center sticky top-0 z-20 border-b border-bokara-grey/10">
-      {/* Left Side: Logo */}
-      <button onClick={() => onNavigate('tracker')} className="cursor-pointer" aria-label="Go to homepage">
-        <h1 className="text-3xl font-bold text-bokara-grey tracking-wider">
-          Team<span className="text-lucius-lime">Check</span>
-        </h1>
-      </button>
       
-      {/* Center: Role Display */}
-      <div className="absolute left-1/2 -translate-x-1/2">
-        <div className="flex items-center gap-1 rounded-lg bg-whisper-white p-1 border border-bokara-grey/10 shadow-inner">
-          <span className="px-3 py-1 text-sm font-semibold rounded-md bg-lucius-lime text-bokara-grey capitalize">
-            {userRole} View
-          </span>
-        </div>
+      <div className="flex items-center gap-4">
+          {/* Mobile Menu Button */}
+          <button 
+            onClick={onMenuClick} 
+            className="md:hidden p-2 -ml-2 rounded-lg text-bokara-grey hover:bg-whisper-white transition-colors"
+            aria-label="Open menu"
+          >
+            <MenuIcon />
+          </button>
+
+          {/* Logo */}
+          <button onClick={() => onNavigate('tracker')} className="cursor-pointer" aria-label="Go to homepage">
+            <h1 className="text-2xl sm:text-3xl font-bold text-bokara-grey tracking-wider">
+              Team<span className="text-lucius-lime">Check</span>
+            </h1>
+          </button>
       </div>
-
-
+      
       {/* Right Side: Profile */}
       <div className="relative">
         <ProfileDropdown user={user} onNavigate={onNavigate} onLogout={onLogout} />

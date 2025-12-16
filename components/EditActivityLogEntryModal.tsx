@@ -1,10 +1,12 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { AttendanceLogEntry, ActivityStatus } from '../types';
 
 interface EditActivityLogEntryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (logId: number, updates: { action: string, timestamp: number }) => void;
+  // FIX: Changed logId type from number to string.
+  onSave: (logId: string, updates: { action: string, timestamp: number }) => void;
   entry: AttendanceLogEntry | null;
   activityStatuses: ActivityStatus[];
 }

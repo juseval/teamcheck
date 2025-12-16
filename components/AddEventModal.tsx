@@ -1,13 +1,12 @@
 
-
-
 import React, { useState, useEffect } from 'react';
-import { Employee, PayrollChangeType, CalendarEvent } from '../types.ts';
+import { Employee, PayrollChangeType, CalendarEvent } from '../types';
 
 interface AddEventModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddEvent: (eventData: Omit<CalendarEvent, 'id'>) => void;
+  // FIX: Exclude companyId from onAddEvent parameters as it is handled by the service/API.
+  onAddEvent: (eventData: Omit<CalendarEvent, 'id' | 'companyId'>) => void;
   employees: Employee[];
   payrollChangeTypes: PayrollChangeType[];
 }
@@ -57,7 +56,7 @@ const AddEventModal: React.FC<AddEventModalProps> = ({ isOpen, onClose, onAddEve
         <h2 className="text-2xl font-bold text-bokara-grey mb-6">Agregar Novedad</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-                <label htmlFor="employeeId" className="block text-sm font-medium text-lucius-lime mb-1">Empleado</label>
+                <label htmlFor="employeeId" className="block text-sm font-medium text-lucius-lime mb-1">Colaborador</label>
                 <select id="employeeId" name="employeeId" value={eventData.employeeId} onChange={handleChange} className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime">
                     {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
                 </select>

@@ -32,7 +32,12 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ oobCode, onNaviga
             setIsVerifying(false);
         }
     };
-    verifyCode();
+    if (oobCode) {
+        verifyCode();
+    } else {
+        setIsVerifying(false);
+        addNotification("Código de restablecimiento no encontrado.", 'error');
+    }
   }, [oobCode, addNotification, onNavigateToLogin]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -75,12 +80,13 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ oobCode, onNaviga
 
   if (isVerifying) {
       return (
-        <div className="w-full min-h-screen flex items-center justify-center bg-bright-white">
+        <div className="w-full min-h-screen flex items-center justify-center bg-bright-white flex-col gap-4">
             <div className="flex items-center space-x-2">
                 <div className="w-4 h-4 rounded-full bg-lucius-lime animate-pulse delay-75"></div>
                 <div className="w-4 h-4 rounded-full bg-lucius-lime animate-pulse delay-150"></div>
                 <div className="w-4 h-4 rounded-full bg-lucius-lime animate-pulse delay-300"></div>
             </div>
+            <p className="text-bokara-grey/60 animate-pulse">Verificando enlace...</p>
         </div>
       );
   }
@@ -88,8 +94,12 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ oobCode, onNaviga
   return (
     <div className="w-full min-h-screen flex items-center justify-center animate-fade-in px-4 bg-bright-white">
         <div className="w-full max-w-md bg-white rounded-xl shadow-md border border-bokara-grey/10 p-8">
-            <h1 className="text-2xl font-bold text-bokara-grey mb-2">Cambiar la contraseña</h1>
-            {userEmail && <p className="text-bokara-grey/80 mb-8 font-medium">de {userEmail}</p>}
+            <h1 className="text-2xl font-bold text-bokara-grey mb-2">Restablecer Contraseña</h1>
+            {userEmail && (
+                <div className="bg-lucius-lime/10 p-3 rounded-lg mb-6 border border-lucius-lime/20">
+                    <p className="text-sm text-bokara-grey">Cuenta: <span className="font-bold">{userEmail}</span></p>
+                </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
@@ -101,6 +111,7 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ oobCode, onNaviga
                             onChange={(e) => setNewPassword(e.target.value)}
                             className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime transition-all"
                             required
+                            placeholder="Mínimo 6 caracteres"
                         />
                         <button
                             type="button"
@@ -121,6 +132,7 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ oobCode, onNaviga
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime transition-all"
                             required
+                            placeholder="Repite la contraseña"
                         />
                         <button
                             type="button"
@@ -136,9 +148,9 @@ const ResetPasswordPage: React.FC<ResetPasswordPageProps> = ({ oobCode, onNaviga
                     <button
                         type="submit"
                         disabled={isSubmitting || !newPassword || !confirmPassword}
-                        className="bg-lucius-lime text-bokara-grey font-bold py-2 px-6 rounded-lg hover:bg-opacity-80 transition-colors shadow-sm disabled:bg-lucius-lime/40 disabled:cursor-not-allowed uppercase text-sm tracking-wide"
+                        className="w-full bg-lucius-lime text-bokara-grey font-bold py-3 px-6 rounded-lg hover:bg-opacity-80 transition-colors shadow-sm disabled:bg-lucius-lime/40 disabled:cursor-not-allowed uppercase text-sm tracking-wide"
                     >
-                        {isSubmitting ? 'Guardando...' : 'GUARDAR'}
+                        {isSubmitting ? 'Guardando...' : 'Cambiar Contraseña'}
                     </button>
                 </div>
             </form>
