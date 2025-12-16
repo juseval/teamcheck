@@ -35,6 +35,7 @@ import SettingsPage from './pages/SettingsPage';
 import ProfilePage from './pages/ProfilePage';
 import CalendarPage from './pages/CalendarPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
+import SeatingPage from './pages/SeatingPage';
 
 // Components
 import Header from './components/Header';
@@ -399,6 +400,14 @@ const AppContent: React.FC = () => {
                       await updateCalendarEvent({ ...event, status });
                       setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e));
                   }}
+              />
+          )}
+
+          {currentPage === 'seating' && (
+              <SeatingPage 
+                  employees={employees}
+                  activityStatuses={activityStatuses}
+                  currentUserRole={user.role}
               />
           )}
 

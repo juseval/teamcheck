@@ -1,9 +1,98 @@
 
-import { Employee, AttendanceLogEntry, ActivityStatus, CalendarEvent, PayrollChangeType, WorkSchedule, Company } from '../types';
+import { Employee, AttendanceLogEntry, ActivityStatus, CalendarEvent, PayrollChangeType, WorkSchedule, Company, MapItem } from '../types';
 import { db, auth, isFirebaseEnabled } from './firebase';
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/storage';
 import { initialEmployees } from '../data/initialData';
+
+// --- MOCK DATA & STATE (For Demo Mode) ---
+let mockEmployees: Employee[] = [...initialEmployees];
+let mockAttendanceLog: AttendanceLogEntry[] = [];
+let mockActivityStatuses: ActivityStatus[] = [
+    { id: '1', name: 'Break', color: '#AE8F60', companyId: 'mock_company_id' },
+    { id: '2', name: 'Lunch', color: '#10B981', companyId: 'mock_company_id' },
+    { id: '3', name: 'Training', color: '#3B82F6', companyId: 'mock_company_id' },
+    { id: '4', name: 'Meeting', color: '#8B5CF6', companyId: 'mock_company_id' }
+];
+let mockWorkSchedules: WorkSchedule[] = [
+    { id: '1', name: 'Morning Shift', startTime: '08:00', endTime: '16:00', days: [1, 2, 3, 4, 5], companyId: 'mock_company_id' },
+    { id: '2', name: 'Evening Shift', startTime: '16:00', endTime: '00:00', days: [1, 2, 3, 4, 5], companyId: 'mock_company_id' }
+];
+let mockPayrollChangeTypes: PayrollChangeType[] = [
+    { id: '1', name: 'Vacation', color: '#10B981', isExclusive: true, adminOnly: false, companyId: 'mock_company_id' },
+    { id: '2', name: 'Sick Leave', color: '#EF4444', isExclusive: true, adminOnly: false, companyId: 'mock_company_id' },
+    { id: '3', name: 'Remote Work', color: '#3B82F6', isExclusive: false, adminOnly: false, companyId: 'mock_company_id' }
+];
+let mockCalendarEvents: CalendarEvent[] = [];
+
+// Initial Map Layout based on "Sale Strategy" image
+let mockMapItems: MapItem[] = [
+    // Entrance Wall
+    { id: 'w1', type: 'wall', x: 5, y: 15, width: 2, height: 40, rotation: 0, companyId: 'mock_company_id' },
+    // Entrance Camera
+    { id: 'cam1', type: 'camera', x: 8, y: 25, rotation: 45, companyId: 'mock_company_id' },
+    
+    // -- Left Cluster (Sales Strategy) --
+    { id: 'd1', type: 'desk', x: 12, y: 35, label: '1', companyId: 'mock_company_id' },
+    { id: 'd2', type: 'desk', x: 18, y: 35, label: '2', companyId: 'mock_company_id' },
+    { id: 'd3', type: 'desk', x: 12, y: 48, label: '3', companyId: 'mock_company_id' },
+    { id: 'd4', type: 'desk', x: 18, y: 48, label: '4', companyId: 'mock_company_id' },
+    { id: 'd5', type: 'desk', x: 12, y: 65, label: '5', companyId: 'mock_company_id' },
+    { id: 'd6', type: 'desk', x: 18, y: 65, label: '6', companyId: 'mock_company_id' },
+    { id: 'd7', type: 'desk', x: 12, y: 78, label: '7', companyId: 'mock_company_id' },
+    { id: 'd8', type: 'desk', x: 18, y: 78, label: '8', companyId: 'mock_company_id' },
+
+    // -- Top Lockers & Kitchen Area --
+    { id: 'l1', type: 'locker', x: 25, y: 10, rotation: 0, companyId: 'mock_company_id' },
+    { id: 'l2', type: 'locker', x: 30, y: 10, rotation: 0, companyId: 'mock_company_id' },
+    { id: 'mt1', type: 'meeting_table', x: 35, y: 25, label: 'Kitchen', companyId: 'mock_company_id' },
+
+    // -- Middle Cluster --
+    { id: 'd9', type: 'desk', x: 30, y: 35, label: '9', companyId: 'mock_company_id' },
+    { id: 'd10', type: 'desk', x: 36, y: 35, label: '10', companyId: 'mock_company_id' },
+    { id: 'd11', type: 'desk', x: 30, y: 48, label: '11', companyId: 'mock_company_id' },
+    { id: 'd12', type: 'desk', x: 36, y: 48, label: '12', companyId: 'mock_company_id' },
+
+    // -- Center Islands (Yellow/Orange) --
+    { id: 'd13', type: 'desk', x: 45, y: 35, label: '13', companyId: 'mock_company_id' },
+    { id: 'd14', type: 'desk', x: 51, y: 35, label: '14', companyId: 'mock_company_id' },
+    { id: 'd15', type: 'desk', x: 45, y: 48, label: '15', companyId: 'mock_company_id' },
+    { id: 'd16', type: 'desk', x: 51, y: 48, label: '16', companyId: 'mock_company_id' },
+
+    // -- Right Cluster --
+    { id: 'd17', type: 'desk', x: 65, y: 35, label: '17', companyId: 'mock_company_id' },
+    { id: 'd18', type: 'desk', x: 71, y: 35, label: '18', companyId: 'mock_company_id' },
+    { id: 'd19', type: 'desk', x: 65, y: 48, label: '19', companyId: 'mock_company_id' },
+    { id: 'd20', type: 'desk', x: 71, y: 48, label: '20', companyId: 'mock_company_id' },
+
+    // -- Bottom Right Cluster --
+    { id: 'd21', type: 'desk', x: 65, y: 65, label: '21', companyId: 'mock_company_id' },
+    { id: 'd22', type: 'desk', x: 71, y: 65, label: '22', companyId: 'mock_company_id' },
+    { id: 'd23', type: 'desk', x: 65, y: 78, label: '23', companyId: 'mock_company_id' },
+    { id: 'd24', type: 'desk', x: 71, y: 78, label: '24', companyId: 'mock_company_id' },
+
+    // -- Far Right Offices --
+    { id: 'w2', type: 'wall', x: 80, y: 10, width: 2, height: 80, rotation: 0, companyId: 'mock_company_id' },
+    { id: 'rl1', type: 'room_label', x: 90, y: 15, label: 'Storage', companyId: 'mock_company_id' },
+    { id: 'rl2', type: 'room_label', x: 90, y: 35, label: 'Sebastian', companyId: 'mock_company_id' },
+    { id: 'rl3', type: 'room_label', x: 90, y: 55, label: 'Lemus', companyId: 'mock_company_id' },
+    
+    // Some decorations
+    { id: 'p1', type: 'plant', x: 5, y: 5, companyId: 'mock_company_id' },
+    { id: 'p2', type: 'plant', x: 75, y: 5, companyId: 'mock_company_id' },
+];
+
+// Helper for mock IDs
+const getNextId = (prefix: string = 'id') => `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+// Mock listeners
+let employeeListeners: ((employees: Employee[]) => void)[] = [];
+let logListeners: ((log: AttendanceLogEntry[]) => void)[] = [];
+
+const notifyListeners = () => {
+    employeeListeners.forEach(l => l([...mockEmployees]));
+    logListeners.forEach(l => l([...mockAttendanceLog]));
+};
 
 // --- HELPER to get current user's company ID (Mock or Real) ---
 const getCurrentUserCompanyId = async (): Promise<string | null> => {
@@ -20,6 +109,189 @@ const getCurrentUserCompanyId = async (): Promise<string | null> => {
     }
 };
 
+// --- MOCK API IMPLEMENTATION ---
+const createMockApi = () => ({
+    joinCompany: async (inviteCode: string): Promise<boolean> => {
+        console.log(`[Mock] Joining company ${inviteCode}`);
+        return true;
+    },
+    migrateLegacyData: async (): Promise<number> => 0,
+    getCompanyDetails: async (companyId: string): Promise<Company | null> => {
+        if (companyId === 'mock_company_id') return { id: 'mock_company_id', name: 'Demo Company', ownerId: '1', createdAt: Date.now() };
+        return null;
+    },
+    registerWithEmailAndPassword: async (fullName: string, email: string, password: string, companyName: string, inviteCode?: string): Promise<Employee> => {
+        const newEmp: Employee = {
+            id: getNextId('emp'),
+            uid: getNextId('uid'),
+            companyId: inviteCode || 'mock_company_id',
+            name: fullName,
+            email,
+            phone: '',
+            location: 'Oficina Principal',
+            role: inviteCode ? 'employee' : 'admin',
+            status: 'Clocked Out',
+            lastClockInTime: null,
+            currentStatusStartTime: null,
+            workScheduleId: null,
+            seatId: null
+        };
+        mockEmployees.push(newEmp);
+        notifyListeners();
+        return newEmp;
+    },
+    loginWithEmailAndPassword: async (email: string, password: string): Promise<Employee> => {
+        const user = mockEmployees.find(e => e.email === email);
+        if (user) return user;
+        // If not found in mock data, return default admin for demo
+        return mockEmployees[0];
+    },
+    logout: async () => {},
+    sendPasswordResetEmail: async (email: string) => {},
+    verifyPasswordResetCode: async (oobCode: string) => 'demo@example.com',
+    confirmPasswordReset: async (oobCode: string, newPassword: string) => {},
+    verifyEmail: async (oobCode: string) => {},
+    changePassword: async (password: string) => {},
+    getEmployeeProfile: async (uid: string): Promise<Employee | null> => {
+        return mockEmployees.find(e => e.uid === uid || e.id === uid) || mockEmployees[0];
+    },
+    streamEmployees: (callback: (employees: Employee[]) => void) => {
+        employeeListeners.push(callback);
+        callback([...mockEmployees]);
+        return () => { employeeListeners = employeeListeners.filter(l => l !== callback); };
+    },
+    addEmployee: async (employeeData: any) => {
+        const newEmp = { ...employeeData, id: getNextId('emp'), status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null };
+        mockEmployees.push(newEmp);
+        notifyListeners();
+        return newEmp;
+    },
+    streamAttendanceLog: (callback: (log: AttendanceLogEntry[]) => void) => {
+        logListeners.push(callback);
+        callback([...mockAttendanceLog]);
+        return () => { logListeners = logListeners.filter(l => l !== callback); };
+    },
+    getEmployees: async () => [...mockEmployees],
+    removeEmployee: async (id: string) => {
+        mockEmployees = mockEmployees.filter(e => e.id !== id);
+        notifyListeners();
+        return { success: true };
+    },
+    updateEmployeeStatus: async (employee: Employee) => {
+        const idx = mockEmployees.findIndex(e => e.id === employee.id);
+        if (idx > -1) mockEmployees[idx] = employee;
+        notifyListeners();
+        return employee;
+    },
+    updateEmployeeDetails: async (employee: Employee) => {
+        const idx = mockEmployees.findIndex(e => e.id === employee.id);
+        if (idx > -1) mockEmployees[idx] = employee;
+        notifyListeners();
+        return employee;
+    },
+    // New function for Seating Chart
+    updateEmployeeSeat: async (employeeId: string, seatId: string | null) => {
+        const idx = mockEmployees.findIndex(e => e.id === employeeId);
+        if (idx > -1) {
+            // Remove seat from any other employee if seatId is not null (unique seats)
+            if (seatId) {
+                const prevOwnerIdx = mockEmployees.findIndex(e => e.seatId === seatId && e.id !== employeeId);
+                if (prevOwnerIdx > -1) mockEmployees[prevOwnerIdx].seatId = null;
+            }
+            mockEmployees[idx].seatId = seatId;
+            notifyListeners();
+        }
+        return Promise.resolve();
+    },
+    uploadProfilePicture: async (userId: string, file: File) => {
+        return URL.createObjectURL(file);
+    },
+    addAttendanceLogEntry: async (entry: any) => {
+        const newEntry = { ...entry, id: getNextId('log') };
+        mockAttendanceLog.unshift(newEntry); // Prepend
+        notifyListeners();
+        return newEntry;
+    },
+    updateAttendanceLogEntry: async (id: string, updates: any) => {
+        const idx = mockAttendanceLog.findIndex(l => l.id === id);
+        if (idx > -1) mockAttendanceLog[idx] = { ...mockAttendanceLog[idx], ...updates };
+        notifyListeners();
+        return mockAttendanceLog[idx];
+    },
+    updateEmployeeCurrentSession: async (id: string, newStartTime: number) => {
+        // Mock implementation for editing session time
+        const emp = mockEmployees.find(e => e.id === id);
+        if (emp && emp.currentStatusStartTime) {
+            const oldTime = emp.currentStatusStartTime;
+            emp.currentStatusStartTime = newStartTime;
+            if (emp.lastClockInTime === oldTime) emp.lastClockInTime = newStartTime;
+            
+            // Find corresponding log
+            const log = mockAttendanceLog.find(l => l.employeeId === id && l.timestamp === oldTime);
+            if (log) log.timestamp = newStartTime;
+            
+            notifyListeners();
+        }
+        return { updatedEmployee: emp, updatedLog: null };
+    },
+    // Config
+    getActivityStatuses: async () => mockActivityStatuses,
+    addActivityStatus: async (name: string, color: string) => {
+        mockActivityStatuses.push({ id: getNextId('status'), name, color, companyId: 'mock_company_id' });
+    },
+    removeActivityStatus: async (id: string) => {
+        mockActivityStatuses = mockActivityStatuses.filter(s => s.id !== id);
+    },
+    getWorkSchedules: async () => mockWorkSchedules,
+    addWorkSchedule: async (schedule: any) => {
+        mockWorkSchedules.push({ ...schedule, id: getNextId('schedule'), companyId: 'mock_company_id' });
+    },
+    updateWorkSchedule: async (id: string, updates: any) => {
+        const idx = mockWorkSchedules.findIndex(s => s.id === id);
+        if (idx > -1) mockWorkSchedules[idx] = { ...mockWorkSchedules[idx], ...updates };
+    },
+    removeWorkSchedule: async (id: string) => {
+        mockWorkSchedules = mockWorkSchedules.filter(s => s.id !== id);
+    },
+    getPayrollChangeTypes: async () => mockPayrollChangeTypes,
+    addPayrollChangeType: async (name: string, color: string, isExclusive: boolean, adminOnly: boolean) => {
+        mockPayrollChangeTypes.push({ id: getNextId('payroll'), name, color, isExclusive, adminOnly, companyId: 'mock_company_id' });
+    },
+    updatePayrollChangeType: async (id: string, updates: any) => {
+        const idx = mockPayrollChangeTypes.findIndex(p => p.id === id);
+        if (idx > -1) mockPayrollChangeTypes[idx] = { ...mockPayrollChangeTypes[idx], ...updates };
+    },
+    removePayrollChangeType: async (id: string) => {
+        mockPayrollChangeTypes = mockPayrollChangeTypes.filter(p => p.id !== id);
+    },
+    // Calendar
+    getCalendarEvents: async () => mockCalendarEvents,
+    addCalendarEvent: async (event: any) => {
+        mockCalendarEvents.push({ ...event, id: getNextId('event'), companyId: 'mock_company_id' });
+    },
+    updateCalendarEvent: async (event: any) => {
+        const idx = mockCalendarEvents.findIndex(e => e.id === event.id);
+        if (idx > -1) mockCalendarEvents[idx] = event;
+    },
+    removeCalendarEvent: async (id: string) => {
+        mockCalendarEvents = mockCalendarEvents.filter(e => e.id !== id);
+    },
+    // Timesheet
+    updateTimesheetEntry: async (employeeId: string, startLogId: string, endLogId: string, newStartTime: number, newEndTime: number) => {
+        const startLog = mockAttendanceLog.find(l => l.id === startLogId);
+        const endLog = mockAttendanceLog.find(l => l.id === endLogId);
+        if (startLog) startLog.timestamp = newStartTime;
+        if (endLog) endLog.timestamp = newEndTime;
+        notifyListeners();
+    },
+    // Map Logic
+    getMapItems: async () => mockMapItems,
+    saveMapItems: async (items: MapItem[]) => {
+        mockMapItems = items;
+        return true;
+    }
+});
+
 // --- REAL API IMPLEMENTATION ---
 const createRealApi = () => {
     if (!db || !auth) throw new Error("Firebase not initialized");
@@ -31,19 +303,18 @@ const createRealApi = () => {
     };
 
     return {
+        // ... (Existing Real API Methods) ...
         joinCompany: async (inviteCode: string): Promise<boolean> => {
             const user = auth!.currentUser;
             if (!user) throw new Error("Must be logged in");
             
-            // Validate company exists
             const companyDoc = await db!.collection('companies').doc(inviteCode).get();
             if (!companyDoc.exists) throw new Error("Company not found");
 
-            // Update user profile
             await db!.collection('employees').doc(user.uid).update({
                 companyId: inviteCode,
-                role: 'employee', // Reset role to employee when joining new company
-                workScheduleId: null // Reset schedule
+                role: 'employee',
+                workScheduleId: null
             });
             return true;
         },
@@ -61,8 +332,9 @@ const createRealApi = () => {
 
             let companyId = inviteCode;
             let role: 'admin' | 'employee' = inviteCode ? 'employee' : 'admin';
+            let existingPlaceholderId: string | null = null;
+            let existingData: Partial<Employee> = {};
 
-            // Create Company if new
             if (!companyId) {
                 const companyRef = db!.collection('companies').doc();
                 companyId = companyRef.id;
@@ -73,7 +345,6 @@ const createRealApi = () => {
                     createdAt: Date.now()
                 });
                 
-                // Create default statuses for new company
                 const defaultStatuses = [
                     { name: 'Break', color: '#AE8F60' },
                     { name: 'Training', color: '#3B82F6' },
@@ -85,6 +356,18 @@ const createRealApi = () => {
                     batch.set(ref, { ...s, companyId, id: ref.id });
                 });
                 await batch.commit();
+            } else {
+                const placeholderQuery = await db!.collection('employees')
+                    .where('companyId', '==', companyId)
+                    .where('email', '==', email)
+                    .limit(1)
+                    .get();
+                
+                if (!placeholderQuery.empty) {
+                    const doc = placeholderQuery.docs[0];
+                    existingPlaceholderId = doc.id;
+                    existingData = doc.data() as Partial<Employee>;
+                }
             }
 
             const newEmployee: Employee = {
@@ -93,16 +376,29 @@ const createRealApi = () => {
                 companyId: companyId!,
                 name: fullName,
                 email,
-                phone: '',
-                location: 'Oficina Principal',
-                role,
-                status: 'Clocked Out',
-                lastClockInTime: null,
-                currentStatusStartTime: null,
-                workScheduleId: null
+                phone: existingData.phone || '',
+                location: existingData.location || 'Oficina Principal',
+                role: existingData.role || role,
+                status: existingData.status || 'Clocked Out',
+                lastClockInTime: existingData.lastClockInTime || null,
+                currentStatusStartTime: existingData.currentStatusStartTime || null,
+                workScheduleId: existingData.workScheduleId || null,
+                seatId: existingData.seatId || null
             };
 
-            await db!.collection('employees').doc(user.uid).set(newEmployee);
+            const batch = db!.batch();
+            const newUserRef = db!.collection('employees').doc(user.uid);
+            batch.set(newUserRef, newEmployee);
+
+            if (existingPlaceholderId && existingPlaceholderId !== user.uid) {
+                batch.delete(db!.collection('employees').doc(existingPlaceholderId));
+                const logs = await db!.collection('attendanceLog').where('employeeId', '==', existingPlaceholderId).get();
+                logs.forEach(logDoc => batch.update(logDoc.ref, { employeeId: user.uid }));
+                const events = await db!.collection('calendarEvents').where('employeeId', '==', existingPlaceholderId).get();
+                events.forEach(evtDoc => batch.update(evtDoc.ref, { employeeId: user.uid }));
+            }
+
+            await batch.commit();
             return newEmployee;
         },
         loginWithEmailAndPassword: async (email: string, password: string): Promise<Employee> => {
@@ -111,36 +407,20 @@ const createRealApi = () => {
             if (!user) throw new Error("Login failed");
 
             const doc = await db!.collection('employees').doc(user.uid).get();
-            if (!doc.exists) {
-                // If auth exists but no firestore doc (rare inconsistency), create basic doc? 
-                // Or throw error. Let's throw for now.
-                throw new Error("User profile not found.");
-            }
+            if (!doc.exists) throw new Error("User profile not found.");
             return { id: doc.id, ...doc.data() } as Employee;
         },
-        logout: async () => {
-            await auth!.signOut();
-        },
-        sendPasswordResetEmail: async (email: string) => {
-            await auth!.sendPasswordResetEmail(email);
-        },
-        verifyPasswordResetCode: async (oobCode: string): Promise<string> => {
-            // BYPASS FOR DEMO
+        logout: async () => { await auth!.signOut(); },
+        sendPasswordResetEmail: async (email: string) => { await auth!.sendPasswordResetEmail(email); },
+        verifyPasswordResetCode: async (oobCode: string) => {
             if (oobCode === 'demo_code') return 'usuario_demo@ejemplo.com';
             return await auth!.verifyPasswordResetCode(oobCode);
         },
         confirmPasswordReset: async (oobCode: string, newPassword: string) => {
-            // BYPASS FOR DEMO
-            if (oobCode === 'demo_code') {
-                // In a real demo, we might update the current user's password if logged in, 
-                // but since reset usually happens logged out, we just simulate success.
-                return Promise.resolve(); 
-            }
+            if (oobCode === 'demo_code') return Promise.resolve();
             await auth!.confirmPasswordReset(oobCode, newPassword);
         },
-        verifyEmail: async (oobCode: string) => {
-            await auth!.applyActionCode(oobCode);
-        },
+        verifyEmail: async (oobCode: string) => { await auth!.applyActionCode(oobCode); },
         changePassword: async (password: string) => {
             const user = auth!.currentUser;
             if (!user) throw new Error("No user logged in");
@@ -151,19 +431,9 @@ const createRealApi = () => {
             return doc.exists ? { id: doc.id, ...doc.data() } as Employee : null;
         },
         streamEmployees: (callback: (employees: Employee[]) => void) => {
-            // Only stream employees for the current user's company
-            // We need the companyId first. This is tricky inside a pure stream function 
-            // if we don't pass companyId. 
-            // Workaround: Listen to auth state to get company, then stream.
-            // For simplicity in this structure, we'll assume the component handles the wait for auth
-            // or we do a one-time fetch of companyId then subscribe.
-            
             const user = auth!.currentUser;
             if (!user) return () => {};
-
-            // We need to fetch the user's companyId first to filter
             let unsubscribe = () => {};
-            
             db!.collection('employees').doc(user.uid).get().then(doc => {
                 if(doc.exists) {
                     const companyId = doc.data()?.companyId;
@@ -177,31 +447,21 @@ const createRealApi = () => {
                     }
                 }
             });
-
             return () => unsubscribe();
         },
         addEmployee: async (employeeData: Omit<Employee, 'id' | 'status' | 'lastClockInTime' | 'currentStatusStartTime' | 'uid'>) => {
-            // Admin adds an employee. 
-            // In Firebase Auth, we can't easily create a user without logging them in (unless using Admin SDK).
-            // Workaround: Create a "Shadow" employee document. The actual user must register themselves 
-            // and we link them via email or an invite code logic. 
-            // For this app's "Add Employee" modal, we'll creates a placeholder doc.
-            
-            // If companyId is not passed in data, try to get from current user
             let companyId = employeeData.companyId;
-            if (!companyId) {
-                companyId = await getCompanyId();
-            }
-
-            const newRef = db!.collection('employees').doc(); // Auto ID
+            if (!companyId) companyId = await getCompanyId();
+            const newRef = db!.collection('employees').doc();
             const newEmployee = {
                 ...employeeData,
-                id: newRef.id, // Use doc ID as ID
-                uid: newRef.id, // Placeholder UID matches Doc ID until real register
+                id: newRef.id,
+                uid: newRef.id,
                 companyId,
                 status: 'Clocked Out',
                 lastClockInTime: null,
-                currentStatusStartTime: null
+                currentStatusStartTime: null,
+                seatId: null
             };
             await newRef.set(newEmployee);
             return newEmployee as Employee;
@@ -209,7 +469,6 @@ const createRealApi = () => {
         streamAttendanceLog: (callback: (log: AttendanceLogEntry[]) => void) => {
             const user = auth!.currentUser;
             if (!user) return () => {};
-
             let unsubscribe = () => {};
             db!.collection('employees').doc(user.uid).get().then(doc => {
                 if (doc.exists) {
@@ -218,7 +477,7 @@ const createRealApi = () => {
                         unsubscribe = db!.collection('attendanceLog')
                             .where('companyId', '==', companyId)
                             .orderBy('timestamp', 'desc')
-                            .limit(500) // Safety limit
+                            .limit(500)
                             .onSnapshot(snapshot => {
                                 const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLogEntry));
                                 callback(logs);
@@ -246,17 +505,31 @@ const createRealApi = () => {
             return employeeToUpdate;
         },
         updateEmployeeDetails: async (employeeToUpdate: Employee) => {
-            // Exclude fields that shouldn't be overwritten blindly if passed incorrectly
             const { id, ...data } = employeeToUpdate;
             await db!.collection('employees').doc(id).update(data);
             return employeeToUpdate;
+        },
+        updateEmployeeSeat: async (employeeId: string, seatId: string | null) => {
+            const batch = db!.batch();
+            if (seatId) {
+                const cid = await getCompanyId();
+                const snapshot = await db!.collection('employees')
+                    .where('companyId', '==', cid)
+                    .where('seatId', '==', seatId)
+                    .get();
+                snapshot.forEach(doc => {
+                    if (doc.id !== employeeId) batch.update(doc.ref, { seatId: null });
+                });
+            }
+            const empRef = db!.collection('employees').doc(employeeId);
+            batch.update(empRef, { seatId });
+            await batch.commit();
         },
         uploadProfilePicture: async (userId: string, file: File): Promise<string> => {
             const storageRef = firebase.storage().ref();
             const fileRef = storageRef.child(`avatars/${userId}/${file.name}`);
             await fileRef.put(file);
             const url = await fileRef.getDownloadURL();
-            
             await db!.collection('employees').doc(userId).update({ avatarUrl: url });
             return url;
         },
@@ -275,407 +548,110 @@ const createRealApi = () => {
             const employeeRef = db!.collection('employees').doc(employeeId);
             const empDoc = await employeeRef.get();
             if (!empDoc.exists) throw new Error("Employee not found");
-            
             const employee = empDoc.data() as Employee;
             const originalStartTime = employee.currentStatusStartTime;
-            
             if (!originalStartTime) throw new Error("No active session");
-
-            // Find matching log
             const logsQuery = await db!.collection('attendanceLog')
                 .where('employeeId', '==', employeeId)
                 .where('timestamp', '==', originalStartTime)
                 .limit(1)
                 .get();
-            
             if (logsQuery.empty) throw new Error("Log not found");
             const logDoc = logsQuery.docs[0];
-
             const batch = db!.batch();
-            
             batch.update(employeeRef, {
                 currentStatusStartTime: newStartTime,
                 lastClockInTime: employee.lastClockInTime === originalStartTime ? newStartTime : employee.lastClockInTime
             });
             batch.update(logDoc.ref, { timestamp: newStartTime });
-            
             await batch.commit();
-            
             const updatedEmp = (await employeeRef.get()).data() as Employee;
             const updatedLog = (await logDoc.ref.get()).data() as AttendanceLogEntry;
-            
             return { updatedEmployee: updatedEmp, updatedLog };
         },
-        // Config & Settings
         getActivityStatuses: async () => {
             const cid = await getCompanyId();
-            const snap = await db!.collection('activityStatuses').where('companyId', '==', cid).get();
-            return snap.docs.map(d => ({ id: d.id, ...d.data() } as ActivityStatus));
+            const snapshot = await db!.collection('activityStatuses').where('companyId', '==', cid).get();
+            return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ActivityStatus));
         },
         addActivityStatus: async (name, color) => {
             const cid = await getCompanyId();
-            const ref = db!.collection('activityStatuses').doc();
-            await ref.set({ id: ref.id, companyId: cid, name, color });
+            await db!.collection('activityStatuses').add({ name, color, companyId: cid });
         },
-        removeActivityStatus: async (id) => {
-            await db!.collection('activityStatuses').doc(id).delete();
-        },
+        removeActivityStatus: async (id) => { await db!.collection('activityStatuses').doc(id).delete(); },
         getWorkSchedules: async () => {
             const cid = await getCompanyId();
-            const snap = await db!.collection('workSchedules').where('companyId', '==', cid).get();
-            return snap.docs.map(d => ({ id: d.id, ...d.data() } as WorkSchedule));
+            const snapshot = await db!.collection('workSchedules').where('companyId', '==', cid).get();
+            return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as WorkSchedule));
         },
         addWorkSchedule: async (schedule) => {
             const cid = await getCompanyId();
-            const ref = db!.collection('workSchedules').doc();
-            await ref.set({ ...schedule, id: ref.id, companyId: cid });
+            await db!.collection('workSchedules').add({ ...schedule, companyId: cid });
         },
-        updateWorkSchedule: async (id, updates) => {
-            await db!.collection('workSchedules').doc(id).update(updates);
-        },
-        removeWorkSchedule: async (id) => {
-            await db!.collection('workSchedules').doc(id).delete();
-        },
+        updateWorkSchedule: async (id, updates) => { await db!.collection('workSchedules').doc(id).update(updates); },
+        removeWorkSchedule: async (id) => { await db!.collection('workSchedules').doc(id).delete(); },
         getPayrollChangeTypes: async () => {
             const cid = await getCompanyId();
-            const snap = await db!.collection('payrollChangeTypes').where('companyId', '==', cid).get();
-            return snap.docs.map(d => ({ id: d.id, ...d.data() } as PayrollChangeType));
+            const snapshot = await db!.collection('payrollChangeTypes').where('companyId', '==', cid).get();
+            return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PayrollChangeType));
         },
         addPayrollChangeType: async (name, color, isExclusive, adminOnly) => {
             const cid = await getCompanyId();
-            const ref = db!.collection('payrollChangeTypes').doc();
-            await ref.set({ id: ref.id, companyId: cid, name, color, isExclusive, adminOnly });
+            await db!.collection('payrollChangeTypes').add({ name, color, isExclusive, adminOnly, companyId: cid });
         },
-        updatePayrollChangeType: async (id, updates) => {
-            await db!.collection('payrollChangeTypes').doc(id).update(updates);
-        },
-        removePayrollChangeType: async (id) => {
-            await db!.collection('payrollChangeTypes').doc(id).delete();
-        },
+        updatePayrollChangeType: async (id, updates) => { await db!.collection('payrollChangeTypes').doc(id).update(updates); },
+        removePayrollChangeType: async (id) => { await db!.collection('payrollChangeTypes').doc(id).delete(); },
         getCalendarEvents: async () => {
             const cid = await getCompanyId();
-            const snap = await db!.collection('calendarEvents').where('companyId', '==', cid).get();
-            return snap.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent));
+            const snapshot = await db!.collection('calendarEvents').where('companyId', '==', cid).get();
+            return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent));
         },
         addCalendarEvent: async (event) => {
             const cid = await getCompanyId();
-            const ref = db!.collection('calendarEvents').doc();
-            await ref.set({ ...event, id: ref.id, companyId: cid });
+            await db!.collection('calendarEvents').add({ ...event, companyId: cid });
         },
-        updateCalendarEvent: async (event) => {
-            await db!.collection('calendarEvents').doc(event.id).update(event);
-        },
-        removeCalendarEvent: async (id) => {
-            await db!.collection('calendarEvents').doc(id).delete();
-        },
+        updateCalendarEvent: async (event) => { await db!.collection('calendarEvents').doc(event.id).update(event); },
+        removeCalendarEvent: async (id) => { await db!.collection('calendarEvents').doc(id).delete(); },
         updateTimesheetEntry: async (employeeId, startLogId, endLogId, newStartTime, newEndTime) => {
             const batch = db!.batch();
-            const startRef = db!.collection('attendanceLog').doc(startLogId);
-            const endRef = db!.collection('attendanceLog').doc(endLogId);
+            const startLogRef = db!.collection('attendanceLog').doc(startLogId);
+            batch.update(startLogRef, { timestamp: newStartTime });
+            const endLogRef = db!.collection('attendanceLog').doc(endLogId);
+            batch.update(endLogRef, { timestamp: newEndTime });
+            await batch.commit();
+        },
+        // Map Logic (Real)
+        getMapItems: async () => {
+            const cid = await getCompanyId();
+            const snapshot = await db!.collection('mapItems').where('companyId', '==', cid).get();
+            return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as MapItem));
+        },
+        saveMapItems: async (items: MapItem[]) => {
+            const cid = await getCompanyId();
+            const batch = db!.batch();
             
-            batch.update(startRef, { timestamp: newStartTime });
-            batch.update(endRef, { timestamp: newEndTime });
+            // Delete existing map items for this company to handle removals
+            // In a production app, we would diff the lists to only add/update/remove what changed
+            const existing = await db!.collection('mapItems').where('companyId', '==', cid).get();
+            existing.forEach(doc => batch.delete(doc.ref));
+            
+            items.forEach(item => {
+                // CRITICAL FIX: Use the item's existing ID for the doc ID to preserve seat assignments.
+                // If it's a new item (temp ID or no ID), Firestore will just use that string or we could gen a new one if needed,
+                // but preserving 'id' is key for the seat mapping.
+                const ref = db!.collection('mapItems').doc(item.id);
+                batch.set(ref, { ...item, companyId: cid, id: item.id }); 
+            });
             
             await batch.commit();
+            return true;
         }
     };
 };
 
-// --- MOCK API IMPLEMENTATION ---
-const createMockApi = () => {
-  // ... mock data initialization ...
-  let mockEmployees: Employee[] = JSON.parse(JSON.stringify(initialEmployees));
-  mockEmployees.forEach(e => e.companyId = 'mock_company_id');
-
-  let mockCompanies: Company[] = [
-      { id: 'mock_company_id', name: 'Demo Company Inc.', ownerId: '1', createdAt: Date.now() }
-  ];
-
-  let mockAttendanceLog: AttendanceLogEntry[] = [];
-  let mockActivityStatuses: ActivityStatus[] = [
-    { id: '1', name: 'Break', color: '#AE8F60', companyId: 'mock_company_id' },
-    { id: '2', name: 'Training', color: '#3B82F6', companyId: 'mock_company_id' },
-  ];
-  let mockPayrollChangeTypes: PayrollChangeType[] = [
-    { id: '1', name: 'Vacation', color: '#10B981', isExclusive: false, adminOnly: false, companyId: 'mock_company_id' },
-    { id: '2', name: 'Sick', color: '#3B82F6', isExclusive: false, adminOnly: true, companyId: 'mock_company_id' },
-    { id: '3', name: 'Family Day', color: '#F59E0B', isExclusive: true, adminOnly: false, companyId: 'mock_company_id' },
-  ];
-  let mockWorkSchedules: WorkSchedule[] = [
-    { id: '1', name: 'Morning Shift', startTime: '08:00', endTime: '16:00', days: [1,2,3,4,5], companyId: 'mock_company_id' },
-  ];
-  let mockCalendarEvents: CalendarEvent[] = [];
-
-  let mockCurrentUser: { uid: string, email: string } | null = null;
-  
-  const getNextId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-
-  // Internal helper to simulate listeners
-  const listeners: { employees: Function[], logs: Function[] } = { employees: [], logs: [] };
-  const notifyListeners = () => {
-      listeners.employees.forEach(cb => cb([...mockEmployees]));
-      listeners.logs.forEach(cb => cb([...mockAttendanceLog]));
-  };
-
-  return {
-    joinCompany: async (inviteCode: string): Promise<boolean> => {
-        return Promise.resolve(true);
-    },
-    migrateLegacyData: async (): Promise<number> => {
-        return Promise.resolve(0);
-    },
-    getCompanyDetails: async (companyId: string): Promise<Company | null> => {
-        return Promise.resolve(mockCompanies.find(c => c.id === companyId) || null);
-    },
-    registerWithEmailAndPassword: async (fullName: string, email: string, password: string, companyName: string, inviteCode?: string): Promise<Employee> => {
-        if (mockEmployees.some(e => e.email === email && e.uid && !e.uid.startsWith('manual_'))) {
-            throw new Error("Email already in use.");
-        }
-        
-        let companyId = inviteCode;
-        let role: 'admin' | 'employee';
-
-        if (inviteCode) {
-            role = 'employee';
-            companyId = inviteCode;
-        } else {
-            role = 'admin';
-            companyId = getNextId('company');
-            mockCompanies.push({
-                id: companyId,
-                name: companyName,
-                ownerId: getNextId('user_placeholder'),
-                createdAt: Date.now()
-            });
-        }
-
-        const newUser = {
-            uid: getNextId('user'),
-            name: fullName,
-            email,
-        };
-        
-        const newEmployee: Employee = {
-            ...newUser,
-            id: getNextId('employee'),
-            companyId: companyId!,
-            phone: '',
-            location: 'Main Office',
-            role: role,
-            status: 'Clocked Out',
-            lastClockInTime: null,
-            currentStatusStartTime: null,
-            workScheduleId: null,
-        };
-        mockEmployees.push(newEmployee);
-        notifyListeners();
-        return Promise.resolve(newEmployee);
-    },
-    loginWithEmailAndPassword: async (email: string, password: string): Promise<Employee> => {
-        if (!email || !password) throw new Error("Email and password are required.");
-        
-        const user = mockEmployees.find(e => e.email === email);
-        if (user) {
-            mockCurrentUser = { uid: user.uid!, email: user.email };
-            return Promise.resolve(user);
-        }
-        throw new Error("Invalid credentials.");
-    },
-    logout: async (): Promise<void> => {
-        mockCurrentUser = null;
-        return Promise.resolve();
-    },
-    sendPasswordResetEmail: async (email: string): Promise<void> => {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return Promise.resolve();
-    },
-    verifyPasswordResetCode: async (oobCode: string): Promise<string> => {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return "usuario_demo@ejemplo.com";
-    },
-    confirmPasswordReset: async (oobCode: string, newPassword: string): Promise<void> => {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return Promise.resolve();
-    },
-    verifyEmail: async (oobCode: string): Promise<void> => {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return Promise.resolve();
-    },
-    changePassword: async (password: string): Promise<void> => {
-        await new Promise(resolve => setTimeout(resolve, 500));
-        return Promise.resolve();
-    },
-    getEmployeeProfile: async (uid: string): Promise<Employee | null> => {
-        const user = mockEmployees.find(e => e.uid === uid);
-        return Promise.resolve(user || null);
-    },
-    streamEmployees: (callback: (employees: Employee[]) => void): (() => void) => {
-        listeners.employees.push(callback);
-        callback([...mockEmployees]);
-        return () => {
-            listeners.employees = listeners.employees.filter(cb => cb !== callback);
-        };
-    },
-    addEmployee: async (employeeData: Omit<Employee, 'id' | 'status' | 'lastClockInTime' | 'currentStatusStartTime' | 'uid'>): Promise<Employee> => {
-        const newEmployee: Employee = {
-            ...employeeData,
-            id: getNextId('employee'),
-            uid: `manual_${Date.now()}`,
-            status: 'Clocked Out',
-            lastClockInTime: null,
-            currentStatusStartTime: null,
-        };
-        mockEmployees.push(newEmployee);
-        notifyListeners();
-        return Promise.resolve(newEmployee);
-    },
-    streamAttendanceLog: (callback: (log: AttendanceLogEntry[]) => void): (() => void) => {
-      listeners.logs.push(callback);
-      callback([...mockAttendanceLog]);
-      return () => {
-          listeners.logs = listeners.logs.filter(cb => cb !== callback);
-      };
-    },
-    getEmployees: async (): Promise<Employee[]> => {
-      return Promise.resolve([...mockEmployees]);
-    },
-    removeEmployee: async (employeeId: string): Promise<{ success: boolean }> => {
-      mockEmployees = mockEmployees.filter(e => e.id !== employeeId);
-      notifyListeners();
-      return Promise.resolve({ success: true });
-    },
-    updateEmployeeStatus: async (employeeToUpdate: Employee): Promise<Employee> => {
-      const index = mockEmployees.findIndex(e => e.id === employeeToUpdate.id);
-      if (index > -1) {
-        mockEmployees[index] = employeeToUpdate;
-        notifyListeners();
-      }
-      return Promise.resolve(employeeToUpdate);
-    },
-    updateEmployeeDetails: async (employeeToUpdate: Employee): Promise<Employee> => {
-      const index = mockEmployees.findIndex(e => e.id === employeeToUpdate.id);
-      if (index > -1) {
-        mockEmployees[index] = employeeToUpdate;
-        notifyListeners();
-      }
-      return Promise.resolve(employeeToUpdate);
-    },
-    uploadProfilePicture: async (userId: string, file: File): Promise<string> => {
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-                const base64 = reader.result as string;
-                const emp = mockEmployees.find(e => e.id === userId);
-                if (emp) {
-                    emp.avatarUrl = base64;
-                    notifyListeners();
-                }
-                resolve(base64);
-            };
-            reader.readAsDataURL(file);
-        });
-    },
-    addAttendanceLogEntry: async (logEntry: Omit<AttendanceLogEntry, 'id'>): Promise<AttendanceLogEntry> => {
-      const newLog: AttendanceLogEntry = { ...logEntry, id: getNextId('log') };
-      mockAttendanceLog.push(newLog);
-      notifyListeners();
-      return Promise.resolve(newLog);
-    },
-    updateAttendanceLogEntry: async (logId: string, updates: { action: string, timestamp: number }): Promise<AttendanceLogEntry> => {
-      const log = mockAttendanceLog.find(l => l.id === logId);
-      if (!log) throw new Error("Log not found");
-      Object.assign(log, updates);
-      notifyListeners();
-      return Promise.resolve(log);
-    },
-    updateEmployeeCurrentSession: async (employeeId: string, newStartTime: number): Promise<{ updatedEmployee: Employee, updatedLog: AttendanceLogEntry }> => {
-      const employee = mockEmployees.find(e => e.id === employeeId);
-      if (!employee) throw new Error("Employee not found");
-      const originalStartTime = employee.currentStatusStartTime;
-      if (!originalStartTime) throw new Error("Employee has no active session");
-      
-      const log = mockAttendanceLog.find(l => l.employeeId === employeeId && l.timestamp === originalStartTime);
-      if (!log) throw new Error("Log entry not found");
-
-      employee.currentStatusStartTime = newStartTime;
-      if (employee.lastClockInTime === originalStartTime) {
-          employee.lastClockInTime = newStartTime;
-      }
-      
-      log.timestamp = newStartTime;
-      notifyListeners();
-      
-      return Promise.resolve({ updatedEmployee: employee, updatedLog: log });
-    },
-    // Config
-    getActivityStatuses: async (): Promise<ActivityStatus[]> => Promise.resolve(mockActivityStatuses),
-    addActivityStatus: async (name: string, color: string): Promise<void> => {
-        mockActivityStatuses.push({ id: getNextId('status'), name, color, companyId: 'mock_company_id' });
-        return Promise.resolve();
-    },
-    removeActivityStatus: async (id: string): Promise<void> => {
-        mockActivityStatuses = mockActivityStatuses.filter(s => s.id !== id);
-        return Promise.resolve();
-    },
-    getWorkSchedules: async (): Promise<WorkSchedule[]> => Promise.resolve(mockWorkSchedules),
-    addWorkSchedule: async (schedule: Omit<WorkSchedule, 'id' | 'companyId'>): Promise<void> => {
-        mockWorkSchedules.push({ ...schedule, id: getNextId('schedule'), companyId: 'mock_company_id' });
-        return Promise.resolve();
-    },
-    updateWorkSchedule: async (id: string, updates: Partial<WorkSchedule>): Promise<void> => {
-        const idx = mockWorkSchedules.findIndex(s => s.id === id);
-        if (idx > -1) mockWorkSchedules[idx] = { ...mockWorkSchedules[idx], ...updates };
-        return Promise.resolve();
-    },
-    removeWorkSchedule: async (id: string): Promise<void> => {
-        mockWorkSchedules = mockWorkSchedules.filter(s => s.id !== id);
-        return Promise.resolve();
-    },
-    getPayrollChangeTypes: async (): Promise<PayrollChangeType[]> => Promise.resolve(mockPayrollChangeTypes),
-    addPayrollChangeType: async (name: string, color: string, isExclusive: boolean, adminOnly: boolean): Promise<void> => {
-        mockPayrollChangeTypes.push({ id: getNextId('payroll'), name, color, isExclusive, adminOnly, companyId: 'mock_company_id' });
-        return Promise.resolve();
-    },
-    updatePayrollChangeType: async (id: string, updates: Partial<PayrollChangeType>): Promise<void> => {
-        const idx = mockPayrollChangeTypes.findIndex(p => p.id === id);
-        if (idx > -1) mockPayrollChangeTypes[idx] = { ...mockPayrollChangeTypes[idx], ...updates };
-        return Promise.resolve();
-    },
-    removePayrollChangeType: async (id: string): Promise<void> => {
-        mockPayrollChangeTypes = mockPayrollChangeTypes.filter(p => p.id !== id);
-        return Promise.resolve();
-    },
-    // Calendar
-    getCalendarEvents: async (): Promise<CalendarEvent[]> => Promise.resolve(mockCalendarEvents),
-    addCalendarEvent: async (event: Omit<CalendarEvent, 'id' | 'companyId'>): Promise<void> => {
-        mockCalendarEvents.push({ ...event, id: getNextId('event'), companyId: 'mock_company_id' });
-        return Promise.resolve();
-    },
-    updateCalendarEvent: async (event: CalendarEvent): Promise<void> => {
-        const idx = mockCalendarEvents.findIndex(e => e.id === event.id);
-        if (idx > -1) mockCalendarEvents[idx] = event;
-        return Promise.resolve();
-    },
-    removeCalendarEvent: async (id: string): Promise<void> => {
-        mockCalendarEvents = mockCalendarEvents.filter(e => e.id !== id);
-        return Promise.resolve();
-    },
-    // Timesheet
-    updateTimesheetEntry: async (employeeId: string, startLogId: string, endLogId: string, newStartTime: number, newEndTime: number): Promise<void> => {
-        const startLog = mockAttendanceLog.find(l => l.id === startLogId);
-        const endLog = mockAttendanceLog.find(l => l.id === endLogId);
-        if (startLog) startLog.timestamp = newStartTime;
-        if (endLog) endLog.timestamp = newEndTime;
-        
-        notifyListeners();
-        return Promise.resolve();
-    }
-  };
-};
-
 const api = isFirebaseEnabled ? createRealApi() : createMockApi();
 
-// Exporting individual functions for App.tsx usage
+// Exporting individual functions
 export const {
     joinCompany,
     migrateLegacyData,
@@ -696,6 +672,7 @@ export const {
     removeEmployee,
     updateEmployeeStatus,
     updateEmployeeDetails,
+    updateEmployeeSeat,
     uploadProfilePicture,
     addAttendanceLogEntry,
     updateAttendanceLogEntry,
@@ -715,5 +692,7 @@ export const {
     addCalendarEvent,
     updateCalendarEvent,
     removeCalendarEvent,
-    updateTimesheetEntry
+    updateTimesheetEntry,
+    getMapItems, // NEW
+    saveMapItems // NEW
 } = api;

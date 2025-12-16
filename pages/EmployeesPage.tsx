@@ -63,8 +63,8 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
   };
 
   return (
-    <div className="w-full mx-auto animate-fade-in space-y-6 flex flex-col h-full overflow-hidden">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 flex-shrink-0">
+    <div className="w-full mx-auto animate-fade-in space-y-6 pb-8">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold text-bokara-grey">Collaborators</h1>
           <span className="bg-lucius-lime/20 text-bokara-grey text-lg font-bold px-3 py-1 rounded-full">{safeEmployees.length}</span>
@@ -85,13 +85,14 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
                     className={`p-2 rounded-md transition-all ${viewMode === 'board' ? 'bg-bokara-grey text-white shadow-sm' : 'text-bokara-grey/50 hover:bg-whisper-white'}`}
                     title="Vista de Tablero (Horarios)"
                 >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 00-2 2" /></svg>
                 </button>
             </div>
 
             <button
             onClick={onAddEmployee}
-            className="bg-lucius-lime hover:bg-opacity-80 text-bokara-grey font-bold py-2 px-4 rounded-lg transition-all duration-300 shadow-md flex items-center gap-2"
+            className="bg-lucius-lime hover:bg-opacity-80 text-bokara-grey font-bold py-2 px-4 rounded-lg transition-all duration-300 shadow-md flex items-center gap-2 cursor-pointer z-10"
+            type="button"
             >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
             <span className="hidden sm:inline">Add Collaborator</span>
@@ -101,7 +102,7 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
 
       {/* Invite Link Widget */}
       {currentUser.role === 'admin' && (
-          <div className="bg-white rounded-xl shadow-sm border border-lucius-lime/30 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 flex-shrink-0">
+          <div className="bg-white rounded-xl shadow-sm border border-lucius-lime/30 p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                   <div className="p-3 bg-lucius-lime/10 rounded-full text-lucius-lime">
                       <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
@@ -111,7 +112,7 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
                       <p className="text-xs text-bokara-grey/60 max-w-lg">
                           1. Crea el perfil del colaborador usando el botón "Add Collaborator".<br/>
                           2. Comparte este <strong>Código de Organización</strong> con ellos.<br/>
-                          3. Cuando se registren con su correo y este código, se vincularán automáticamente.
+                          3. Cuando se registren con su correo y este código, se vincularán automáticamente a su perfil creado.
                       </p>
                   </div>
               </div>
@@ -130,7 +131,7 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
       )}
       
       {viewMode === 'list' ? (
-        <div className="bg-white rounded-xl shadow-md border border-bokara-grey/10 overflow-hidden flex-grow overflow-y-auto">
+        <div className="bg-white rounded-xl shadow-md border border-bokara-grey/10 overflow-hidden">
             <div className="overflow-x-auto">
             <table className="w-full text-left">
                 <thead>
@@ -185,7 +186,7 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
             </div>
         </div>
       ) : (
-          <div className="flex-grow flex flex-col h-0 min-h-0">
+          <div className="h-[600px] min-h-[500px]">
               <EmployeeScheduleBoard 
                 employees={safeEmployees} 
                 workSchedules={safeWorkSchedules} 

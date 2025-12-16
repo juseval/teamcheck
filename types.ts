@@ -22,6 +22,7 @@ export interface Employee {
   currentStatusStartTime: number | null;
   avatarUrl?: string; // Optional field for a profile picture
   workScheduleId?: string | null;
+  seatId?: string | null; // ID of the desk they sit at
   messages?: number;
 }
 
@@ -123,4 +124,20 @@ export interface WorkSchedule {
   startTime: string; // "HH:mm"
   endTime: string; // "HH:mm"
   days: number[]; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+}
+
+// --- MAP TYPES ---
+export type MapItemType = 'desk' | 'locker' | 'wall' | 'plant' | 'meeting_table' | 'camera' | 'room_label';
+
+export interface MapItem {
+  id: string;
+  companyId?: string;
+  type: MapItemType;
+  x: number; // Percentage 0-100
+  y: number; // Percentage 0-100
+  width?: number; // CSS width or scale
+  height?: number; // CSS height
+  rotation?: number; // Degrees
+  label?: string;
+  color?: string; // For walls or specific items
 }

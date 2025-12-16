@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { ClockIcon, DashboardIcon, TeamIcon, CalendarIcon, SettingsIcon, TimesheetIcon, TicketIcon } from './Icons';
+import { ClockIcon, DashboardIcon, TeamIcon, CalendarIcon, SettingsIcon, TimesheetIcon, TicketIcon, MapIcon } from './Icons';
 
 interface NavItemProps {
   label: string;
@@ -97,6 +97,10 @@ const SideNav: React.FC<SideNavProps> = ({ currentPage, onNavigate, userRole, is
                     <div className="w-full border-t border-bokara-grey/10 my-1"></div>
                 </>
                 )}
+
+                <NavItem label="Map" pageName="seating" currentPage={currentPage} onNavigate={onNavigate} onClick={onClose}>
+                    <MapIcon />
+                </NavItem>
 
                 <NavItem label="Tickets" pageName="ticketing" currentPage={currentPage} onNavigate={onNavigate} onClick={onClose}>
                     <TicketIcon />
