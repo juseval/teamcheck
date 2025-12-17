@@ -52,16 +52,17 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
         }
     };
 
-    const handleAddItem = (type: MapItemType) => {
+    const handleAddItem = (type: MapItemType, shapeVariant?: 'circle' | 'rectangle') => {
         const newItem: MapItem = {
             id: `new_${Date.now()}`,
             type,
             x: 50, // Center
             y: 50,
             rotation: 0,
-            label: type === 'desk' ? 'New' : (type === 'meeting_table' ? 'Table' : undefined),
-            width: type === 'wall' ? 10 : undefined, // Default wall length
-            height: type === 'wall' ? 12 : undefined // Default wall thickness (in px approx)
+            label: type === 'desk' ? 'New' : (type === 'custom_shape' ? 'Shape' : undefined),
+            width: type === 'wall' ? 10 : (type === 'custom_shape' ? 60 : undefined), // Default sizes
+            height: type === 'wall' ? 12 : (type === 'custom_shape' ? 60 : undefined),
+            shapeVariant: shapeVariant
         };
         setMapItems([...mapItems, newItem]);
         setSelectedItem(newItem);
@@ -135,6 +136,11 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
         setDragItem(null);
     };
 
+    const handleMouseLeaveOrUp = () => {
+        setIsDragging(false);
+        setDragItem(null);
+    };
+
     // --- Rendering Helpers ---
 
     const getStatusColor = (status: string) => {
@@ -158,7 +164,12 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
             onMouseDown: (e: React.MouseEvent) => handleMouseDown(e, item),
             onClick: (e: React.MouseEvent) => {
                 e.stopPropagation(); // Crucial: Stop click from hitting the background and deselecting
-                if (!isEditMode && item.type === 'desk' && currentUserRole === 'admin') {
+                // ALLOW 'desk' and 'meeting_table' for assignment
+                // 'custom_shape' is usually visual, but user can edit it
+                if (!isEditMode && (item.type === 'desk' || item.type === 'meeting_table') && currentUserRole === 'admin') {
+                    setSelectedItem(item);
+                }
+                if (isEditMode) {
                     setSelectedItem(item);
                 }
             }
@@ -170,10 +181,34 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
             transform: `translate(-50%, -50%) rotate(${item.rotation || 0}deg)`,
             position: 'absolute',
             zIndex: item.type === 'wall' ? 1 : 10,
-            cursor: isEditMode ? 'grab' : (item.type === 'desk' ? 'pointer' : 'default'),
+            cursor: isEditMode ? 'grab' : ((item.type === 'desk' || item.type === 'meeting_table') ? 'pointer' : 'default'),
             border: isSelected ? '2px solid #3B82F6' : 'none', // Blue selection border in edit mode
             boxShadow: isSelected ? '0 0 15px rgba(59, 130, 246, 0.5)' : 'none'
         };
+
+        // NEW: Generic Shape Renderer (Rectangle / Circle / Oval via dimensions)
+        if (item.type === 'custom_shape') {
+            const width = item.width || 60;
+            const height = item.height || 60;
+            const borderRadius = item.shapeVariant === 'circle' ? '50%' : '4px';
+            
+            return (
+                <div
+                    key={item.id}
+                    style={{
+                        ...baseStyle,
+                        width: `${width}px`,
+                        height: `${height}px`,
+                        backgroundColor: item.color || '#9CA3AF',
+                        borderRadius: borderRadius
+                    }}
+                    className="flex items-center justify-center shadow-lg border border-black/10 overflow-hidden font-bold text-white text-xs text-center p-1 break-words leading-tight"
+                    {...interactiveProps}
+                >
+                    <span className="pointer-events-none select-none">{item.label}</span>
+                </div>
+            );
+        }
 
         if (item.type === 'wall') {
             return (
@@ -183,7 +218,7 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
                         ...baseStyle, 
                         width: `${item.width || 10}%`, 
                         height: `${item.height || 12}px`, 
-                        backgroundColor: '#34495e',
+                        backgroundColor: item.color || '#34495e',
                         borderRadius: '2px'
                     }} 
                     {...interactiveProps}
@@ -195,7 +230,7 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
             return (
                 <div 
                     key={item.id} 
-                    style={{ ...baseStyle, width: '30px', height: '30px', backgroundColor: '#95a5a6' }}
+                    style={{ ...baseStyle, width: '30px', height: '30px', backgroundColor: item.color || '#95a5a6' }}
                     className="rounded-sm flex items-center justify-center border border-gray-600 shadow-md"
                     {...interactiveProps}
                 >
@@ -235,8 +270,14 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
             return (
                 <div 
                     key={item.id}
-                    style={{ ...baseStyle, width: 'auto', height: 'auto', backgroundColor: 'transparent' }}
-                    className="text-gray-400/50 font-display font-bold text-2xl uppercase tracking-widest whitespace-nowrap pointer-events-none select-none"
+                    style={{ 
+                        ...baseStyle, 
+                        width: 'auto', 
+                        height: 'auto', 
+                        backgroundColor: 'transparent', 
+                        color: item.color || 'rgba(156, 163, 175, 0.5)' // default gray-400/50 
+                    }}
+                    className="font-display font-bold text-2xl uppercase tracking-widest whitespace-nowrap select-none"
                     {...interactiveProps}
                 >
                     {item.label || 'ROOM'}
@@ -245,14 +286,36 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
         }
 
         if (item.type === 'meeting_table') {
+             const seatedEmployee = employees.find(e => e.seatId === item.id);
              return (
                 <div 
                     key={item.id} 
-                    style={{ ...baseStyle, width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#d35400' }}
-                    className="flex items-center justify-center border-4 border-[#a04000] shadow-lg text-[10px] text-white font-bold opacity-90 overflow-hidden"
+                    style={{ 
+                        ...baseStyle, 
+                        width: '80px', 
+                        height: '80px', 
+                        borderRadius: item.shape === 'rectangle' ? '8px' : '50%', 
+                        backgroundColor: item.color || '#d35400' 
+                    }}
+                    className="flex items-center justify-center border-4 border-black/20 shadow-lg text-[10px] text-white font-bold opacity-90 overflow-hidden relative"
                     {...interactiveProps}
                 >
-                    {item.label}
+                    {seatedEmployee ? (
+                        <div className="flex flex-col items-center z-10">
+                             {seatedEmployee.avatarUrl ? (
+                                <img src={seatedEmployee.avatarUrl} alt="" className="w-8 h-8 rounded-full border border-white object-cover mb-1 shadow-sm" />
+                             ) : (
+                                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold mb-1 shadow-sm text-white">
+                                    {getInitials(seatedEmployee.name)}
+                                </div>
+                             )}
+                             <span className="truncate max-w-[70px] px-1 bg-black/40 rounded text-[9px] backdrop-blur-sm">
+                                {seatedEmployee.name.split(' ')[0]}
+                             </span>
+                        </div>
+                    ) : (
+                        <span>{item.label}</span>
+                    )}
                 </div>
             );
         }
@@ -359,10 +422,20 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
                     <div className="w-full lg:w-48 bg-white p-4 rounded-xl shadow-md border border-bokara-grey/10 flex flex-col gap-4 overflow-y-auto">
                         <h3 className="font-bold text-sm text-bokara-grey uppercase tracking-wider">Toolbox</h3>
                         <div className="grid grid-cols-2 gap-2">
-                            <button onClick={() => handleAddItem('desk')} className="p-2 bg-gray-100 rounded hover:bg-gray-200 flex flex-col items-center gap-1 text-xs font-medium">
+                            <button onClick={() => handleAddItem('desk')} className="p-2 bg-gray-100 rounded hover:bg-gray-200 flex flex-col items-center gap-1 text-xs font-medium col-span-2">
                                 <div className="w-6 h-6 border-2 border-gray-600 rounded bg-white"></div>
-                                Desk
+                                Add Desk (Person)
                             </button>
+                            
+                            <button onClick={() => handleAddItem('custom_shape', 'rectangle')} className="p-2 bg-gray-100 rounded hover:bg-gray-200 flex flex-col items-center gap-1 text-xs font-medium">
+                                <div className="w-6 h-4 bg-orange-700 rounded-sm"></div>
+                                Rectangle
+                            </button>
+                            <button onClick={() => handleAddItem('custom_shape', 'circle')} className="p-2 bg-gray-100 rounded hover:bg-gray-200 flex flex-col items-center gap-1 text-xs font-medium">
+                                <div className="w-6 h-6 bg-green-700 rounded-full"></div>
+                                Circle
+                            </button>
+
                             <button onClick={() => handleAddItem('wall')} className="p-2 bg-gray-100 rounded hover:bg-gray-200 flex flex-col items-center gap-1 text-xs font-medium">
                                 <div className="w-8 h-2 bg-gray-800"></div>
                                 Wall
@@ -371,19 +444,12 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
                                 <div className="w-6 h-6 bg-gray-400 border border-gray-600"></div>
                                 Locker
                             </button>
-                            <button onClick={() => handleAddItem('meeting_table')} className="p-2 bg-gray-100 rounded hover:bg-gray-200 flex flex-col items-center gap-1 text-xs font-medium">
-                                <div className="w-6 h-6 bg-orange-700 rounded-full"></div>
-                                Table
-                            </button>
-                            <button onClick={() => handleAddItem('plant')} className="p-2 bg-gray-100 rounded hover:bg-gray-200 flex flex-col items-center gap-1 text-xs font-medium">
-                                <div className="w-6 h-6 bg-green-600 rounded-full"></div>
-                                Plant
-                            </button>
+                            
                             <button onClick={() => handleAddItem('camera')} className="p-2 bg-gray-100 rounded hover:bg-gray-200 flex flex-col items-center gap-1 text-xs font-medium">
                                 <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586a1 1 0 01-.707-.293l-1.121-1.121A2 2 0 0011.172 3H8.828a2 2 0 00-1.414.586L6.293 4.707A1 1 0 015.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z"></path></svg>
                                 Camera
                             </button>
-                            <button onClick={() => handleAddItem('room_label')} className="p-2 bg-gray-100 rounded hover:bg-gray-200 flex flex-col items-center gap-1 text-xs font-medium col-span-2">
+                            <button onClick={() => handleAddItem('room_label')} className="p-2 bg-gray-100 rounded hover:bg-gray-200 flex flex-col items-center gap-1 text-xs font-medium">
                                 <span className="font-bold text-gray-600">TEXT</span>
                                 Label
                             </button>
@@ -395,28 +461,56 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
                                 <div className="flex flex-col gap-2">
                                     <button onClick={handleRotateItem} className="w-full py-1 bg-blue-50 text-blue-600 rounded text-xs font-bold hover:bg-blue-100">Rotate 45°</button>
                                     
-                                    {(selectedItem.type === 'desk' || selectedItem.type === 'meeting_table') && (
+                                    {/* Universal Label Editor */}
+                                    <input 
+                                        type="text" 
+                                        value={selectedItem.label || ''} 
+                                        onChange={(e) => updateItem(selectedItem.id, { label: e.target.value })}
+                                        className="w-full border p-1 rounded text-xs" 
+                                        placeholder="Label / Name"
+                                    />
+                                    
+                                    {/* Color Picker */}
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-bold text-gray-500">Color:</span>
                                         <input 
-                                            type="text" 
-                                            value={selectedItem.label || ''} 
-                                            onChange={(e) => updateItem(selectedItem.id, { label: e.target.value })}
-                                            className="w-full border p-1 rounded text-xs" 
-                                            placeholder="Label / Name"
+                                            type="color" 
+                                            value={selectedItem.color || (selectedItem.type === 'wall' ? '#34495e' : '#d35400')} 
+                                            onChange={(e) => updateItem(selectedItem.id, { color: e.target.value })}
+                                            className="w-6 h-6 border-none p-0 bg-transparent cursor-pointer"
                                         />
+                                    </div>
+
+                                    {/* Custom Shape Scaler (Width/Height) */}
+                                    {(selectedItem.type === 'custom_shape') && (
+                                        <div className="space-y-2 mt-1">
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] font-bold text-gray-500">Width (Ancho): {selectedItem.width}px</span>
+                                                <input 
+                                                    type="range" 
+                                                    min="20" max="400" step="10"
+                                                    value={selectedItem.width || 60} 
+                                                    onChange={(e) => updateItem(selectedItem.id, { width: Number(e.target.value) })}
+                                                    className="w-full"
+                                                />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] font-bold text-gray-500">Height (Alto): {selectedItem.height}px</span>
+                                                <input 
+                                                    type="range" 
+                                                    min="20" max="400" step="10"
+                                                    value={selectedItem.height || 60} 
+                                                    onChange={(e) => updateItem(selectedItem.id, { height: Number(e.target.value) })}
+                                                    className="w-full"
+                                                />
+                                            </div>
+                                        </div>
                                     )}
-                                    {selectedItem.type === 'room_label' && (
-                                        <input 
-                                            type="text" 
-                                            value={selectedItem.label || ''} 
-                                            onChange={(e) => updateItem(selectedItem.id, { label: e.target.value })}
-                                            className="w-full border p-1 rounded text-xs" 
-                                            placeholder="Room Name"
-                                        />
-                                    )}
+
                                     {(selectedItem.type === 'wall') && (
                                         <div className="space-y-2 mt-1">
                                             <div className="flex flex-col">
-                                                <span className="text-[10px] font-bold text-gray-500">Largo (Length)</span>
+                                                <span className="text-[10px] font-bold text-gray-500">Length</span>
                                                 <input 
                                                     type="range" 
                                                     min="2" max="50" 
@@ -426,7 +520,7 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
                                                 />
                                             </div>
                                             <div className="flex flex-col">
-                                                <span className="text-[10px] font-bold text-gray-500">Grosor (Thickness)</span>
+                                                <span className="text-[10px] font-bold text-gray-500">Thickness</span>
                                                 <input 
                                                     type="range" 
                                                     min="4" max="40" 
@@ -457,7 +551,7 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
                     }}
                     onMouseMove={handleMouseMove}
                     onMouseUp={handleMouseUp}
-                    onMouseLeave={handleMouseUp}
+                    onMouseLeave={handleMouseLeaveOrUp}
                     onClick={() => { if(isEditMode) setSelectedItem(null); }}
                 >
                     {mapItems.map(renderMapItem)}
@@ -465,7 +559,7 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
             </div>
 
             {/* Assignment Modal (View Mode Only) */}
-            {!isEditMode && selectedItem && selectedItem.type === 'desk' && (
+            {!isEditMode && selectedItem && (selectedItem.type === 'desk' || selectedItem.type === 'meeting_table') && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSelectedItem(null)}>
                     <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl animate-fade-in" onClick={e => e.stopPropagation()}>
                         <h3 className="text-xl font-bold text-bokara-grey mb-4">Assign Seat {selectedItem.label}</h3>

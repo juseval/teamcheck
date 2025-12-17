@@ -14,7 +14,7 @@ import {
   addActivityStatus, removeActivityStatus,
   addPayrollChangeType, updatePayrollChangeType, removePayrollChangeType,
   addCalendarEvent, updateCalendarEvent, removeCalendarEvent,
-  updateTimesheetEntry, sendPasswordResetEmail
+  updateTimesheetEntry, sendPasswordResetEmail, updateAttendanceLogEntry
 } from './services/apiService';
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
 import { auth } from './services/firebase';
@@ -36,6 +36,7 @@ import ProfilePage from './pages/ProfilePage';
 import CalendarPage from './pages/CalendarPage';
 import ChangePasswordPage from './pages/ChangePasswordPage';
 import SeatingPage from './pages/SeatingPage';
+import ActivityLogPage from './pages/ActivityLogPage';
 
 // Components
 import Header from './components/Header';
@@ -46,6 +47,7 @@ import EditTimeModal from './components/EditTimeModal';
 import EditTimesheetEntryModal from './components/EditTimesheetEntryModal';
 import AddEventModal from './components/AddEventModal';
 import EditEventModal from './components/EditEventModal';
+import EditActivityLogEntryModal from './components/EditActivityLogEntryModal';
 import ConfirmationModal from './components/ConfirmationModal';
 
 const AppContent: React.FC = () => {
@@ -88,6 +90,9 @@ const AppContent: React.FC = () => {
   const [isAddEventModalOpen, setIsAddEventModalOpen] = useState(false);
   const [isEditEventModalOpen, setIsEditEventModalOpen] = useState(false);
   const [eventToEdit, setEventToEdit] = useState<CalendarEvent | null>(null);
+
+  const [isEditActivityLogEntryModalOpen, setIsEditActivityLogEntryModalOpen] = useState(false);
+  const [logEntryToEdit, setLogEntryToEdit] = useState<AttendanceLogEntry | null>(null);
 
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [confirmConfig, setConfirmConfig] = useState<{ title: string; message: string; onConfirm: () => void }>({
@@ -191,6 +196,12 @@ const AppContent: React.FC = () => {
     };
   }, [user]);
 
+  // Derived State: Pending Correction Requests for Admin Bell
+  const pendingRequests = useMemo(() => {
+      if (user?.role !== 'admin') return [];
+      return attendanceLog.filter(log => log.correctionStatus === 'pending');
+  }, [attendanceLog, user?.role]);
+
   // --- Actions ---
 
   const handleLogin = async (creds: {email: string, password: string}) => {
@@ -276,6 +287,17 @@ const AppContent: React.FC = () => {
       }
   };
 
+  const handleUpdateLogEntry = async (logId: string, updates: Partial<AttendanceLogEntry>) => {
+      try {
+          await updateAttendanceLogEntry(logId, updates);
+          setIsEditActivityLogEntryModalOpen(false);
+          addNotification('Registro actualizado.', 'success');
+      } catch (error) {
+          console.error("Failed to update log entry", error);
+          addNotification('Error al actualizar registro.', 'error');
+      }
+  };
+
   const promptConfirm = (title: string, message: string, onConfirm: () => void) => {
       setConfirmConfig({ title, message, onConfirm: () => {
           onConfirm();
@@ -334,6 +356,11 @@ const AppContent: React.FC = () => {
             userRole={user.role} 
             onLogout={handleLogout} 
             onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            notifications={pendingRequests}
+            onNotificationClick={(entry) => {
+                setLogEntryToEdit(entry);
+                setIsEditActivityLogEntryModalOpen(true);
+            }}
         />
         
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-whisper-white/30 p-4 sm:p-6 lg:p-8 scroll-smooth">
@@ -351,6 +378,11 @@ const AppContent: React.FC = () => {
                 userRole={user.role}
                 activityStatuses={activityStatuses}
                 workSchedules={workSchedules}
+                // Pass global modal handler for Admins editing logs on Tracker
+                onEditEntry={(entry) => {
+                    setLogEntryToEdit(entry);
+                    setIsEditActivityLogEntryModalOpen(true);
+                }}
             />
           )}
           
@@ -511,6 +543,15 @@ const AppContent: React.FC = () => {
         <EditEventModal isOpen={isEditEventModalOpen} onClose={() => setIsEditEventModalOpen(false)} eventToEdit={eventToEdit} employees={employees} payrollChangeTypes={payrollChangeTypes} onUpdateEvent={async (data) => {
              try { await updateCalendarEvent(data); setIsEditEventModalOpen(false); addNotification('Event updated', 'success'); const evs = await getCalendarEvents(); setCalendarEvents(evs); } catch(e) { addNotification('Failed', 'error'); }
         }} />
+
+        {/* Global Log Entry Edit Modal (For Corrections) */}
+        <EditActivityLogEntryModal 
+            isOpen={isEditActivityLogEntryModalOpen} 
+            onClose={() => setIsEditActivityLogEntryModalOpen(false)} 
+            entry={logEntryToEdit} 
+            activityStatuses={activityStatuses}
+            onSave={handleUpdateLogEntry}
+        />
         
         <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setIsConfirmModalOpen(false)} title={confirmConfig.title} message={confirmConfig.message} onConfirm={confirmConfig.onConfirm} />
       </div>

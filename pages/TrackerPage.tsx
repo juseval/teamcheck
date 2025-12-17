@@ -4,6 +4,8 @@ import { Employee, AttendanceLogEntry, AttendanceAction, ActivityStatus, WorkSch
 import EmployeeCard from '../components/EmployeeCard';
 import AttendanceLog from '../components/AttendanceLog';
 import EmployeeTimeline from '../components/EmployeeTimeline';
+import { updateAttendanceLogEntry } from '../services/apiService';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface TrackerPageProps {
   employees: Employee[];
@@ -18,6 +20,8 @@ interface TrackerPageProps {
   userRole: 'admin' | 'employee';
   activityStatuses: ActivityStatus[];
   workSchedules: WorkSchedule[];
+  // New prop for handling log editing
+  onEditEntry?: (entry: AttendanceLogEntry) => void;
 }
 
 const TrackerPage: React.FC<TrackerPageProps> = ({ 
@@ -29,26 +33,51 @@ const TrackerPage: React.FC<TrackerPageProps> = ({
   onEditTime,
   userRole,
   activityStatuses,
-  workSchedules
+  workSchedules,
+  onEditEntry
 }) => {
+  const { addNotification } = useNotification();
   const [dateRange, setDateRange] = useState({ startDate: '', endDate: '' });
 
   const filteredLogs = useMemo(() => {
+    // If employee, filter logs for ONLY that employee immediately to prevent seeing others' data
+    // (Though parent component likely filters 'employees' prop, attendanceLog might contain all)
+    let logsToFilter = attendanceLog;
+    
+    // Safety check: if userRole is employee, find the matching employee ID from the employees prop (which should be length 1)
+    if (userRole === 'employee' && employees.length > 0) {
+        logsToFilter = attendanceLog.filter(log => log.employeeId === employees[0].id);
+    }
+
     const { startDate, endDate } = dateRange;
     if (!startDate && !endDate) {
-      return attendanceLog;
+      return logsToFilter;
     }
     
     const startTimestamp = startDate ? new Date(`${startDate}T00:00:00`).getTime() : 0;
     const endTimestamp = endDate ? new Date(`${endDate}T23:59:59.999`).getTime() : Infinity;
 
-    return attendanceLog.filter(log => {
+    return logsToFilter.filter(log => {
       const logTs = log.timestamp;
       const isAfterStart = startTimestamp === 0 ? true : logTs >= startTimestamp;
       const isBeforeEnd = endTimestamp === Infinity ? true : logTs <= endTimestamp;
       return isAfterStart && isBeforeEnd;
     });
-  }, [attendanceLog, dateRange]);
+  }, [attendanceLog, dateRange, userRole, employees]);
+
+  // Handle Correction Request (Employee)
+  const handleRequestCorrection = async (entry: AttendanceLogEntry, requestText: string) => {
+      try {
+          await updateAttendanceLogEntry(entry.id, {
+              correctionRequest: requestText,
+              correctionStatus: 'pending'
+          });
+          addNotification("Solicitud enviada al administrador.", 'success');
+      } catch (error) {
+          console.error(error);
+          addNotification("Error al enviar solicitud.", 'error');
+      }
+  };
 
   // Ensure Admins see "Team Status"
   const pageTitle = userRole === 'employee' ? "My Status" : "Team Status";
@@ -175,6 +204,8 @@ const TrackerPage: React.FC<TrackerPageProps> = ({
                     dateRange={dateRange}
                     onDateRangeChange={setDateRange}
                     userRole={userRole}
+                    onRequestCorrection={handleRequestCorrection}
+                    onEditEntry={onEditEntry}
                 />
             </div>
         </div>

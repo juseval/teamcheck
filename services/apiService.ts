@@ -539,7 +539,7 @@ const createRealApi = () => {
             await ref.set(newLog);
             return newLog;
         },
-        updateAttendanceLogEntry: async (logId: string, updates: { action: string, timestamp: number }) => {
+        updateAttendanceLogEntry: async (logId: string, updates: Partial<AttendanceLogEntry>) => {
             await db!.collection('attendanceLog').doc(logId).update(updates);
             const doc = await db!.collection('attendanceLog').doc(logId).get();
             return { id: doc.id, ...doc.data() } as AttendanceLogEntry;
@@ -636,11 +636,14 @@ const createRealApi = () => {
             existing.forEach(doc => batch.delete(doc.ref));
             
             items.forEach(item => {
+                // Sanitize item: remove undefined values
+                const sanitizedItem = JSON.parse(JSON.stringify(item)); // Simple way to strip undefined
+                
                 // CRITICAL FIX: Use the item's existing ID for the doc ID to preserve seat assignments.
                 // If it's a new item (temp ID or no ID), Firestore will just use that string or we could gen a new one if needed,
                 // but preserving 'id' is key for the seat mapping.
                 const ref = db!.collection('mapItems').doc(item.id);
-                batch.set(ref, { ...item, companyId: cid, id: item.id }); 
+                batch.set(ref, { ...sanitizedItem, companyId: cid, id: item.id }); 
             });
             
             await batch.commit();

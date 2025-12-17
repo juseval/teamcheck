@@ -35,6 +35,10 @@ export interface AttendanceLogEntry {
   employeeName: string;
   action: AttendanceAction;
   timestamp: number;
+  // Correction Request Fields
+  correctionRequest?: string; // The message from the employee
+  correctionStatus?: 'pending' | 'approved' | 'rejected';
+  adminResponse?: string; // Context/Reason from admin
 }
 
 export interface TimeEntry {
@@ -127,7 +131,7 @@ export interface WorkSchedule {
 }
 
 // --- MAP TYPES ---
-export type MapItemType = 'desk' | 'locker' | 'wall' | 'plant' | 'meeting_table' | 'camera' | 'room_label';
+export type MapItemType = 'desk' | 'locker' | 'wall' | 'plant' | 'meeting_table' | 'camera' | 'room_label' | 'custom_shape';
 
 export interface MapItem {
   id: string;
@@ -140,4 +144,6 @@ export interface MapItem {
   rotation?: number; // Degrees
   label?: string;
   color?: string; // For walls or specific items
+  shape?: 'circle' | 'rectangle'; // Shape for tables, etc.
+  shapeVariant?: 'rectangle' | 'circle'; // For custom generic shapes
 }

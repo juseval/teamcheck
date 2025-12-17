@@ -98,9 +98,12 @@ const SideNav: React.FC<SideNavProps> = ({ currentPage, onNavigate, userRole, is
                 </>
                 )}
 
-                <NavItem label="Map" pageName="seating" currentPage={currentPage} onNavigate={onNavigate} onClick={onClose}>
-                    <MapIcon />
-                </NavItem>
+                {/* Requirement: Employee cannot see Map module */}
+                {userRole === 'admin' && (
+                    <NavItem label="Map" pageName="seating" currentPage={currentPage} onNavigate={onNavigate} onClick={onClose}>
+                        <MapIcon />
+                    </NavItem>
+                )}
 
                 <NavItem label="Tickets" pageName="ticketing" currentPage={currentPage} onNavigate={onNavigate} onClick={onClose}>
                     <TicketIcon />
