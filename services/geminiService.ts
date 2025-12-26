@@ -1,7 +1,3 @@
-
-
-
-
 import { GoogleGenAI, GenerateContentResponse } from '@google/genai';
 import { TimeEntry } from '../types';
 
@@ -28,14 +24,15 @@ export async function generateTimeSummary(entries: TimeEntry[]): Promise<string>
   const prompt = `Based on the following time log, provide a brief, friendly summary of the work completed. Highlight the main activities and total time spent. The log is:\n${entriesString}`;
   
   try {
+    // FIX: Using gemini-3-flash-preview as recommended for basic text tasks.
     // Call the Gemini API to generate content.
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-2.5-flash', // Recommended model for basic text tasks.
+      model: 'gemini-3-flash-preview',
       contents: prompt,
     });
     
     // Extract and return the text from the response.
-    return response.text;
+    return response.text || "Summary unavailable.";
   } catch (error) {
     console.error("Error generating time summary with Gemini API:", error);
     // Return a user-friendly error message.

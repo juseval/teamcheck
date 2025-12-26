@@ -24,6 +24,10 @@ export interface Employee {
   workScheduleId?: string | null;
   seatId?: string | null; // ID of the desk they sit at
   messages?: number;
+  // --- New HR / Vacation Fields ---
+  hireDate?: number; // Timestamp of employment start
+  terminationDate?: number; // Optional timestamp of employment end
+  manualVacationAdjustment?: number; // Historical days balance (+ or -)
 }
 
 export type AttendanceAction = string;
@@ -119,6 +123,7 @@ export interface PayrollChangeType {
   color: string;
   isExclusive?: boolean; // If true, only one person can have this approved per day
   adminOnly?: boolean;   // If true, employees cannot request this type
+  yearlyQuota?: number;  // Max requests allowed per calendar year
 }
 
 export interface WorkSchedule {

@@ -24,68 +24,10 @@ let mockPayrollChangeTypes: PayrollChangeType[] = [
     { id: '3', name: 'Remote Work', color: '#3B82F6', isExclusive: false, adminOnly: false, companyId: 'mock_company_id' }
 ];
 let mockCalendarEvents: CalendarEvent[] = [];
+let mockMapItems: MapItem[] = [];
 
-// Initial Map Layout based on "Sale Strategy" image
-let mockMapItems: MapItem[] = [
-    // Entrance Wall
-    { id: 'w1', type: 'wall', x: 5, y: 15, width: 2, height: 40, rotation: 0, companyId: 'mock_company_id' },
-    // Entrance Camera
-    { id: 'cam1', type: 'camera', x: 8, y: 25, rotation: 45, companyId: 'mock_company_id' },
-    
-    // -- Left Cluster (Sales Strategy) --
-    { id: 'd1', type: 'desk', x: 12, y: 35, label: '1', companyId: 'mock_company_id' },
-    { id: 'd2', type: 'desk', x: 18, y: 35, label: '2', companyId: 'mock_company_id' },
-    { id: 'd3', type: 'desk', x: 12, y: 48, label: '3', companyId: 'mock_company_id' },
-    { id: 'd4', type: 'desk', x: 18, y: 48, label: '4', companyId: 'mock_company_id' },
-    { id: 'd5', type: 'desk', x: 12, y: 65, label: '5', companyId: 'mock_company_id' },
-    { id: 'd6', type: 'desk', x: 18, y: 65, label: '6', companyId: 'mock_company_id' },
-    { id: 'd7', type: 'desk', x: 12, y: 78, label: '7', companyId: 'mock_company_id' },
-    { id: 'd8', type: 'desk', x: 18, y: 78, label: '8', companyId: 'mock_company_id' },
-
-    // -- Top Lockers & Kitchen Area --
-    { id: 'l1', type: 'locker', x: 25, y: 10, rotation: 0, companyId: 'mock_company_id' },
-    { id: 'l2', type: 'locker', x: 30, y: 10, rotation: 0, companyId: 'mock_company_id' },
-    { id: 'mt1', type: 'meeting_table', x: 35, y: 25, label: 'Kitchen', companyId: 'mock_company_id' },
-
-    // -- Middle Cluster --
-    { id: 'd9', type: 'desk', x: 30, y: 35, label: '9', companyId: 'mock_company_id' },
-    { id: 'd10', type: 'desk', x: 36, y: 35, label: '10', companyId: 'mock_company_id' },
-    { id: 'd11', type: 'desk', x: 30, y: 48, label: '11', companyId: 'mock_company_id' },
-    { id: 'd12', type: 'desk', x: 36, y: 48, label: '12', companyId: 'mock_company_id' },
-
-    // -- Center Islands (Yellow/Orange) --
-    { id: 'd13', type: 'desk', x: 45, y: 35, label: '13', companyId: 'mock_company_id' },
-    { id: 'd14', type: 'desk', x: 51, y: 35, label: '14', companyId: 'mock_company_id' },
-    { id: 'd15', type: 'desk', x: 45, y: 48, label: '15', companyId: 'mock_company_id' },
-    { id: 'd16', type: 'desk', x: 51, y: 48, label: '16', companyId: 'mock_company_id' },
-
-    // -- Right Cluster --
-    { id: 'd17', type: 'desk', x: 65, y: 35, label: '17', companyId: 'mock_company_id' },
-    { id: 'd18', type: 'desk', x: 71, y: 35, label: '18', companyId: 'mock_company_id' },
-    { id: 'd19', type: 'desk', x: 65, y: 48, label: '19', companyId: 'mock_company_id' },
-    { id: 'd20', type: 'desk', x: 71, y: 48, label: '20', companyId: 'mock_company_id' },
-
-    // -- Bottom Right Cluster --
-    { id: 'd21', type: 'desk', x: 65, y: 65, label: '21', companyId: 'mock_company_id' },
-    { id: 'd22', type: 'desk', x: 71, y: 65, label: '22', companyId: 'mock_company_id' },
-    { id: 'd23', type: 'desk', x: 65, y: 78, label: '23', companyId: 'mock_company_id' },
-    { id: 'd24', type: 'desk', x: 71, y: 78, label: '24', companyId: 'mock_company_id' },
-
-    // -- Far Right Offices --
-    { id: 'w2', type: 'wall', x: 80, y: 10, width: 2, height: 80, rotation: 0, companyId: 'mock_company_id' },
-    { id: 'rl1', type: 'room_label', x: 90, y: 15, label: 'Storage', companyId: 'mock_company_id' },
-    { id: 'rl2', type: 'room_label', x: 90, y: 35, label: 'Sebastian', companyId: 'mock_company_id' },
-    { id: 'rl3', type: 'room_label', x: 90, y: 55, label: 'Lemus', companyId: 'mock_company_id' },
-    
-    // Some decorations
-    { id: 'p1', type: 'plant', x: 5, y: 5, companyId: 'mock_company_id' },
-    { id: 'p2', type: 'plant', x: 75, y: 5, companyId: 'mock_company_id' },
-];
-
-// Helper for mock IDs
 const getNextId = (prefix: string = 'id') => `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-// Mock listeners
 let employeeListeners: ((employees: Employee[]) => void)[] = [];
 let logListeners: ((log: AttendanceLogEntry[]) => void)[] = [];
 
@@ -94,79 +36,46 @@ const notifyListeners = () => {
     logListeners.forEach(l => l([...mockAttendanceLog]));
 };
 
-// --- HELPER to get current user's company ID (Mock or Real) ---
 const getCurrentUserCompanyId = async (): Promise<string | null> => {
     if (!isFirebaseEnabled) return 'mock_company_id';
-    
     const user = auth?.currentUser;
     if (!user) return null;
-    
     try {
         const doc = await db?.collection('employees').doc(user.uid).get();
         return doc?.data()?.companyId || null;
-    } catch {
-        return null;
-    }
+    } catch { return null; }
 };
 
-// --- MOCK API IMPLEMENTATION ---
 const createMockApi = () => ({
-    joinCompany: async (inviteCode: string): Promise<boolean> => {
-        console.log(`[Mock] Joining company ${inviteCode}`);
-        return true;
-    },
-    migrateLegacyData: async (): Promise<number> => 0,
-    getCompanyDetails: async (companyId: string): Promise<Company | null> => {
-        if (companyId === 'mock_company_id') return { id: 'mock_company_id', name: 'Demo Company', ownerId: '1', createdAt: Date.now() };
-        return null;
-    },
-    registerWithEmailAndPassword: async (fullName: string, email: string, password: string, companyName: string, inviteCode?: string): Promise<Employee> => {
-        const newEmp: Employee = {
-            id: getNextId('emp'),
-            uid: getNextId('uid'),
-            companyId: inviteCode || 'mock_company_id',
-            name: fullName,
-            email,
-            phone: '',
-            location: 'Oficina Principal',
-            role: inviteCode ? 'employee' : 'admin',
-            status: 'Clocked Out',
-            lastClockInTime: null,
-            currentStatusStartTime: null,
-            workScheduleId: null,
-            seatId: null
-        };
+    joinCompany: async () => true,
+    migrateLegacyData: async () => 0,
+    getCompanyDetails: async () => null,
+    registerWithEmailAndPassword: async (fullName: string, email: string) => {
+        const newEmp: Employee = { id: getNextId('emp'), uid: getNextId('uid'), companyId: 'mock_company_id', name: fullName, email, phone: '', location: '', role: 'admin', status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null };
         mockEmployees.push(newEmp);
         notifyListeners();
         return newEmp;
     },
-    loginWithEmailAndPassword: async (email: string, password: string): Promise<Employee> => {
-        const user = mockEmployees.find(e => e.email === email);
-        if (user) return user;
-        // If not found in mock data, return default admin for demo
-        return mockEmployees[0];
-    },
+    loginWithEmailAndPassword: async () => mockEmployees[0],
     logout: async () => {},
-    sendPasswordResetEmail: async (email: string) => {},
-    verifyPasswordResetCode: async (oobCode: string) => 'demo@example.com',
-    confirmPasswordReset: async (oobCode: string, newPassword: string) => {},
-    verifyEmail: async (oobCode: string) => {},
-    changePassword: async (password: string) => {},
-    getEmployeeProfile: async (uid: string): Promise<Employee | null> => {
-        return mockEmployees.find(e => e.uid === uid || e.id === uid) || mockEmployees[0];
-    },
-    streamEmployees: (callback: (employees: Employee[]) => void) => {
+    sendPasswordResetEmail: async () => {},
+    verifyPasswordResetCode: async () => 'demo@example.com',
+    confirmPasswordReset: async () => {},
+    verifyEmail: async () => {},
+    changePassword: async () => {},
+    getEmployeeProfile: async () => mockEmployees[0],
+    streamEmployees: (callback: any) => {
         employeeListeners.push(callback);
         callback([...mockEmployees]);
         return () => { employeeListeners = employeeListeners.filter(l => l !== callback); };
     },
-    addEmployee: async (employeeData: any) => {
-        const newEmp = { ...employeeData, id: getNextId('emp'), status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null };
+    addEmployee: async (data: any) => {
+        const newEmp = { ...data, id: getNextId('emp'), status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null };
         mockEmployees.push(newEmp);
         notifyListeners();
         return newEmp;
     },
-    streamAttendanceLog: (callback: (log: AttendanceLogEntry[]) => void) => {
+    streamAttendanceLog: (callback: any) => {
         logListeners.push(callback);
         callback([...mockAttendanceLog]);
         return () => { logListeners = logListeners.filter(l => l !== callback); };
@@ -189,26 +98,15 @@ const createMockApi = () => ({
         notifyListeners();
         return employee;
     },
-    // New function for Seating Chart
     updateEmployeeSeat: async (employeeId: string, seatId: string | null) => {
         const idx = mockEmployees.findIndex(e => e.id === employeeId);
-        if (idx > -1) {
-            // Remove seat from any other employee if seatId is not null (unique seats)
-            if (seatId) {
-                const prevOwnerIdx = mockEmployees.findIndex(e => e.seatId === seatId && e.id !== employeeId);
-                if (prevOwnerIdx > -1) mockEmployees[prevOwnerIdx].seatId = null;
-            }
-            mockEmployees[idx].seatId = seatId;
-            notifyListeners();
-        }
-        return Promise.resolve();
+        if (idx > -1) mockEmployees[idx].seatId = seatId;
+        notifyListeners();
     },
-    uploadProfilePicture: async (userId: string, file: File) => {
-        return URL.createObjectURL(file);
-    },
+    uploadProfilePicture: async () => 'https://via.placeholder.com/150',
     addAttendanceLogEntry: async (entry: any) => {
         const newEntry = { ...entry, id: getNextId('log') };
-        mockAttendanceLog.unshift(newEntry); // Prepend
+        mockAttendanceLog.unshift(newEntry);
         notifyListeners();
         return newEntry;
     },
@@ -218,434 +116,225 @@ const createMockApi = () => ({
         notifyListeners();
         return mockAttendanceLog[idx];
     },
-    updateEmployeeCurrentSession: async (id: string, newStartTime: number) => {
-        // Mock implementation for editing session time
+    updateEmployeeCurrentSession: async (id: string, time: number) => {
         const emp = mockEmployees.find(e => e.id === id);
-        if (emp && emp.currentStatusStartTime) {
-            const oldTime = emp.currentStatusStartTime;
-            emp.currentStatusStartTime = newStartTime;
-            if (emp.lastClockInTime === oldTime) emp.lastClockInTime = newStartTime;
-            
-            // Find corresponding log
-            const log = mockAttendanceLog.find(l => l.employeeId === id && l.timestamp === oldTime);
-            if (log) log.timestamp = newStartTime;
-            
-            notifyListeners();
-        }
+        if (emp) emp.currentStatusStartTime = time;
+        notifyListeners();
         return { updatedEmployee: emp, updatedLog: null };
     },
-    // Config
     getActivityStatuses: async () => mockActivityStatuses,
-    addActivityStatus: async (name: string, color: string) => {
-        mockActivityStatuses.push({ id: getNextId('status'), name, color, companyId: 'mock_company_id' });
-    },
-    removeActivityStatus: async (id: string) => {
-        mockActivityStatuses = mockActivityStatuses.filter(s => s.id !== id);
-    },
+    addActivityStatus: async (name: string, color: string) => mockActivityStatuses.push({ id: getNextId('status'), name, color }),
+    removeActivityStatus: async (id: string) => mockActivityStatuses = mockActivityStatuses.filter(s => s.id !== id),
     getWorkSchedules: async () => mockWorkSchedules,
-    addWorkSchedule: async (schedule: any) => {
-        mockWorkSchedules.push({ ...schedule, id: getNextId('schedule'), companyId: 'mock_company_id' });
-    },
-    updateWorkSchedule: async (id: string, updates: any) => {
-        const idx = mockWorkSchedules.findIndex(s => s.id === id);
-        if (idx > -1) mockWorkSchedules[idx] = { ...mockWorkSchedules[idx], ...updates };
-    },
-    removeWorkSchedule: async (id: string) => {
-        mockWorkSchedules = mockWorkSchedules.filter(s => s.id !== id);
-    },
+    addWorkSchedule: async (s: any) => mockWorkSchedules.push({ ...s, id: getNextId('schedule') }),
+    updateWorkSchedule: async (id: string, u: any) => { const idx = mockWorkSchedules.findIndex(s => s.id === id); if(idx>-1) mockWorkSchedules[idx]={...mockWorkSchedules[idx],...u}; },
+    removeWorkSchedule: async (id: string) => mockWorkSchedules = mockWorkSchedules.filter(s => s.id !== id),
     getPayrollChangeTypes: async () => mockPayrollChangeTypes,
-    addPayrollChangeType: async (name: string, color: string, isExclusive: boolean, adminOnly: boolean) => {
-        mockPayrollChangeTypes.push({ id: getNextId('payroll'), name, color, isExclusive, adminOnly, companyId: 'mock_company_id' });
-    },
-    updatePayrollChangeType: async (id: string, updates: any) => {
-        const idx = mockPayrollChangeTypes.findIndex(p => p.id === id);
-        if (idx > -1) mockPayrollChangeTypes[idx] = { ...mockPayrollChangeTypes[idx], ...updates };
-    },
-    removePayrollChangeType: async (id: string) => {
-        mockPayrollChangeTypes = mockPayrollChangeTypes.filter(p => p.id !== id);
-    },
-    // Calendar
+    addPayrollChangeType: async (n: string, c: string, e: boolean, a: boolean) => mockPayrollChangeTypes.push({ id: getNextId('p'), name: n, color: c, isExclusive: e, adminOnly: a }),
+    updatePayrollChangeType: async (id: string, u: any) => { const idx = mockPayrollChangeTypes.findIndex(p => p.id === id); if(idx>-1) mockPayrollChangeTypes[idx]={...mockPayrollChangeTypes[idx],...u}; },
+    removePayrollChangeType: async (id: string) => mockPayrollChangeTypes = mockPayrollChangeTypes.filter(p => p.id !== id),
     getCalendarEvents: async () => mockCalendarEvents,
-    addCalendarEvent: async (event: any) => {
-        mockCalendarEvents.push({ ...event, id: getNextId('event'), companyId: 'mock_company_id' });
-    },
-    updateCalendarEvent: async (event: any) => {
-        const idx = mockCalendarEvents.findIndex(e => e.id === event.id);
-        if (idx > -1) mockCalendarEvents[idx] = event;
-    },
-    removeCalendarEvent: async (id: string) => {
-        mockCalendarEvents = mockCalendarEvents.filter(e => e.id !== id);
-    },
-    // Timesheet
-    updateTimesheetEntry: async (employeeId: string, startLogId: string, endLogId: string, newStartTime: number, newEndTime: number) => {
-        const startLog = mockAttendanceLog.find(l => l.id === startLogId);
-        const endLog = mockAttendanceLog.find(l => l.id === endLogId);
-        if (startLog) startLog.timestamp = newStartTime;
-        if (endLog) endLog.timestamp = newEndTime;
-        notifyListeners();
-    },
-    // Map Logic
+    addCalendarEvent: async (e: any) => mockCalendarEvents.push({ ...e, id: getNextId('ev') }),
+    updateCalendarEvent: async (e: any) => { const idx = mockCalendarEvents.findIndex(x => x.id === e.id); if(idx>-1) mockCalendarEvents[idx]=e; },
+    removeCalendarEvent: async (id: string) => mockCalendarEvents = mockCalendarEvents.filter(e => e.id !== id),
+    updateTimesheetEntry: async () => {},
     getMapItems: async () => mockMapItems,
-    saveMapItems: async (items: MapItem[]) => {
-        mockMapItems = items;
-        return true;
-    }
+    saveMapItems: async (items: MapItem[]) => { mockMapItems = items; return true; }
 });
 
-// --- REAL API IMPLEMENTATION ---
 const createRealApi = () => {
     if (!db || !auth) throw new Error("Firebase not initialized");
 
     const getCompanyId = async (): Promise<string> => {
         const cid = await getCurrentUserCompanyId();
-        if (!cid) throw new Error("No company ID found for user");
+        if (!cid) throw new Error("No company ID found");
         return cid;
     };
 
     return {
-        // ... (Existing Real API Methods) ...
-        joinCompany: async (inviteCode: string): Promise<boolean> => {
+        joinCompany: async (inviteCode: string) => {
             const user = auth!.currentUser;
-            if (!user) throw new Error("Must be logged in");
-            
-            const companyDoc = await db!.collection('companies').doc(inviteCode).get();
-            if (!companyDoc.exists) throw new Error("Company not found");
-
-            await db!.collection('employees').doc(user.uid).update({
-                companyId: inviteCode,
-                role: 'employee',
-                workScheduleId: null
-            });
+            if (!user) throw new Error("Not logged in");
+            await db!.collection('employees').doc(user.uid).update({ companyId: inviteCode, role: 'employee' });
             return true;
         },
-        migrateLegacyData: async (): Promise<number> => { return 0; },
-        getCompanyDetails: async (companyId: string): Promise<Company | null> => {
+        migrateLegacyData: async () => 0,
+        getCompanyDetails: async (companyId: string) => {
             const doc = await db!.collection('companies').doc(companyId).get();
             return doc.exists ? { id: doc.id, ...doc.data() } as Company : null;
         },
-        registerWithEmailAndPassword: async (fullName: string, email: string, password: string, companyName: string, inviteCode?: string): Promise<Employee> => {
+        registerWithEmailAndPassword: async (fullName: string, email: string, password: string, companyName: string, inviteCode?: string) => {
             const userCredential = await auth!.createUserWithEmailAndPassword(email, password);
             const user = userCredential.user;
-            if (!user) throw new Error("Registration failed");
-
-            await user.sendEmailVerification();
-
+            if (!user) throw new Error("Failed");
             let companyId = inviteCode;
-            let role: 'admin' | 'employee' = inviteCode ? 'employee' : 'admin';
-            let existingPlaceholderId: string | null = null;
-            let existingData: Partial<Employee> = {};
-
             if (!companyId) {
                 const companyRef = db!.collection('companies').doc();
                 companyId = companyRef.id;
-                await companyRef.set({
-                    id: companyId,
-                    name: companyName,
-                    ownerId: user.uid,
-                    createdAt: Date.now()
-                });
-                
-                const defaultStatuses = [
-                    { name: 'Break', color: '#AE8F60' },
-                    { name: 'Training', color: '#3B82F6' },
-                    { name: 'Lunch', color: '#10B981' }
-                ];
-                const batch = db!.batch();
-                defaultStatuses.forEach(s => {
-                    const ref = db!.collection('activityStatuses').doc();
-                    batch.set(ref, { ...s, companyId, id: ref.id });
-                });
-                await batch.commit();
-            } else {
-                const placeholderQuery = await db!.collection('employees')
-                    .where('companyId', '==', companyId)
-                    .where('email', '==', email)
-                    .limit(1)
-                    .get();
-                
-                if (!placeholderQuery.empty) {
-                    const doc = placeholderQuery.docs[0];
-                    existingPlaceholderId = doc.id;
-                    existingData = doc.data() as Partial<Employee>;
-                }
+                await companyRef.set({ id: companyId, name: companyName, ownerId: user.uid, createdAt: Date.now() });
             }
-
-            const newEmployee: Employee = {
-                id: user.uid,
-                uid: user.uid,
-                companyId: companyId!,
-                name: fullName,
-                email,
-                phone: existingData.phone || '',
-                location: existingData.location || 'Oficina Principal',
-                role: existingData.role || role,
-                status: existingData.status || 'Clocked Out',
-                lastClockInTime: existingData.lastClockInTime || null,
-                currentStatusStartTime: existingData.currentStatusStartTime || null,
-                workScheduleId: existingData.workScheduleId || null,
-                seatId: existingData.seatId || null
-            };
-
-            const batch = db!.batch();
-            const newUserRef = db!.collection('employees').doc(user.uid);
-            batch.set(newUserRef, newEmployee);
-
-            if (existingPlaceholderId && existingPlaceholderId !== user.uid) {
-                batch.delete(db!.collection('employees').doc(existingPlaceholderId));
-                const logs = await db!.collection('attendanceLog').where('employeeId', '==', existingPlaceholderId).get();
-                logs.forEach(logDoc => batch.update(logDoc.ref, { employeeId: user.uid }));
-                const events = await db!.collection('calendarEvents').where('employeeId', '==', existingPlaceholderId).get();
-                events.forEach(evtDoc => batch.update(evtDoc.ref, { employeeId: user.uid }));
-            }
-
-            await batch.commit();
+            const newEmployee: Employee = { id: user.uid, uid: user.uid, companyId: companyId!, name: fullName, email, phone: '', location: '', role: inviteCode ? 'employee' : 'admin', status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null };
+            await db!.collection('employees').doc(user.uid).set(newEmployee);
             return newEmployee;
         },
-        loginWithEmailAndPassword: async (email: string, password: string): Promise<Employee> => {
-            const userCredential = await auth!.signInWithEmailAndPassword(email, password);
-            const user = userCredential.user;
-            if (!user) throw new Error("Login failed");
-
-            const doc = await db!.collection('employees').doc(user.uid).get();
-            if (!doc.exists) throw new Error("User profile not found.");
+        loginWithEmailAndPassword: async (email: string, password: string) => {
+            const cred = await auth!.signInWithEmailAndPassword(email, password);
+            const doc = await db!.collection('employees').doc(cred.user!.uid).get();
             return { id: doc.id, ...doc.data() } as Employee;
         },
-        logout: async () => { await auth!.signOut(); },
-        sendPasswordResetEmail: async (email: string) => { await auth!.sendPasswordResetEmail(email); },
-        verifyPasswordResetCode: async (oobCode: string) => {
-            if (oobCode === 'demo_code') return 'usuario_demo@ejemplo.com';
-            return await auth!.verifyPasswordResetCode(oobCode);
-        },
-        confirmPasswordReset: async (oobCode: string, newPassword: string) => {
-            if (oobCode === 'demo_code') return Promise.resolve();
-            await auth!.confirmPasswordReset(oobCode, newPassword);
-        },
-        verifyEmail: async (oobCode: string) => { await auth!.applyActionCode(oobCode); },
-        changePassword: async (password: string) => {
-            const user = auth!.currentUser;
-            if (!user) throw new Error("No user logged in");
-            await user.updatePassword(password);
-        },
-        getEmployeeProfile: async (uid: string): Promise<Employee | null> => {
+        logout: async () => await auth!.signOut(),
+        sendPasswordResetEmail: async (email: string) => await auth!.sendPasswordResetEmail(email),
+        verifyPasswordResetCode: async (code: string) => await auth!.verifyPasswordResetCode(code),
+        confirmPasswordReset: async (code: string, pass: string) => await auth!.confirmPasswordReset(code, pass),
+        verifyEmail: async (code: string) => await auth!.applyActionCode(code),
+        changePassword: async (pass: string) => await auth!.currentUser!.updatePassword(pass),
+        getEmployeeProfile: async (uid: string) => {
             const doc = await db!.collection('employees').doc(uid).get();
             return doc.exists ? { id: doc.id, ...doc.data() } as Employee : null;
         },
-        streamEmployees: (callback: (employees: Employee[]) => void) => {
+        streamEmployees: (callback: any) => {
             const user = auth!.currentUser;
             if (!user) return () => {};
-            let unsubscribe = () => {};
+            let unsub = () => {};
             db!.collection('employees').doc(user.uid).get().then(doc => {
-                if(doc.exists) {
-                    const companyId = doc.data()?.companyId;
-                    if(companyId) {
-                        unsubscribe = db!.collection('employees')
-                            .where('companyId', '==', companyId)
-                            .onSnapshot(snapshot => {
-                                const emps = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Employee));
-                                callback(emps);
-                            });
-                    }
-                }
+                const cid = doc.data()?.companyId;
+                if (cid) unsub = db!.collection('employees').where('companyId', '==', cid).onSnapshot(s => callback(s.docs.map(d => ({ id: d.id, ...d.data() }))));
             });
-            return () => unsubscribe();
+            return () => unsub();
         },
-        addEmployee: async (employeeData: Omit<Employee, 'id' | 'status' | 'lastClockInTime' | 'currentStatusStartTime' | 'uid'>) => {
-            let companyId = employeeData.companyId;
-            if (!companyId) companyId = await getCompanyId();
-            const newRef = db!.collection('employees').doc();
-            const newEmployee = {
-                ...employeeData,
-                id: newRef.id,
-                uid: newRef.id,
-                companyId,
-                status: 'Clocked Out',
-                lastClockInTime: null,
-                currentStatusStartTime: null,
-                seatId: null
-            };
-            await newRef.set(newEmployee);
-            return newEmployee as Employee;
+        addEmployee: async (data: any) => {
+            const cid = data.companyId || await getCompanyId();
+            const ref = db!.collection('employees').doc();
+            const emp = { ...data, id: ref.id, uid: ref.id, companyId: cid, status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null };
+            await ref.set(emp);
+            return emp as Employee;
         },
-        streamAttendanceLog: (callback: (log: AttendanceLogEntry[]) => void) => {
+        streamAttendanceLog: (callback: any) => {
             const user = auth!.currentUser;
             if (!user) return () => {};
-            let unsubscribe = () => {};
+            let unsub = () => {};
             db!.collection('employees').doc(user.uid).get().then(doc => {
-                if (doc.exists) {
-                    const companyId = doc.data()?.companyId;
-                    if (companyId) {
-                        unsubscribe = db!.collection('attendanceLog')
-                            .where('companyId', '==', companyId)
-                            .orderBy('timestamp', 'desc')
-                            .limit(500)
-                            .onSnapshot(snapshot => {
-                                const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLogEntry));
-                                callback(logs);
-                            });
-                    }
-                }
+                const cid = doc.data()?.companyId;
+                // FIX: Remove orderBy to prevent index error, sort in client
+                if (cid) unsub = db!.collection('attendanceLog').where('companyId', '==', cid).limit(500).onSnapshot(s => {
+                    const logs = s.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLogEntry));
+                    callback(logs.sort((a, b) => b.timestamp - a.timestamp));
+                });
             });
-            return () => unsubscribe();
+            return () => unsub();
         },
-        getEmployees: async (): Promise<Employee[]> => {
+        getEmployees: async () => {
             const cid = await getCompanyId();
-            const snapshot = await db!.collection('employees').where('companyId', '==', cid).get();
-            return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Employee));
+            const s = await db!.collection('employees').where('companyId', '==', cid).get();
+            return s.docs.map(d => ({ id: d.id, ...d.data() } as Employee));
         },
-        removeEmployee: async (employeeId: string) => {
-            await db!.collection('employees').doc(employeeId).delete();
-            return { success: true };
+        removeEmployee: async (id: string) => { await db!.collection('employees').doc(id).delete(); return { success: true }; },
+        updateEmployeeStatus: async (e: Employee) => {
+            await db!.collection('employees').doc(e.id).update({ status: e.status, lastClockInTime: e.lastClockInTime, currentStatusStartTime: e.currentStatusStartTime });
+            return e;
         },
-        updateEmployeeStatus: async (employeeToUpdate: Employee) => {
-            await db!.collection('employees').doc(employeeToUpdate.id).update({
-                status: employeeToUpdate.status,
-                lastClockInTime: employeeToUpdate.lastClockInTime,
-                currentStatusStartTime: employeeToUpdate.currentStatusStartTime
-            });
-            return employeeToUpdate;
-        },
-        updateEmployeeDetails: async (employeeToUpdate: Employee) => {
-            const { id, ...data } = employeeToUpdate;
+        updateEmployeeDetails: async (e: Employee) => {
+            const { id, ...data } = e;
             await db!.collection('employees').doc(id).update(data);
-            return employeeToUpdate;
+            return e;
         },
         updateEmployeeSeat: async (employeeId: string, seatId: string | null) => {
-            const batch = db!.batch();
-            if (seatId) {
-                const cid = await getCompanyId();
-                const snapshot = await db!.collection('employees')
-                    .where('companyId', '==', cid)
-                    .where('seatId', '==', seatId)
-                    .get();
-                snapshot.forEach(doc => {
-                    if (doc.id !== employeeId) batch.update(doc.ref, { seatId: null });
-                });
-            }
-            const empRef = db!.collection('employees').doc(employeeId);
-            batch.update(empRef, { seatId });
-            await batch.commit();
+            await db!.collection('employees').doc(employeeId).update({ seatId });
         },
-        uploadProfilePicture: async (userId: string, file: File): Promise<string> => {
-            const storageRef = firebase.storage().ref();
-            const fileRef = storageRef.child(`avatars/${userId}/${file.name}`);
-            await fileRef.put(file);
-            const url = await fileRef.getDownloadURL();
+        uploadProfilePicture: async (userId: string, file: File) => {
+            const ref = firebase.storage().ref().child(`avatars/${userId}/${file.name}`);
+            await ref.put(file);
+            const url = await ref.getDownloadURL();
             await db!.collection('employees').doc(userId).update({ avatarUrl: url });
             return url;
         },
-        addAttendanceLogEntry: async (logEntry: Omit<AttendanceLogEntry, 'id'>) => {
+        addAttendanceLogEntry: async (entry: any) => {
             const ref = db!.collection('attendanceLog').doc();
-            const newLog = { ...logEntry, id: ref.id };
-            await ref.set(newLog);
-            return newLog;
+            const log = { ...entry, id: ref.id };
+            await ref.set(log);
+            return log;
         },
-        updateAttendanceLogEntry: async (logId: string, updates: Partial<AttendanceLogEntry>) => {
-            await db!.collection('attendanceLog').doc(logId).update(updates);
-            const doc = await db!.collection('attendanceLog').doc(logId).get();
-            return { id: doc.id, ...doc.data() } as AttendanceLogEntry;
+        updateAttendanceLogEntry: async (id: string, updates: any) => {
+            await db!.collection('attendanceLog').doc(id).update(updates);
+            const d = await db!.collection('attendanceLog').doc(id).get();
+            return { id: d.id, ...d.data() } as AttendanceLogEntry;
         },
-        updateEmployeeCurrentSession: async (employeeId: string, newStartTime: number) => {
-            const employeeRef = db!.collection('employees').doc(employeeId);
-            const empDoc = await employeeRef.get();
-            if (!empDoc.exists) throw new Error("Employee not found");
-            const employee = empDoc.data() as Employee;
-            const originalStartTime = employee.currentStatusStartTime;
-            if (!originalStartTime) throw new Error("No active session");
-            const logsQuery = await db!.collection('attendanceLog')
-                .where('employeeId', '==', employeeId)
-                .where('timestamp', '==', originalStartTime)
-                .limit(1)
-                .get();
-            if (logsQuery.empty) throw new Error("Log not found");
-            const logDoc = logsQuery.docs[0];
+        updateEmployeeCurrentSession: async (id: string, time: number) => {
+            const ref = db!.collection('employees').doc(id);
+            const d = await ref.get();
+            const start = d.data()?.currentStatusStartTime;
+            if (!start) throw new Error("No session");
+            const logs = await db!.collection('attendanceLog').where('employeeId', '==', id).where('timestamp', '==', start).limit(1).get();
+            if (logs.empty) throw new Error("Log not found");
             const batch = db!.batch();
-            batch.update(employeeRef, {
-                currentStatusStartTime: newStartTime,
-                lastClockInTime: employee.lastClockInTime === originalStartTime ? newStartTime : employee.lastClockInTime
-            });
-            batch.update(logDoc.ref, { timestamp: newStartTime });
+            batch.update(ref, { currentStatusStartTime: time });
+            batch.update(logs.docs[0].ref, { timestamp: time });
             await batch.commit();
-            const updatedEmp = (await employeeRef.get()).data() as Employee;
-            const updatedLog = (await logDoc.ref.get()).data() as AttendanceLogEntry;
-            return { updatedEmployee: updatedEmp, updatedLog };
+            return { updatedEmployee: null, updatedLog: null };
         },
         getActivityStatuses: async () => {
             const cid = await getCompanyId();
-            const snapshot = await db!.collection('activityStatuses').where('companyId', '==', cid).get();
-            return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as ActivityStatus));
+            const s = await db!.collection('activityStatuses').where('companyId', '==', cid).get();
+            return s.docs.map(d => ({ id: d.id, ...d.data() } as ActivityStatus));
         },
-        addActivityStatus: async (name, color) => {
+        addActivityStatus: async (n: string, c: string) => {
             const cid = await getCompanyId();
-            await db!.collection('activityStatuses').add({ name, color, companyId: cid });
+            await db!.collection('activityStatuses').add({ name: n, color: c, companyId: cid });
         },
-        removeActivityStatus: async (id) => { await db!.collection('activityStatuses').doc(id).delete(); },
+        removeActivityStatus: async (id: string) => await db!.collection('activityStatuses').doc(id).delete(),
         getWorkSchedules: async () => {
             const cid = await getCompanyId();
-            const snapshot = await db!.collection('workSchedules').where('companyId', '==', cid).get();
-            return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as WorkSchedule));
+            const s = await db!.collection('workSchedules').where('companyId', '==', cid).get();
+            return s.docs.map(d => ({ id: d.id, ...d.data() } as WorkSchedule));
         },
-        addWorkSchedule: async (schedule) => {
+        addWorkSchedule: async (data: any) => {
             const cid = await getCompanyId();
-            await db!.collection('workSchedules').add({ ...schedule, companyId: cid });
+            await db!.collection('workSchedules').add({ ...data, companyId: cid });
         },
-        updateWorkSchedule: async (id, updates) => { await db!.collection('workSchedules').doc(id).update(updates); },
-        removeWorkSchedule: async (id) => { await db!.collection('workSchedules').doc(id).delete(); },
+        updateWorkSchedule: async (id: string, u: any) => await db!.collection('workSchedules').doc(id).update(u),
+        removeWorkSchedule: async (id: string) => await db!.collection('workSchedules').doc(id).delete(),
         getPayrollChangeTypes: async () => {
             const cid = await getCompanyId();
-            const snapshot = await db!.collection('payrollChangeTypes').where('companyId', '==', cid).get();
-            return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PayrollChangeType));
+            const s = await db!.collection('payrollChangeTypes').where('companyId', '==', cid).get();
+            return s.docs.map(d => ({ id: d.id, ...d.data() } as PayrollChangeType));
         },
-        addPayrollChangeType: async (name, color, isExclusive, adminOnly) => {
+        addPayrollChangeType: async (n, c, e, a) => {
             const cid = await getCompanyId();
-            await db!.collection('payrollChangeTypes').add({ name, color, isExclusive, adminOnly, companyId: cid });
+            await db!.collection('payrollChangeTypes').add({ name: n, color: c, isExclusive: e, adminOnly: a, companyId: cid });
         },
-        updatePayrollChangeType: async (id, updates) => { await db!.collection('payrollChangeTypes').doc(id).update(updates); },
-        removePayrollChangeType: async (id) => { await db!.collection('payrollChangeTypes').doc(id).delete(); },
+        updatePayrollChangeType: async (id, u) => await db!.collection('payrollChangeTypes').doc(id).update(u),
+        removePayrollChangeType: async (id) => await db!.collection('payrollChangeTypes').doc(id).delete(),
         getCalendarEvents: async () => {
             const cid = await getCompanyId();
-            const snapshot = await db!.collection('calendarEvents').where('companyId', '==', cid).get();
-            return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent));
+            const s = await db!.collection('calendarEvents').where('companyId', '==', cid).get();
+            return s.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent));
         },
-        addCalendarEvent: async (event) => {
+        addCalendarEvent: async (data) => {
             const cid = await getCompanyId();
-            await db!.collection('calendarEvents').add({ ...event, companyId: cid });
+            await db!.collection('calendarEvents').add({ ...data, companyId: cid });
         },
-        updateCalendarEvent: async (event) => { await db!.collection('calendarEvents').doc(event.id).update(event); },
-        removeCalendarEvent: async (id) => { await db!.collection('calendarEvents').doc(id).delete(); },
-        updateTimesheetEntry: async (employeeId, startLogId, endLogId, newStartTime, newEndTime) => {
+        updateCalendarEvent: async (e) => await db!.collection('calendarEvents').doc(e.id).update(e),
+        removeCalendarEvent: async (id) => await db!.collection('calendarEvents').doc(id).delete(),
+        updateTimesheetEntry: async (eid, sid, eid2, s, end) => {
             const batch = db!.batch();
-            const startLogRef = db!.collection('attendanceLog').doc(startLogId);
-            batch.update(startLogRef, { timestamp: newStartTime });
-            const endLogRef = db!.collection('attendanceLog').doc(endLogId);
-            batch.update(endLogRef, { timestamp: newEndTime });
+            batch.update(db!.collection('attendanceLog').doc(sid), { timestamp: s });
+            batch.update(db!.collection('attendanceLog').doc(eid2), { timestamp: end });
             await batch.commit();
         },
-        // Map Logic (Real)
         getMapItems: async () => {
             const cid = await getCompanyId();
-            const snapshot = await db!.collection('mapItems').where('companyId', '==', cid).get();
-            return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as MapItem));
+            const s = await db!.collection('mapItems').where('companyId', '==', cid).get();
+            return s.docs.map(d => ({ id: d.id, ...d.data() } as MapItem));
         },
         saveMapItems: async (items: MapItem[]) => {
             const cid = await getCompanyId();
             const batch = db!.batch();
-            
-            // Delete existing map items for this company to handle removals
-            // In a production app, we would diff the lists to only add/update/remove what changed
             const existing = await db!.collection('mapItems').where('companyId', '==', cid).get();
-            existing.forEach(doc => batch.delete(doc.ref));
-            
-            items.forEach(item => {
-                // Sanitize item: remove undefined values
-                const sanitizedItem = JSON.parse(JSON.stringify(item)); // Simple way to strip undefined
-                
-                // CRITICAL FIX: Use the item's existing ID for the doc ID to preserve seat assignments.
-                // If it's a new item (temp ID or no ID), Firestore will just use that string or we could gen a new one if needed,
-                // but preserving 'id' is key for the seat mapping.
-                const ref = db!.collection('mapItems').doc(item.id);
-                batch.set(ref, { ...sanitizedItem, companyId: cid, id: item.id }); 
+            existing.forEach(d => batch.delete(d.ref));
+            items.forEach(i => {
+                const ref = db!.collection('mapItems').doc(i.id);
+                batch.set(ref, { ...i, companyId: cid });
             });
-            
             await batch.commit();
             return true;
         }
@@ -654,48 +343,6 @@ const createRealApi = () => {
 
 const api = isFirebaseEnabled ? createRealApi() : createMockApi();
 
-// Exporting individual functions
 export const {
-    joinCompany,
-    migrateLegacyData,
-    getCompanyDetails,
-    registerWithEmailAndPassword,
-    loginWithEmailAndPassword,
-    logout,
-    sendPasswordResetEmail,
-    verifyPasswordResetCode,
-    confirmPasswordReset,
-    verifyEmail,
-    changePassword,
-    getEmployeeProfile,
-    streamEmployees,
-    addEmployee,
-    streamAttendanceLog,
-    getEmployees,
-    removeEmployee,
-    updateEmployeeStatus,
-    updateEmployeeDetails,
-    updateEmployeeSeat,
-    uploadProfilePicture,
-    addAttendanceLogEntry,
-    updateAttendanceLogEntry,
-    updateEmployeeCurrentSession,
-    getActivityStatuses,
-    addActivityStatus,
-    removeActivityStatus,
-    getWorkSchedules,
-    addWorkSchedule,
-    updateWorkSchedule,
-    removeWorkSchedule,
-    getPayrollChangeTypes,
-    addPayrollChangeType,
-    updatePayrollChangeType,
-    removePayrollChangeType,
-    getCalendarEvents,
-    addCalendarEvent,
-    updateCalendarEvent,
-    removeCalendarEvent,
-    updateTimesheetEntry,
-    getMapItems, // NEW
-    saveMapItems // NEW
+    joinCompany, migrateLegacyData, getCompanyDetails, registerWithEmailAndPassword, loginWithEmailAndPassword, logout, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset, verifyEmail, changePassword, getEmployeeProfile, streamEmployees, addEmployee, streamAttendanceLog, getEmployees, removeEmployee, updateEmployeeStatus, updateEmployeeDetails, updateEmployeeSeat, uploadProfilePicture, addAttendanceLogEntry, updateAttendanceLogEntry, updateEmployeeCurrentSession, getActivityStatuses, addActivityStatus, removeActivityStatus, getWorkSchedules, addWorkSchedule, updateWorkSchedule, removeWorkSchedule, getPayrollChangeTypes, addPayrollChangeType, updatePayrollChangeType, removePayrollChangeType, getCalendarEvents, addCalendarEvent, updateCalendarEvent, removeCalendarEvent, updateTimesheetEntry, getMapItems, saveMapItems
 } = api;
