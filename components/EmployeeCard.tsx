@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Employee, AttendanceAction, ActivityStatus } from '../types';
 import ActivityPickerModal from '../components/ActivityPickerModal';
-import { EditIcon } from '../components/Icons';
+import { EditIcon, AlertIcon } from '../components/Icons';
 
 interface EmployeeCardProps {
   employee: Employee;
@@ -28,7 +28,6 @@ const getInitials = (name: string) => {
   return name.substring(0, 2).toUpperCase();
 };
 
-
 const StatusIndicator: React.FC<{ status: Employee['status'], activityStatuses: ActivityStatus[] }> = ({ status, activityStatuses }) => {
   const baseClasses = "px-2 py-0.5 text-xs font-semibold rounded-full";
   const customStatus = activityStatuses.find(s => s.name === status);
@@ -50,8 +49,12 @@ const StatusIndicator: React.FC<{ status: Employee['status'], activityStatuses: 
 const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemove, onEditTime, activityStatuses, userRole }) => {
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+  const [isMobileDevice, setIsMobileDevice] = useState(false);
 
   useEffect(() => {
+    const mobileCheck = /Mobi|Android|iPhone/i.test(navigator.userAgent);
+    setIsMobileDevice(mobileCheck);
+
     if (employee.status !== 'Clocked Out' && employee.currentStatusStartTime) {
       setElapsedTime(Math.floor((Date.now() - (employee.currentStatusStartTime || 0)) / 1000));
       const interval = setInterval(() => {
@@ -73,6 +76,8 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
     onEditTime(employee.id);
   };
 
+  const isMobileRestricted = isMobileDevice && employee.allowMobileClockIn === false;
+
   const renderButtons = () => {
     const baseButtonClass = "w-full text-center font-bold py-2 px-4 rounded-lg transition-all duration-300 shadow-md transform hover:scale-105";
     const primaryButtonClass = `${baseButtonClass} bg-bokara-grey hover:bg-bokara-grey/90 text-bright-white`;
@@ -80,6 +85,14 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
 
     switch (employee.status) {
       case 'Clocked Out':
+        if (isMobileRestricted && userRole === 'employee') {
+            return (
+                <div className="bg-red-50 border border-red-100 p-2 rounded-lg flex items-center gap-2 text-red-700">
+                    <AlertIcon className="w-5 h-5 flex-shrink-0" />
+                    <span className="text-[10px] leading-tight font-bold">ACCESO MÓVIL RESTRINGIDO POR ADMINISTRADOR</span>
+                </div>
+            );
+        }
         return (
           <button onClick={() => onAction(employee.id, 'Clock In')} className={primaryButtonClass}>
             Clock In
@@ -96,7 +109,7 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
             </button>
           </div>
         );
-      default: // This handles all custom activities like 'Break', 'Training', etc.
+      default:
         const customStatus = activityStatuses.find(s => s.name === employee.status);
         const endButtonColor = customStatus ? customStatus.color : '#AE8F60';
         return (

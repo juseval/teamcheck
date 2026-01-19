@@ -28,6 +28,10 @@ export interface Employee {
   hireDate?: number; // Timestamp of employment start
   terminationDate?: number; // Optional timestamp of employment end
   manualVacationAdjustment?: number; // Historical days balance (+ or -)
+  // --- New Security / Clock In Permissions ---
+  allowMobileClockIn?: boolean;
+  autoClockOut24h?: boolean;
+  blockEarlyClockIn?: boolean;
 }
 
 export type AttendanceAction = string;
@@ -43,6 +47,7 @@ export interface AttendanceLogEntry {
   correctionRequest?: string; // The message from the employee
   correctionStatus?: 'pending' | 'approved' | 'rejected';
   adminResponse?: string; // Context/Reason from admin
+  isAutoLog?: boolean; // If system performed the action
 }
 
 export interface TimeEntry {

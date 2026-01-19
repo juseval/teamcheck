@@ -19,6 +19,7 @@ interface CalendarDay {
   isCurrentMonth: boolean;
   isToday: boolean;
   dayOfMonth: number;
+  isPast: boolean;
   events: {
     event: CalendarEvent;
     isMine: boolean;
@@ -62,7 +63,42 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
         }
     }, [visibleTypes, viewType, newRequestType, editingEvent]);
 
-    // --- LÓGICA DE VACACIONES (15 DÍAS POR CADA 360 LABORADOS) ---
+    const quotaInfo = useMemo(() => {
+        const selectedType = payrollChangeTypes.find(t => t.name === newRequestType);
+        if (!selectedType || !selectedType.yearlyQuota) return null;
+
+        const currentYear = new Date().getFullYear();
+        const usedThisYear = events.filter(e => {
+            const startDate = new Date(e.startDate);
+            return e.employeeId === currentUser.id && 
+                   e.type === newRequestType && 
+                   e.status !== 'rejected' &&
+                   startDate.getFullYear() === currentYear;
+        }).length;
+
+        return {
+            current: usedThisYear,
+            max: selectedType.yearlyQuota
+        };
+    }, [newRequestType, events, currentUser.id, payrollChangeTypes]);
+
+    const handleDayClick = (date: Date, isPast: boolean) => {
+        if (isPast) return; // No permitir abrir modal en días pasados
+        const dateStr = date.toISOString().split('T')[0];
+        setNewRequestStartDate(dateStr);
+        setNewRequestEndDate(dateStr);
+        setEditingEvent(null);
+        setIsRequestModalOpen(true);
+    };
+
+    const handleEditRequest = (event: CalendarEvent) => {
+        setEditingEvent(event);
+        setNewRequestType(event.type);
+        setNewRequestStartDate(event.startDate);
+        setNewRequestEndDate(event.endDate);
+        setIsRequestModalOpen(true);
+    };
+
     const vacationStats = useMemo(() => {
         if (!currentUser.hireDate) return { accrued: "0.00", taken: "0.0", pending: "0.00" };
         
@@ -82,12 +118,8 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
         if (m1 === 2 && d1 >= 28) d1 = 30;
         if (m2 === 2 && d2 >= 28) d2 = 30;
 
-        // Días contables base 360 (Inclusivo +1)
         const accountingDays = ((y2 - y1) * 360) + ((m2 - m1) * 30) + (d2 - d1) + 1;
-        
-        // Fórmula exacta para 15 días/año (Equivale a 1.25 por mes)
         const accruedBase = (accountingDays * 15) / 360;
-        
         const adjustment = currentUser.manualVacationAdjustment || 0;
 
         let taken = 0;
@@ -107,72 +139,66 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
         };
     }, [currentUser, events]);
 
-    // --- QUOTA VALIDATION ---
-    const quotaInfo = useMemo(() => {
-        const type = payrollChangeTypes.find(t => t.name === newRequestType);
-        if (!type || !type.yearlyQuota) return null;
-
-        const currentYear = new Date().getFullYear();
-        const count = events.filter(e => 
-            e.employeeId === currentUser.id && 
-            e.type === newRequestType && 
-            e.status !== 'rejected' &&
-            new Date(e.startDate).getFullYear() === currentYear
-        ).length;
-
-        return { current: count, max: type.yearlyQuota };
-    }, [newRequestType, events, currentUser.id, payrollChangeTypes]);
-
-    const handleDayClick = (date: Date) => {
-        setEditingEvent(null);
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const dateStr = `${year}-${month}-${day}`;
-        setNewRequestStartDate(dateStr);
-        setNewRequestEndDate(dateStr);
-        setIsRequestModalOpen(true);
-    };
-
-    const handleEditRequest = (event: CalendarEvent) => {
-        setEditingEvent(event);
-        setNewRequestType(event.type);
-        setNewRequestStartDate(event.startDate);
-        setNewRequestEndDate(event.endDate);
-        setIsRequestModalOpen(true);
-    };
-
     const calendarGrid = useMemo(() => {
         const year = currentDate.getFullYear();
         const month = currentDate.getMonth();
         const firstDayOfMonth = new Date(year, month, 1);
         const lastDayOfMonth = new Date(year, month + 1, 0);
         const days: CalendarDay[] = [];
+        
         let startDayOfWeek = firstDayOfMonth.getDay(); 
         startDayOfWeek = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1; 
+
+        const today = new Date();
+        today.setHours(0,0,0,0);
+
         for (let i = 0; i < startDayOfWeek; i++) {
             const date = new Date(firstDayOfMonth);
             date.setDate(date.getDate() - (startDayOfWeek - i));
-            days.push({ date, isCurrentMonth: false, isToday: false, dayOfMonth: date.getDate(), events: [] });
+            days.push({ 
+                date, 
+                isCurrentMonth: false, 
+                isToday: false, 
+                dayOfMonth: date.getDate(), 
+                isPast: date < today,
+                events: [] 
+            });
         }
-        const today = new Date();
+
         for (let i = 1; i <= lastDayOfMonth.getDate(); i++) {
             const date = new Date(year, month, i);
             const isToday = date.toDateString() === today.toDateString();
-            days.push({ date, isCurrentMonth: true, isToday, dayOfMonth: i, events: [] });
+            days.push({ 
+                date, 
+                isCurrentMonth: true, 
+                isToday, 
+                dayOfMonth: i, 
+                isPast: date < today,
+                events: [] 
+            });
         }
+
         const remainingDays = 42 - days.length; 
         for (let i = 1; i <= remainingDays; i++) {
             const date = new Date(lastDayOfMonth);
             date.setDate(date.getDate() + i);
-            days.push({ date, isCurrentMonth: false, isToday: false, dayOfMonth: date.getDate(), events: [] });
+            days.push({ 
+                date, 
+                isCurrentMonth: false, 
+                isToday: false, 
+                dayOfMonth: date.getDate(), 
+                isPast: date < today,
+                events: [] 
+            });
         }
+
         const selectedTypeConfig = payrollChangeTypes.find(t => t.name === viewType);
         events.forEach(event => {
             if (event.status === 'rejected') return;
             const startDate = new Date(event.startDate + 'T00:00:00');
             const endDate = new Date(event.endDate + 'T00:00:00');
             const isMine = event.employeeId === currentUser.id;
+            
             for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
                 const dayStr = d.toISOString().split('T')[0];
                 const dayInGrid = days.find(day => day.date.toISOString().split('T')[0] === dayStr);
@@ -180,7 +206,9 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                     if (!isMine && selectedTypeConfig?.isExclusive && event.type === viewType && event.status === 'approved') dayInGrid.isBlocked = true;
                     if (isMine) {
                         dayInGrid.events.push({
-                            event, isMine: true, color: eventColorMap.get(event.type) || '#91A673',
+                            event, 
+                            isMine: true, 
+                            color: eventColorMap.get(event.type) || '#91A673',
                             label: event.status === 'pending' ? `${event.type} (Pendiente)` : event.type
                         });
                     }
@@ -202,8 +230,6 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
 
     return (
         <div className="w-full mx-auto animate-fade-in flex flex-col gap-6">
-            
-            {/* LIBRO DE VACACIONES - Resumen Horizontal */}
             <div className="bg-white rounded-xl shadow-md border border-bokara-grey/10 p-6">
                 <div className="flex flex-col sm:flex-row items-center justify-start gap-8 sm:gap-16">
                     <div className="text-left">
@@ -246,7 +272,9 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                 <div className="lg:col-span-2 bg-white rounded-xl shadow-md border border-bokara-grey/10 p-6 flex flex-col">
                     <div className="mb-6 flex flex-col sm:flex-row gap-4 items-center">
                         <div className="bg-[#F3F0E9] p-3 rounded-2xl border border-[#E5E0D6] flex items-center gap-4 w-full shadow-sm">
-                            <div className="bg-white p-3 rounded-xl shadow-sm text-lucius-lime border border-[#E5E0D6] flex-shrink-0"><FilterIcon className="w-6 h-6" /></div>
+                            <div className="bg-white p-3 rounded-xl shadow-sm text-lucius-lime border border-[#E5E0D6] flex-shrink-0">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            </div>
                             <div className="flex-grow min-w-0">
                                 <label className="block text-[10px] font-bold text-lucius-lime uppercase tracking-widest mb-0.5">Vista de Calendario</label>
                                 <select className="appearance-none bg-transparent font-bold text-bokara-grey text-lg w-full focus:outline-none" value={viewType} onChange={(e) => setViewType(e.target.value)}>
@@ -259,7 +287,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                     <div className="flex justify-between items-center mb-4">
                         <div className="flex items-center gap-2">
                              <button onClick={handlePrevMonth} className="p-1 rounded hover:bg-whisper-white transition-colors cursor-pointer"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg></button>
-                             <span className="text-lg font-bold capitalize w-32 text-center text-bokara-grey">{currentDate.toLocaleString('es-ES', { month: 'long' })} {currentDate.getFullYear()}</span>
+                             <span className="text-lg font-bold capitalize w-48 text-center text-bokara-grey">{currentDate.toLocaleString('es-ES', { month: 'long' })} {currentDate.getFullYear()}</span>
                              <button onClick={handleNextMonth} className="p-1 rounded hover:bg-whisper-white transition-colors cursor-pointer"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg></button>
                         </div>
                         <button onClick={handleToday} className="text-sm text-lucius-lime font-bold hover:underline bg-lucius-lime/10 px-3 py-1 rounded-full transition-colors cursor-pointer">Hoy</button>
@@ -270,11 +298,19 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                     </div>
                     <div className="grid grid-cols-7 gap-1 flex-grow">
                         {calendarGrid.map((day, idx) => (
-                            <div key={idx} onClick={() => !day.isBlocked && handleDayClick(day.date)} className={`min-h-[80px] p-1 border rounded-md relative flex flex-col transition-colors ${day.isBlocked ? 'bg-gray-100 cursor-not-allowed' : (!day.isCurrentMonth ? 'bg-whisper-white/30 cursor-pointer hover:bg-white' : 'bg-white cursor-pointer hover:bg-lucius-lime/5')} ${day.isToday ? 'border-lucius-lime ring-1 ring-lucius-lime' : 'border-bokara-grey/10'}`}>
+                            <div 
+                                key={idx} 
+                                onClick={() => handleDayClick(day.date, day.isPast)} 
+                                className={`min-h-[80px] p-1 border rounded-md relative flex flex-col transition-colors ${
+                                    day.isBlocked ? 'bg-gray-100 cursor-not-allowed' : 
+                                    day.isPast ? 'bg-gray-50 cursor-not-allowed opacity-60' :
+                                    (!day.isCurrentMonth ? 'bg-whisper-white/30 cursor-pointer hover:bg-white' : 'bg-white cursor-pointer hover:bg-lucius-lime/5')
+                                } ${day.isToday ? 'border-lucius-lime ring-1 ring-lucius-lime' : 'border-bokara-grey/10'}`}
+                            >
                                 <div className={`text-xs text-right mb-1 ${day.isToday ? 'font-bold text-lucius-lime' : 'text-bokara-grey/50'}`}>{day.dayOfMonth}</div>
                                 {day.isBlocked ? (
                                     <div className="flex-grow flex items-center justify-center">
-                                        <span className="text-[9px] font-bold text-gray-400 bg-gray-200/50 px-1 py-0.5 rounded text-center leading-tight">OCUPADO</span>
+                                        <span className="text-[9px] font-bold text-gray-400 bg-gray-200/50 px-1 py-0.5 rounded text-center leading-tight uppercase">Ocupado</span>
                                     </div>
                                 ) : (
                                     <div className="space-y-1">
@@ -293,26 +329,34 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                 <div className="bg-white rounded-xl shadow-md border border-bokara-grey/10 p-6 flex flex-col">
                     <h3 className="font-bold text-bokara-grey mb-4 border-b border-bokara-grey/5 pb-2">Mis Solicitudes</h3>
                     <div className="space-y-3 overflow-y-auto flex-grow max-h-[500px] pr-1">
-                        {myRequests.map(req => (
-                            <div key={req.id} className="p-3 bg-whisper-white/50 rounded-lg border border-bokara-grey/5 hover:bg-whisper-white transition-colors group">
-                                <div className="flex justify-between items-start mb-1">
-                                    <span className="font-bold text-sm text-bokara-grey">{req.type}</span>
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
-                                        req.status === 'approved' ? 'bg-green-100 text-green-700' : 
-                                        req.status === 'rejected' ? 'bg-red-100 text-red-700' : 
-                                        'bg-yellow-100 text-yellow-700'
-                                    }`}>{req.status === 'approved' ? 'Aprobado' : req.status === 'rejected' ? 'Rechazado' : 'Pendiente'}</span>
+                        {myRequests.map(req => {
+                            const today = new Date();
+                            today.setHours(0,0,0,0);
+                            const isPast = new Date(req.endDate + 'T00:00:00') < today;
+                            return (
+                                <div key={req.id} className={`p-3 rounded-lg border border-bokara-grey/5 transition-colors group bg-whisper-white/50 hover:bg-whisper-white`}>
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className="font-bold text-sm text-bokara-grey">{req.type}</span>
+                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                                            req.status === 'approved' ? 'bg-green-100 text-green-700' : 
+                                            req.status === 'rejected' ? 'bg-red-100 text-red-700' : 
+                                            'bg-yellow-100 text-yellow-700'
+                                        }`}>{req.status === 'approved' ? 'Aprobado' : req.status === 'rejected' ? 'Rechazado' : 'Pendiente'}</span>
+                                    </div>
+                                    <div className="text-[11px] text-bokara-grey/70 font-mono mt-1 flex justify-between items-center">
+                                        <span>{req.startDate} ➜ {req.endDate}</span>
+                                        <div className="flex items-center gap-2">
+                                            {isPast && <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">Histórico</span>}
+                                            {req.status === 'pending' && !isPast && (
+                                                <button onClick={() => handleEditRequest(req)} className="p-1 hover:bg-lucius-lime/10 rounded text-lucius-lime transition-all">
+                                                    <EditIcon className="w-3.5 h-3.5" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="text-[11px] text-bokara-grey/70 font-mono mt-1 flex justify-between items-center">
-                                    <span>{req.startDate} ➜ {req.endDate}</span>
-                                    {req.status === 'pending' && (
-                                        <button onClick={() => handleEditRequest(req)} className="p-1 hover:bg-lucius-lime/10 rounded text-lucius-lime">
-                                            <EditIcon className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                         {myRequests.length === 0 && <p className="text-center py-12 text-sm text-bokara-grey/40">No tienes solicitudes registradas.</p>}
                     </div>
                 </div>
@@ -345,9 +389,6 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                             <div className="grid grid-cols-2 gap-4">
                                 <div><label className="block text-xs font-bold text-lucius-lime uppercase tracking-widest mb-1.5">Desde</label><input type="date" className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-sm" value={newRequestStartDate} onChange={e => setNewRequestStartDate(e.target.value)} required /></div>
                                 <div><label className="block text-xs font-bold text-lucius-lime uppercase tracking-widest mb-1.5">Hasta</label><input type="date" className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-sm" value={newRequestEndDate} onChange={e => setNewRequestEndDate(e.target.value)} required /></div>
-                            </div>
-                            <div className="bg-blue-50 p-3 rounded-lg text-[10px] text-blue-700 leading-relaxed font-medium">
-                                ℹ️ Recuerda que según la ley, las vacaciones se deben tomar por un mínimo de 6 días consecutivos y no se cuentan domingos ni festivos para el descuento de tu saldo.
                             </div>
                             <div className="flex justify-end gap-3 mt-8">
                                 <button type="button" onClick={() => setIsRequestModalOpen(false)} className="px-5 py-2.5 bg-gray-100 rounded-lg font-bold text-bokara-grey text-sm">Cancelar</button>
