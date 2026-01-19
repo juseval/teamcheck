@@ -98,29 +98,33 @@ const AppContent: React.FC = () => {
     currentPageRef.current = currentPage;
   }, [currentPage]);
 
-  // --- AUTO CLOCK OUT LOGIC (24h) ---
+  // --- REFINED AUTO CLOCK OUT LOGIC (Exitosamente 24h) ---
   useEffect(() => {
-    if (!employees.length) return;
+    if (!employees || employees.length === 0) return;
 
     const checkAutoClockOut = async () => {
         const now = Date.now();
-        const MAX_SESSION = 24 * 60 * 60 * 1000; // 24 hours
+        const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
         for (const emp of employees) {
-            if (emp.status !== 'Clocked Out' && emp.currentStatusStartTime && emp.autoClockOut24h !== false) {
+            // Unicamente si el empleado no está fuera Y tiene una hora de inicio de estado válida
+            if (emp.status !== 'Clocked Out' && emp.currentStatusStartTime) {
                 const sessionDuration = now - emp.currentStatusStartTime;
                 
-                if (sessionDuration >= MAX_SESSION) {
+                // CRITICO: Solo si la duración es MAYOR O IGUAL a 24 horas
+                if (sessionDuration >= TWENTY_FOUR_HOURS_MS) {
                     try {
-                        const autoTime = emp.currentStatusStartTime + MAX_SESSION;
+                        // El tiempo de salida debe ser exactamente 24 horas después del inicio para coherencia de datos
+                        const autoExitTime = emp.currentStatusStartTime + TWENTY_FOUR_HOURS_MS;
+                        
                         await addAttendanceLogEntry({
                             employeeId: emp.id,
                             companyId: emp.companyId,
                             employeeName: emp.name,
                             action: 'Clock Out',
-                            timestamp: autoTime,
+                            timestamp: autoExitTime,
                             isAutoLog: true,
-                            adminResponse: "Sistema: Salida automática tras 24h de actividad."
+                            adminResponse: "Sistema: Salida automática tras cumplirse el límite de 24h de sesión activa."
                         });
 
                         await updateEmployeeStatus({
@@ -129,7 +133,8 @@ const AppContent: React.FC = () => {
                             currentStatusStartTime: null
                         });
                         
-                        addNotification(`Salida automática procesada para ${emp.name} (Límite 24h).`, 'success');
+                        addNotification(`Salida automática (24h) procesada para ${emp.name}.`, 'success');
+                        console.log(`[AutoClockOut] ${emp.name} sacado tras ${sessionDuration / 3600000} horas.`);
                     } catch (e) {
                         console.error("Auto clock out failed for", emp.name, e);
                     }
@@ -138,8 +143,9 @@ const AppContent: React.FC = () => {
         }
     };
 
+    // Ejecutar verificación inmediatamente y luego cada 5 minutos (suficiente para el umbral de 24h)
     checkAutoClockOut();
-    const interval = setInterval(checkAutoClockOut, 60000); // Check every minute
+    const interval = setInterval(checkAutoClockOut, 300000); 
     return () => clearInterval(interval);
   }, [employees]);
 

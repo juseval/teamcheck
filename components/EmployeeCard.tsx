@@ -52,7 +52,7 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
   const [isMobileDevice, setIsMobileDevice] = useState(false);
 
   useEffect(() => {
-    // Detección mejorada de móvil
+    // Detección robusta de móvil (UA + Ancho de pantalla)
     const mobileCheck = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (window.innerWidth <= 768);
     setIsMobileDevice(mobileCheck);
 
@@ -77,26 +77,28 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
     onEditTime(employee.id);
   };
 
-  // El bloqueo aplica si es móvil Y el permiso está explícitamente en falso o no definido (según tu requerimiento de "no le di permisos")
+  // El bloqueo aplica si es móvil Y el permiso NO está habilitado
   const isMobileRestricted = isMobileDevice && employee.allowMobileClockIn !== true;
 
   const renderButtons = () => {
+    // Si la restricción móvil está activa, bloqueamos TODOS los botones para el rol de empleado
+    if (isMobileRestricted && userRole === 'employee') {
+        return (
+            <div className="bg-red-50 border border-red-200 p-3 rounded-lg flex flex-col items-center gap-2 text-red-700 animate-fade-in shadow-inner">
+                <AlertIcon className="w-6 h-6 flex-shrink-0" />
+                <span className="text-[10px] leading-tight font-bold text-center uppercase tracking-tight">
+                    Acceso móvil restringido por el administrador.<br/>Por favor use un computador.
+                </span>
+            </div>
+        );
+    }
+
     const baseButtonClass = "w-full text-center font-bold py-2 px-4 rounded-lg transition-all duration-300 shadow-md transform hover:scale-105";
     const primaryButtonClass = `${baseButtonClass} bg-bokara-grey hover:bg-bokara-grey/90 text-bright-white`;
     const secondaryButtonClass = `${baseButtonClass} bg-wet-sand hover:bg-opacity-80 text-bokara-grey`;
 
     switch (employee.status) {
       case 'Clocked Out':
-        if (isMobileRestricted && userRole === 'employee') {
-            return (
-                <div className="bg-red-50 border border-red-200 p-3 rounded-lg flex flex-col items-center gap-2 text-red-700 animate-fade-in">
-                    <AlertIcon className="w-6 h-6 flex-shrink-0" />
-                    <span className="text-[11px] leading-tight font-bold text-center uppercase tracking-tight">
-                        Acceso móvil restringido.<br/>Marque desde un computador.
-                    </span>
-                </div>
-            );
-        }
         return (
           <button onClick={() => onAction(employee.id, 'Clock In')} className={primaryButtonClass}>
             Clock In
