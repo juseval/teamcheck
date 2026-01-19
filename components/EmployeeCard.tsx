@@ -52,7 +52,8 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
   const [isMobileDevice, setIsMobileDevice] = useState(false);
 
   useEffect(() => {
-    const mobileCheck = /Mobi|Android|iPhone/i.test(navigator.userAgent);
+    // Detección mejorada de móvil
+    const mobileCheck = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (window.innerWidth <= 768);
     setIsMobileDevice(mobileCheck);
 
     if (employee.status !== 'Clocked Out' && employee.currentStatusStartTime) {
@@ -76,7 +77,8 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
     onEditTime(employee.id);
   };
 
-  const isMobileRestricted = isMobileDevice && employee.allowMobileClockIn === false;
+  // El bloqueo aplica si es móvil Y el permiso está explícitamente en falso o no definido (según tu requerimiento de "no le di permisos")
+  const isMobileRestricted = isMobileDevice && employee.allowMobileClockIn !== true;
 
   const renderButtons = () => {
     const baseButtonClass = "w-full text-center font-bold py-2 px-4 rounded-lg transition-all duration-300 shadow-md transform hover:scale-105";
@@ -87,9 +89,11 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
       case 'Clocked Out':
         if (isMobileRestricted && userRole === 'employee') {
             return (
-                <div className="bg-red-50 border border-red-100 p-2 rounded-lg flex items-center gap-2 text-red-700">
-                    <AlertIcon className="w-5 h-5 flex-shrink-0" />
-                    <span className="text-[10px] leading-tight font-bold">ACCESO MÓVIL RESTRINGIDO POR ADMINISTRADOR</span>
+                <div className="bg-red-50 border border-red-200 p-3 rounded-lg flex flex-col items-center gap-2 text-red-700 animate-fade-in">
+                    <AlertIcon className="w-6 h-6 flex-shrink-0" />
+                    <span className="text-[11px] leading-tight font-bold text-center uppercase tracking-tight">
+                        Acceso móvil restringido.<br/>Marque desde un computador.
+                    </span>
                 </div>
             );
         }
