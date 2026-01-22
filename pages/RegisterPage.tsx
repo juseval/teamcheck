@@ -88,70 +88,70 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
           <h1 className="text-3xl font-bold text-bokara-grey tracking-wider">
               Team<span className="text-lucius-lime">Check</span>
           </h1>
-          <div className="w-20"></div> {/* Spacer for symmetry */}
+          <div className="w-20"></div>
       </div>
 
       <div className="w-full max-w-5xl animate-fade-in">
         {step === 'selection' ? (
           <div className="space-y-12">
             <div className="text-center">
-                <h2 className="text-4xl font-bold text-bokara-grey mb-4">¡Bienvenido a TeamCheck!</h2>
-                <p className="text-xl text-bokara-grey/60">¿Cómo planeas usar la plataforma hoy?</p>
+                <h2 className="text-4xl font-bold text-bokara-grey mb-4">¿Cómo quieres empezar hoy?</h2>
+                <p className="text-xl text-bokara-grey/60">Elige la opción que mejor se adapte a ti.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* ADMIN PATH */}
+                {/* OPCIÓN: ¿ERES NUEVO? (ADMIN) */}
                 <button 
                     onClick={() => { setActiveTab('create'); setStep('form'); }}
                     className="group bg-white rounded-3xl p-8 border-2 border-transparent hover:border-lucius-lime shadow-lg hover:shadow-2xl transition-all text-left flex flex-col h-full"
                 >
                     <div className="mb-6">
-                        <span className="text-sm font-bold text-lucius-lime uppercase tracking-widest">Para propietarios y admins</span>
-                        <h3 className="text-2xl font-bold text-bokara-grey mt-2">Crear una nueva organización</h3>
-                        <p className="text-bokara-grey/60 mt-2">Simplifica la gestión de tiempo, asistencia y mapas de oficina para tu equipo.</p>
+                        <span className="text-sm font-bold text-lucius-lime uppercase tracking-widest">Para Fundadores y Gerentes</span>
+                        <h3 className="text-2xl font-bold text-bokara-grey mt-2">¿Eres nuevo? Crea una empresa</h3>
+                        <p className="text-bokara-grey/60 mt-2">Configura tu espacio de trabajo, define horarios y obtén tu código de equipo.</p>
                     </div>
                     <ul className="space-y-3 mb-8 flex-grow">
                         <li className="flex items-center gap-2 text-sm font-medium text-bokara-grey/80">
-                            <div className="w-1.5 h-1.5 rounded-full bg-lucius-lime"></div> Invita y gestiona a tu equipo de manera sencilla
+                            <div className="w-1.5 h-1.5 rounded-full bg-lucius-lime"></div> Crea códigos únicos (ej: ABC-123)
                         </li>
                         <li className="flex items-center gap-2 text-sm font-medium text-bokara-grey/80">
-                            <div className="w-1.5 h-1.5 rounded-full bg-lucius-lime"></div> Lleva el control del tiempo y los proyectos
+                            <div className="w-1.5 h-1.5 rounded-full bg-lucius-lime"></div> Control total de asistencia y nómina
                         </li>
                         <li className="flex items-center gap-2 text-sm font-medium text-bokara-grey/80">
-                            <div className="w-1.5 h-1.5 rounded-full bg-lucius-lime"></div> Configura tu mapa de asientos interactivo
+                            <div className="w-1.5 h-1.5 rounded-full bg-lucius-lime"></div> Mapa interactivo de la oficina
                         </li>
                     </ul>
                     <div className="mt-auto">
-                        <div className="w-full py-4 bg-lucius-lime rounded-2xl text-center font-bold text-bokara-grey group-hover:bg-bokara-grey group-hover:text-white transition-colors">
+                        <div className="w-full py-4 bg-lucius-lime rounded-2xl text-center font-bold text-bokara-grey group-hover:bg-bokara-grey group-hover:text-white transition-colors shadow-sm">
                             Comenzar como Administrador
                         </div>
                     </div>
                 </button>
 
-                {/* EMPLOYEE PATH */}
+                {/* OPCIÓN: UNIRME A UN EQUIPO (EMPLOYEE) */}
                 <button 
                     onClick={() => { setActiveTab('join'); setStep('form'); }}
                     className="group bg-white rounded-3xl p-8 border-2 border-transparent hover:border-bokara-grey shadow-lg hover:shadow-2xl transition-all text-left flex flex-col h-full"
                 >
                     <div className="mb-6">
-                        <span className="text-sm font-bold text-bokara-grey/40 uppercase tracking-widest">Para empleados y miembros</span>
-                        <h3 className="text-2xl font-bold text-bokara-grey mt-2">Únete a una organización</h3>
-                        <p className="text-bokara-grey/60 mt-2">Acepta invitaciones para unirte al espacio de trabajo de tu equipo.</p>
+                        <span className="text-sm font-bold text-bokara-grey/40 uppercase tracking-widest">Para Miembros del Equipo</span>
+                        <h3 className="text-2xl font-bold text-bokara-grey mt-2">Unirme a un equipo existente</h3>
+                        <p className="text-bokara-grey/60 mt-2">Ingresa el código que te dio tu jefe y empieza a marcar tus horas.</p>
                     </div>
                     <ul className="space-y-3 mb-8 flex-grow">
                         <li className="flex items-center gap-2 text-sm font-medium text-bokara-grey/80">
-                            <div className="w-1.5 h-1.5 rounded-full bg-gray-300"></div> Registra horas en cualquier momento y lugar
+                            <div className="w-1.5 h-1.5 rounded-full bg-gray-300"></div> Registro rápido con código de equipo
                         </li>
                         <li className="flex items-center gap-2 text-sm font-medium text-bokara-grey/80">
-                            <div className="w-1.5 h-1.5 rounded-full bg-gray-300"></div> Revisa tus horarios y solicita correcciones
+                            <div className="w-1.5 h-1.5 rounded-full bg-gray-300"></div> Visualiza tu horario y tiquetes
                         </li>
                         <li className="flex items-center gap-2 text-sm font-medium text-bokara-grey/80">
-                            <div className="w-1.5 h-1.5 rounded-full bg-gray-300"></div> Mira tu lugar asignado en el mapa
+                            <div className="w-1.5 h-1.5 rounded-full bg-gray-300"></div> Ve tu asiento asignado en el mapa
                         </li>
                     </ul>
                     <div className="mt-auto">
-                        <div className="w-full py-4 bg-gray-100 rounded-2xl text-center font-bold text-bokara-grey group-hover:bg-bokara-grey group-hover:text-white transition-colors">
-                            Unirse a mi Equipo
+                        <div className="w-full py-4 bg-gray-100 rounded-2xl text-center font-bold text-bokara-grey group-hover:bg-bokara-grey group-hover:text-white transition-colors shadow-sm">
+                            Unirme a mi Empresa
                         </div>
                     </div>
                 </button>
@@ -160,14 +160,16 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
         ) : (
           <div className="max-w-md mx-auto bg-white rounded-3xl shadow-2xl p-8 sm:p-10 border border-bokara-grey/10">
             <h2 className="text-3xl font-bold text-bokara-grey mb-2">
-                {activeTab === 'create' ? 'Configura tu Empresa' : 'Únete a tu Equipo'}
+                {activeTab === 'create' ? 'Nueva Organización' : 'Ingresa al Equipo'}
             </h2>
-            <p className="text-bokara-grey/60 mb-8">Completa tus datos para empezar.</p>
+            <p className="text-bokara-grey/60 mb-8">
+                {activeTab === 'create' ? 'Configura tu empresa para empezar.' : 'Completa tus datos personales.'}
+            </p>
 
             <form onSubmit={handleSubmit} className="space-y-5">
                 {activeTab === 'create' ? (
                     <div>
-                        <label className="block text-xs font-bold text-lucius-lime uppercase tracking-widest mb-1.5">Nombre de la Organización</label>
+                        <label className="block text-[10px] font-bold text-lucius-lime uppercase tracking-widest mb-1.5">Nombre de la Empresa</label>
                         <input
                             type="text"
                             required
@@ -179,21 +181,22 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
                     </div>
                 ) : (
                     <div>
-                        <label className="block text-xs font-bold text-bokara-grey/40 uppercase tracking-widest mb-1.5">Código de Invitación</label>
+                        <label className="block text-[10px] font-bold text-bokara-grey/40 uppercase tracking-widest mb-1.5">Código de Equipo</label>
                         <input
                             type="text"
                             required
                             value={inviteCode}
-                            onChange={(e) => setInviteCode(e.target.value)}
-                            className="w-full bg-whisper-white border border-bokara-grey/10 rounded-xl px-4 py-3 text-bokara-grey font-mono focus:outline-none focus:ring-2 focus:ring-bokara-grey/20 transition-all"
-                            placeholder="Pega el código aquí..."
+                            onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                            className="w-full bg-whisper-white border border-bokara-grey/10 rounded-xl px-4 py-3 text-bokara-grey font-mono focus:outline-none focus:ring-2 focus:ring-bokara-grey/20 transition-all text-center tracking-widest"
+                            placeholder="ABC-123"
+                            maxLength={7}
                         />
-                        <p className="text-[10px] text-bokara-grey/40 mt-1.5">Este código lo genera tu administrador en la sección de Colaboradores.</p>
+                        <p className="text-[9px] text-bokara-grey/40 mt-1.5">Pídele el código de 6 dígitos a tu administrador.</p>
                     </div>
                 )}
 
                 <div>
-                    <label className="block text-xs font-bold text-bokara-grey/40 uppercase tracking-widest mb-1.5">Tu Nombre Completo</label>
+                    <label className="block text-[10px] font-bold text-bokara-grey/40 uppercase tracking-widest mb-1.5">Tu Nombre Completo</label>
                     <input
                         type="text"
                         required
@@ -205,7 +208,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
                 </div>
                 
                 <div>
-                    <label className="block text-xs font-bold text-bokara-grey/40 uppercase tracking-widest mb-1.5">Correo Electrónico</label>
+                    <label className="block text-[10px] font-bold text-bokara-grey/40 uppercase tracking-widest mb-1.5">Correo Electrónico</label>
                     <input
                         type="email"
                         required
@@ -218,7 +221,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
 
                 <div className="grid grid-cols-2 gap-4">
                     <div>
-                        <label className="block text-xs font-bold text-bokara-grey/40 uppercase tracking-widest mb-1.5">Contraseña</label>
+                        <label className="block text-[10px] font-bold text-bokara-grey/40 uppercase tracking-widest mb-1.5">Contraseña</label>
                         <input
                             type="password"
                             required
@@ -229,7 +232,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-bokara-grey/40 uppercase tracking-widest mb-1.5">Confirmar</label>
+                        <label className="block text-[10px] font-bold text-bokara-grey/40 uppercase tracking-widest mb-1.5">Confirmar</label>
                         <input
                             type="password"
                             required
@@ -247,14 +250,14 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
                         disabled={isRegistering}
                         className="w-full bg-bokara-grey text-white font-bold py-4 px-6 rounded-xl hover:bg-black transition-all shadow-lg disabled:opacity-50 disabled:cursor-wait"
                     >
-                        {isRegistering ? 'Procesando...' : (activeTab === 'create' ? 'Crear mi Organización' : 'Unirse al Equipo')}
+                        {isRegistering ? 'Procesando...' : (activeTab === 'create' ? 'Crear Empresa y Cuenta' : 'Unirme al Equipo')}
                     </button>
                     <button 
                         type="button"
                         onClick={onNavigateToLogin}
-                        className="w-full mt-4 text-sm font-bold text-bokara-grey/40 hover:text-bokara-grey transition-colors"
+                        className="w-full mt-4 text-xs font-bold text-bokara-grey/40 hover:text-bokara-grey transition-colors uppercase tracking-widest"
                     >
-                        ¿Ya tienes cuenta? Inicia sesión aquí
+                        ¿Ya tienes cuenta? Iniciar sesión
                     </button>
                 </div>
             </form>

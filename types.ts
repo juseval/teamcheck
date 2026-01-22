@@ -5,13 +5,14 @@ export interface Company {
   id: string;
   name: string;
   ownerId: string;
+  inviteCode: string; // Added to interface for consistency
   createdAt: number;
 }
 
 export interface Employee {
   id: string;
-  uid?: string; // UID from Firebase Authentication
-  companyId: string; // Link to the company
+  uid?: string; 
+  companyId: string;
   name: string;
   email: string;
   phone: string;
@@ -20,18 +21,17 @@ export interface Employee {
   status: EmployeeStatus;
   lastClockInTime: number | null;
   currentStatusStartTime: number | null;
-  avatarUrl?: string; // Optional field for a profile picture
+  avatarUrl?: string;
   workScheduleId?: string | null;
-  seatId?: string | null; // ID of the desk they sit at
+  seatId?: string | null;
   messages?: number;
-  // --- New HR / Vacation Fields ---
-  hireDate?: number; // Timestamp of employment start
-  terminationDate?: number; // Optional timestamp of employment end
-  manualVacationAdjustment?: number; // Historical days balance (+ or -)
-  // --- New Security / Clock In Permissions ---
+  hireDate?: number;
+  terminationDate?: number;
+  manualVacationAdjustment?: number;
   allowMobileClockIn?: boolean;
   autoClockOut24h?: boolean;
   blockEarlyClockIn?: boolean;
+  emailVerified: boolean; // Requisito de seguridad
 }
 
 export type AttendanceAction = string;
@@ -43,11 +43,10 @@ export interface AttendanceLogEntry {
   employeeName: string;
   action: AttendanceAction;
   timestamp: number;
-  // Correction Request Fields
-  correctionRequest?: string; // The message from the employee
+  correctionRequest?: string;
   correctionStatus?: 'pending' | 'approved' | 'rejected';
-  adminResponse?: string; // Context/Reason from admin
-  isAutoLog?: boolean; // If system performed the action
+  adminResponse?: string;
+  isAutoLog?: boolean;
 }
 
 export interface TimeEntry {
@@ -56,7 +55,7 @@ export interface TimeEntry {
   activity: string;
   startTime: number;
   endTime: number;
-  duration: number; // in seconds
+  duration: number;
 }
 
 export interface User {
@@ -75,7 +74,7 @@ export interface Message {
 
 export interface ActivityStatus {
   id:string;
-  companyId?: string; // Optional for default system statuses
+  companyId?: string;
   name: string;
   color: string;
 }
@@ -89,7 +88,7 @@ export interface TimesheetEntry {
   type: string;
   timeIn: number;
   timeOut: number;
-  duration: number; // in seconds
+  duration: number;
   color?: string;
   startLogId: string;
   endLogId: string;
@@ -101,8 +100,8 @@ export interface Task {
   id: string;
   companyId: string;
   name: string;
-  startDate: string; // YYYY-MM-DD
-  endDate: string; // YYYY-MM-DD
+  startDate: string;
+  endDate: string;
   status: TaskStatus;
   assigneeId?: string;
   progress: number;
@@ -115,9 +114,9 @@ export interface CalendarEvent {
   id: string;
   companyId: string;
   employeeId: string;
-  type: string; // 'Vacation', 'Family Day', etc.
-  startDate: string; // YYYY-MM-DD
-  endDate: string; // YYYY-MM-DD
+  type: string;
+  startDate: string;
+  endDate: string;
   status: EventStatus;
 }
 
@@ -126,34 +125,33 @@ export interface PayrollChangeType {
   companyId?: string;
   name: string;
   color: string;
-  isExclusive?: boolean; // If true, only one person can have this approved per day
-  adminOnly?: boolean;   // If true, employees cannot request this type
-  yearlyQuota?: number;  // Max requests allowed per calendar year
+  isExclusive?: boolean;
+  adminOnly?: boolean;
+  yearlyQuota?: number;
 }
 
 export interface WorkSchedule {
   id: string;
   companyId: string;
   name: string;
-  startTime: string; // "HH:mm"
-  endTime: string; // "HH:mm"
-  days: number[]; // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  startTime: string;
+  endTime: string;
+  days: number[];
 }
 
-// --- MAP TYPES ---
 export type MapItemType = 'desk' | 'locker' | 'wall' | 'plant' | 'meeting_table' | 'camera' | 'room_label' | 'custom_shape';
 
 export interface MapItem {
   id: string;
   companyId?: string;
   type: MapItemType;
-  x: number; // Percentage 0-100
-  y: number; // Percentage 0-100
-  width?: number; // CSS width or scale
-  height?: number; // CSS height
-  rotation?: number; // Degrees
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  rotation?: number;
   label?: string;
-  color?: string; // For walls or specific items
-  shape?: 'circle' | 'rectangle'; // Shape for tables, etc.
-  shapeVariant?: 'rectangle' | 'circle'; // For custom generic shapes
+  color?: string;
+  shape?: 'circle' | 'rectangle';
+  shapeVariant?: 'rectangle' | 'circle';
 }
