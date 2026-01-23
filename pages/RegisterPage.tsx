@@ -24,6 +24,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
   const [isRegistering, setIsRegistering] = useState(false);
   const [isResending, setIsResending] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [errorType, setErrorType] = useState<string | null>(null);
   
   const { addNotification } = useNotification();
 
@@ -39,6 +40,8 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorType(null);
+
     if (password !== confirmPassword) {
         addNotification("Las contraseñas no coinciden.", 'error');
         return;
@@ -55,7 +58,12 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
         });
         setIsSuccess(true);
     } catch (error: any) {
-        addNotification(error.message || "Error en el registro", 'error');
+        if (error.code === 'auth/email-already-in-use') {
+            setErrorType('ALREADY_EXISTS');
+            addNotification("Este correo ya está registrado. Por favor inicia sesión.", 'error');
+        } else {
+            addNotification(error.message || "Error en el registro", 'error');
+        }
     } finally {
         setIsRegistering(false);
     }
@@ -65,7 +73,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
     setIsResending(true);
     try {
         await resendVerificationEmail(email);
-        addNotification("Se ha generado un nuevo enlace de verificación.", 'success');
+        addNotification("Se ha enviado un nuevo enlace de verificación.", 'success');
     } catch (error: any) {
         addNotification(error.message || "Error al reenviar", 'error');
     } finally {
@@ -81,21 +89,11 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
                     <svg className="w-10 h-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                 </div>
                 <h2 className="text-3xl font-bold text-bokara-grey mb-3">¡Casi listo!</h2>
-                <p className="text-bokara-grey/70 mb-6 leading-relaxed">
-                    Se ha generado un tiquete de verificación para <strong className="text-bokara-grey">{email}</strong>.
+                <p className="text-bokara-grey/70 mb-8 leading-relaxed">
+                    Hemos enviado un enlace de verificación a <strong className="text-bokara-grey">{email}</strong>.<br/>
+                    Por favor revisa tu bandeja de entrada (y la carpeta de <strong>Spam</strong>).
                 </p>
                 
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-8 text-left">
-                    <p className="text-xs text-blue-800 font-bold uppercase mb-2">Nota para el equipo de ventas:</p>
-                    <p className="text-xs text-blue-700 leading-tight">
-                        En esta fase de desarrollo, los emails son <strong>simulados</strong>. Para verificar la cuenta:
-                        <br/><br/>
-                        1. Abre la consola del navegador (Pulsa <strong>F12</strong>).<br/>
-                        2. Busca el mensaje <strong>[EMAIL SIMULATOR]</strong>.<br/>
-                        3. Haz clic en el enlace que aparece allí.
-                    </p>
-                </div>
-
                 <div className="space-y-3">
                     <button onClick={onNavigateToLogin} className="w-full bg-bokara-grey hover:bg-black text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md">
                         Ir a Iniciar Sesión
@@ -105,7 +103,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
                         disabled={isResending}
                         className="w-full bg-transparent text-bokara-grey/60 hover:text-bokara-grey font-bold py-2 text-sm transition-all disabled:opacity-50"
                     >
-                        {isResending ? 'Generando nuevo enlace...' : '¿No encuentras el enlace? Reintentar'}
+                        {isResending ? 'Enviando...' : '¿No recibiste nada? Reenviar'}
                     </button>
                 </div>
             </div>
@@ -249,7 +247,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
                         required
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="w-full bg-whisper-white border border-bokara-grey/10 rounded-xl px-4 py-3 text-bokara-grey focus:outline-none focus:ring-2 focus:ring-lucius-lime transition-all"
+                        className={`w-full bg-whisper-white border rounded-xl px-4 py-3 text-bokara-grey focus:outline-none focus:ring-2 focus:ring-lucius-lime transition-all ${errorType === 'ALREADY_EXISTS' ? 'border-red-500' : 'border-bokara-grey/10'}`}
                         placeholder="tu@correo.com"
                     />
                 </div>
@@ -280,17 +278,32 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
                 </div>
 
                 <div className="pt-4">
-                    <button
-                        type="submit"
-                        disabled={isRegistering}
-                        className="w-full bg-bokara-grey text-white font-bold py-4 px-6 rounded-xl hover:bg-black transition-all shadow-lg disabled:opacity-50 disabled:cursor-wait"
-                    >
-                        {isRegistering ? 'Procesando...' : (activeTab === 'create' ? 'Crear Empresa y Cuenta' : 'Unirme al Equipo')}
-                    </button>
+                    {errorType === 'ALREADY_EXISTS' ? (
+                        <div className="space-y-3">
+                            <div className="p-3 bg-red-50 border border-red-100 rounded-lg text-xs text-red-600 font-medium">
+                                Ya existe una cuenta con este correo. Si es tuya, por favor inicia sesión.
+                            </div>
+                            <button
+                                type="button"
+                                onClick={onNavigateToLogin}
+                                className="w-full bg-bokara-grey text-white font-bold py-4 px-6 rounded-xl hover:bg-black transition-all shadow-lg"
+                            >
+                                Ir al Inicio de Sesión
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            type="submit"
+                            disabled={isRegistering}
+                            className="w-full bg-bokara-grey text-white font-bold py-4 px-6 rounded-xl hover:bg-black transition-all shadow-lg disabled:opacity-50 disabled:cursor-wait"
+                        >
+                            {isRegistering ? 'Procesando...' : (activeTab === 'create' ? 'Crear Empresa y Cuenta' : 'Unirme al Equipo')}
+                        </button>
+                    )}
                     <button 
                         type="button"
                         onClick={onNavigateToLogin}
-                        className="w-full mt-4 text-xs font-bold text-bokara-grey/40 hover:text-bokara-grey transition-colors uppercase tracking-widest"
+                        className="w-full mt-4 text-xs font-bold text-bokara-grey/40 hover:text-lucius-lime transition-colors uppercase tracking-widest"
                     >
                         ¿Ya tienes cuenta? Iniciar sesión
                     </button>

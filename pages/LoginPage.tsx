@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeftIcon, PasswordIcon, UserIcon } from '../components/Icons';
 import { useNotification } from '../contexts/NotificationContext';
-import { resendVerificationEmail } from '../services/apiService';
+import { resendVerificationEmail, loginWithEmailAndPassword } from '../services/apiService';
 
 interface LoginPageProps {
   onLogin: (credentials: { email: string; password: string; }) => Promise<void>;
@@ -34,6 +34,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
   
@@ -71,14 +72,23 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
   };
 
   const handleResendVerification = async () => {
-      setIsLoggingIn(true);
+      setIsResending(true);
       try {
+          // Primero intentamos hacer login para "despertar" la sesión de Firebase
+          // No necesitamos manejar el error VERIFY_REQUIRED aquí porque resendVerificationEmail lo usará.
+          try {
+              await loginWithEmailAndPassword(email, password);
+          } catch (e: any) {
+              // Si falla por falta de verificación, ignoramos el error porque es lo que queremos corregir
+              if (!e.message.includes("VERIFY_REQUIRED")) throw e;
+          }
+          
           await resendVerificationEmail(email);
-          addNotification("¡Enviado! Revisa tu correo (incluyendo spam).", 'success');
+          addNotification("¡Enlace enviado! Revisa tu bandeja de entrada.", 'success');
       } catch (e: any) {
-          addNotification(e.message, 'error');
+          addNotification(e.message || "Error al intentar reenviar.", 'error');
       } finally {
-          setIsLoggingIn(false);
+          setIsResending(false);
       }
   };
 
@@ -173,10 +183,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
                   <h3 className="text-xl font-bold text-bokara-grey">Verifica tu correo</h3>
                   <p className="text-sm text-bokara-grey/70 leading-relaxed">
                       Tu cuenta está bloqueada hasta que confirmes tu identidad. <br/>
-                      Hemos enviado un link a <strong>{email}</strong>.
+                      Si no has recibido el link en <strong>{email}</strong>, pulsa abajo.
                   </p>
-                  <button onClick={handleResendVerification} disabled={isLoggingIn} className="w-full py-3 bg-bokara-grey text-white rounded-lg font-bold hover:bg-black transition-all shadow-md">
-                      {isLoggingIn ? 'Enviando...' : 'Reenviar Email Real'}
+                  <button onClick={handleResendVerification} disabled={isResending} className="w-full py-3 bg-bokara-grey text-white rounded-lg font-bold hover:bg-black transition-all shadow-md">
+                      {isResending ? 'Enviando...' : 'Reenviar Email Real'}
                   </button>
                   <button onClick={() => setView('login')} className="text-xs text-bokara-grey/60 hover:underline">Intentar con otro correo</button>
               </div>
