@@ -9,6 +9,7 @@ interface LoginPageProps {
   onNavigateToRegister: () => void;
   onNavigateToHome: () => void;
   onForgotPassword: (email: string) => Promise<void>;
+  initiallyUnverifiedEmail?: string | null;
 }
 
 const DesktopNotSupported: React.FC<{ onNavigateToHome: () => void; }> = ({ onNavigateToHome }) => (
@@ -29,7 +30,7 @@ const DesktopNotSupported: React.FC<{ onNavigateToHome: () => void; }> = ({ onNa
     </div>
 );
 
-const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, onNavigateToHome, onForgotPassword }) => {
+const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, onNavigateToHome, onForgotPassword, initiallyUnverifiedEmail }) => {
   const [view, setView] = useState<'login' | 'forgot_password' | 'unverified'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -48,6 +49,14 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
     }
   }, []);
 
+  // PERSISTENCIA DE ESTADO NO VERIFICADO TRAS REFRESH
+  useEffect(() => {
+    if (initiallyUnverifiedEmail) {
+        setEmail(initiallyUnverifiedEmail);
+        setView('unverified');
+    }
+  }, [initiallyUnverifiedEmail]);
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = email.trim();
@@ -62,7 +71,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
       await onLogin({ email: cleanEmail, password });
     } catch (error: any) {
       setIsLoggingIn(false);
-      // CAPTURAR EL BLOQUEO DE VERIFICACIÓN
       if (error.message.includes("VERIFY_REQUIRED")) {
           setView('unverified');
       } else {
@@ -74,11 +82,10 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
   const handleResendVerification = async () => {
       setIsResending(true);
       try {
-          // Intentamos "despertar" la sesión para poder enviar el correo real
-          try {
-              await loginWithEmailAndPassword(email, password);
-          } catch (e: any) {
-              if (!e.message.includes("VERIFY_REQUIRED")) throw e;
+          // Intentamos despertar la sesión si no hay password (refresh case)
+          // Si fallamos el login aquí no importa, solo queremos intentar enviar el mail
+          if (password) {
+             try { await loginWithEmailAndPassword(email, password); } catch(e) {}
           }
           
           await resendVerificationEmail(email);
@@ -129,7 +136,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
             </h1>
         </div>
         
-        <div className="bg-white rounded-xl shadow-2xl p-8 border border-bokara-grey/10 transition-all duration-300">
+        <div className="bg-white rounded-xl shadow-2xl p-8 border border-bokara-grey/10 transition-all duration-300 min-h-[400px] flex flex-col justify-center">
           
           {view === 'login' && (
               <form onSubmit={handleLoginSubmit} className="space-y-6 animate-fade-in">
@@ -201,24 +208,24 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
                           {isResending ? 'Enviando...' : 'Reenviar Email Real'}
                       </button>
                       <button 
-                        onClick={() => setView('login')} 
+                        onClick={() => { setView('login'); setPassword(''); }} 
                         className="w-full py-2 text-xs font-bold text-bokara-grey/40 hover:text-bokara-grey uppercase tracking-widest"
                       >
                           Volver al formulario
                       </button>
                   </div>
                   <div className="p-3 bg-blue-50 rounded-lg border border-blue-100 mt-4">
-                      <p className="text-[10px] text-blue-600 font-medium">Tip: Si no llega, revisa la carpeta de <strong>SPAM</strong> o <strong>Correos no deseados</strong>.</p>
+                      <p className="text-[10px] text-blue-600 font-medium">Tip: Si no llega, revisa la carpeta de <strong>SPAM</strong>.</p>
                   </div>
               </div>
           )}
 
           {view === 'forgot_password' && (
                <form onSubmit={handleForgotSubmit} className="space-y-6 animate-fade-in">
-                    <h3 className="text-xl font-bold text-bokara-grey">Recuperar Acceso</h3>
+                    <h3 className="text-xl font-bold text-bokara-grey text-center">Recuperar Acceso</h3>
                     {!resetSuccessMessage ? (
                         <>
-                            <p className="text-sm text-bokara-grey/70">Ingresa tu email para recibir instrucciones.</p>
+                            <p className="text-sm text-bokara-grey/70 text-center">Ingresa tu email para recibir instrucciones.</p>
                             <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-bokara-grey" placeholder="tu@correo.com" />
                             <div className="flex flex-col gap-3">
                                 <button type="submit" disabled={isSendingReset} className="w-full py-3 bg-bokara-grey text-white rounded-lg font-bold hover:bg-black transition-all">Enviar Enlace</button>
@@ -226,7 +233,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
                             </div>
                         </>
                     ) : (
-                        <div className="space-y-4">
+                        <div className="space-y-4 text-center">
                             <p className="text-sm text-green-600 font-medium">{resetSuccessMessage}</p>
                             <button onClick={() => setView('login')} className="w-full py-3 bg-lucius-lime text-bokara-grey font-bold rounded-lg">Volver al Login</button>
                         </div>
