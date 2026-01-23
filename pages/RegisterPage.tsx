@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeftIcon } from '../components/Icons';
 import { useNotification } from '../contexts/NotificationContext';
+import { resendVerificationEmail } from '../services/apiService';
 
 interface RegisterPageProps {
   onRegister: (data: { fullName: string; email: string; password: string; companyName: string; inviteCode?: string }) => Promise<void>;
@@ -21,6 +22,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
   const [inviteCode, setInviteCode] = useState('');
   
   const [isRegistering, setIsRegistering] = useState(false);
+  const [isResending, setIsResending] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   
   const { addNotification } = useNotification();
@@ -59,6 +61,18 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
     }
   };
 
+  const handleResend = async () => {
+    setIsResending(true);
+    try {
+        await resendVerificationEmail(email);
+        addNotification("Se ha generado un nuevo enlace de verificación.", 'success');
+    } catch (error: any) {
+        addNotification(error.message || "Error al reenviar", 'error');
+    } finally {
+        setIsResending(false);
+    }
+  };
+
   if (isSuccess) {
     return (
         <div className="min-h-screen flex items-center justify-center bg-bright-white p-4">
@@ -66,13 +80,34 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onRegister, onNavigateToLog
                 <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
                     <svg className="w-10 h-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                 </div>
-                <h2 className="text-3xl font-bold text-bokara-grey mb-3">¡Verifica tu correo!</h2>
-                <p className="text-bokara-grey/70 mb-8 leading-relaxed">
-                    Hemos enviado un enlace de confirmación a <strong className="text-bokara-grey">{email}</strong>. Haz clic en él para activar tu cuenta.
+                <h2 className="text-3xl font-bold text-bokara-grey mb-3">¡Casi listo!</h2>
+                <p className="text-bokara-grey/70 mb-6 leading-relaxed">
+                    Se ha generado un tiquete de verificación para <strong className="text-bokara-grey">{email}</strong>.
                 </p>
-                <button onClick={onNavigateToLogin} className="w-full bg-lucius-lime hover:bg-opacity-80 text-bokara-grey font-bold py-4 px-6 rounded-xl transition-all shadow-md">
-                    Ir a Iniciar Sesión
-                </button>
+                
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-8 text-left">
+                    <p className="text-xs text-blue-800 font-bold uppercase mb-2">Nota para el equipo de ventas:</p>
+                    <p className="text-xs text-blue-700 leading-tight">
+                        En esta fase de desarrollo, los emails son <strong>simulados</strong>. Para verificar la cuenta:
+                        <br/><br/>
+                        1. Abre la consola del navegador (Pulsa <strong>F12</strong>).<br/>
+                        2. Busca el mensaje <strong>[EMAIL SIMULATOR]</strong>.<br/>
+                        3. Haz clic en el enlace que aparece allí.
+                    </p>
+                </div>
+
+                <div className="space-y-3">
+                    <button onClick={onNavigateToLogin} className="w-full bg-bokara-grey hover:bg-black text-white font-bold py-3 px-6 rounded-xl transition-all shadow-md">
+                        Ir a Iniciar Sesión
+                    </button>
+                    <button 
+                        onClick={handleResend} 
+                        disabled={isResending}
+                        className="w-full bg-transparent text-bokara-grey/60 hover:text-bokara-grey font-bold py-2 text-sm transition-all disabled:opacity-50"
+                    >
+                        {isResending ? 'Generando nuevo enlace...' : '¿No encuentras el enlace? Reintentar'}
+                    </button>
+                </div>
             </div>
         </div>
     );
