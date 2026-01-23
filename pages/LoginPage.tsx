@@ -61,8 +61,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
       await onLogin({ email: cleanEmail, password });
     } catch (error: any) {
       setIsLoggingIn(false);
-      if (error.message.includes("Verifica tu email")) {
+      // CAPTURAR EL BLOQUEO DE VERIFICACIÓN
+      if (error.message.includes("VERIFY_REQUIRED")) {
           setView('unverified');
+      } else {
+          addNotification(error.message, 'error');
       }
     }
   };
@@ -71,8 +74,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
       setIsLoggingIn(true);
       try {
           await resendVerificationEmail(email);
-          addNotification("Nuevo enlace enviado. Revisa tu correo.", 'success');
-          setView('login');
+          addNotification("¡Enviado! Revisa tu correo (incluyendo spam).", 'success');
       } catch (e: any) {
           addNotification(e.message, 'error');
       } finally {
@@ -94,8 +96,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
       try {
           await onForgotPassword(cleanEmail);
           setResetSuccessMessage(`Se ha enviado un enlace de recuperación a ${cleanEmail}. Revisa tu bandeja de entrada.`);
-      } catch (error) {
-          console.error(error);
+      } catch (error: any) {
+          addNotification(error.message, 'error');
       } finally {
           setIsSendingReset(false);
       }
@@ -169,11 +171,14 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
               <div className="text-center space-y-6 animate-fade-in">
                   <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto text-yellow-600"><svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg></div>
                   <h3 className="text-xl font-bold text-bokara-grey">Verifica tu correo</h3>
-                  <p className="text-sm text-bokara-grey/70">No puedes entrar hasta activar tu cuenta. Hemos enviado un enlace a <span className="font-bold">{email}</span>.</p>
-                  <button onClick={handleResendVerification} disabled={isLoggingIn} className="w-full py-3 bg-bokara-grey text-white rounded-lg font-bold hover:bg-black transition-all">
-                      {isLoggingIn ? 'Enviando...' : 'Reenviar Email de Verificación'}
+                  <p className="text-sm text-bokara-grey/70 leading-relaxed">
+                      Tu cuenta está bloqueada hasta que confirmes tu identidad. <br/>
+                      Hemos enviado un link a <strong>{email}</strong>.
+                  </p>
+                  <button onClick={handleResendVerification} disabled={isLoggingIn} className="w-full py-3 bg-bokara-grey text-white rounded-lg font-bold hover:bg-black transition-all shadow-md">
+                      {isLoggingIn ? 'Enviando...' : 'Reenviar Email Real'}
                   </button>
-                  <button onClick={() => setView('login')} className="text-xs text-bokara-grey/60 hover:underline">Volver e intentar otro correo</button>
+                  <button onClick={() => setView('login')} className="text-xs text-bokara-grey/60 hover:underline">Intentar con otro correo</button>
               </div>
           )}
 
@@ -183,9 +188,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onNavigateToRegister, on
                     {!resetSuccessMessage ? (
                         <>
                             <p className="text-sm text-bokara-grey/70">Ingresa tu email para recibir instrucciones.</p>
-                            <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-2" placeholder="tu@correo.com" />
+                            <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-bokara-grey" placeholder="tu@correo.com" />
                             <div className="flex flex-col gap-3">
-                                <button type="submit" disabled={isSendingReset} className="w-full py-3 bg-wet-sand text-white rounded-lg font-bold hover:bg-opacity-80 transition-all">Enviar Enlace</button>
+                                <button type="submit" disabled={isSendingReset} className="w-full py-3 bg-bokara-grey text-white rounded-lg font-bold hover:bg-black transition-all">Enviar Enlace</button>
                                 <button type="button" onClick={() => setView('login')} className="text-sm text-bokara-grey/60">Cancelar</button>
                             </div>
                         </>

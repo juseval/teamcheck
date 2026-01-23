@@ -35,12 +35,14 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose, on
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (employeeData.name.trim() && employeeData.email.trim()) {
+      // FIX: Added missing property emailVerified to satisfy the Employee type.
       onAddEmployee({
         ...employeeData,
         workScheduleId: employeeData.workScheduleId || null,
         hireDate: new Date(employeeData.hireDate).getTime(),
         terminationDate: employeeData.terminationDate ? new Date(employeeData.terminationDate).getTime() : undefined,
-        manualVacationAdjustment: employeeData.manualVacationAdjustment
+        manualVacationAdjustment: employeeData.manualVacationAdjustment,
+        emailVerified: false
       });
       // Reset
       setEmployeeData({

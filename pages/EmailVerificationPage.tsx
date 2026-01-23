@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNotification } from '../contexts/NotificationContext';
-import { verifyEmail } from '../services/apiService';
+// FIX: Using correct exported member verifyEmailWithToken.
+import { verifyEmailWithToken } from '../services/apiService';
 
 interface EmailVerificationPageProps {
   oobCode: string;
@@ -16,7 +17,8 @@ const EmailVerificationPage: React.FC<EmailVerificationPageProps> = ({ oobCode, 
   useEffect(() => {
     const handleVerification = async () => {
         try {
-            await verifyEmail(oobCode);
+            // FIX: Using verifyEmailWithToken instead of verifyEmail.
+            await verifyEmailWithToken(oobCode);
             setStatus('success');
             addNotification('¡Correo verificado con éxito! Ahora puedes iniciar sesión.', 'success');
         } catch (error: any) {
