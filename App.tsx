@@ -107,16 +107,11 @@ const AppContent: React.FC = () => {
         const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
 
         for (const emp of employees) {
-            // Unicamente si el empleado no está fuera Y tiene una hora de inicio de estado válida
             if (emp.status !== 'Clocked Out' && emp.currentStatusStartTime) {
                 const sessionDuration = now - emp.currentStatusStartTime;
-                
-                // CRITICO: Solo si la duración es MAYOR O IGUAL a 24 horas
                 if (sessionDuration >= TWENTY_FOUR_HOURS_MS) {
                     try {
-                        // El tiempo de salida debe ser exactamente 24 horas después del inicio para coherencia de datos
                         const autoExitTime = emp.currentStatusStartTime + TWENTY_FOUR_HOURS_MS;
-                        
                         await addAttendanceLogEntry({
                             employeeId: emp.id,
                             companyId: emp.companyId,
@@ -126,24 +121,16 @@ const AppContent: React.FC = () => {
                             isAutoLog: true,
                             adminResponse: "Sistema: Salida automática tras cumplirse el límite de 24h de sesión activa."
                         });
-
-                        await updateEmployeeStatus({
-                            ...emp,
-                            status: 'Clocked Out',
-                            currentStatusStartTime: null
-                        });
-                        
+                        await updateEmployeeStatus({ ...emp, status: 'Clocked Out', currentStatusStartTime: null });
                         addNotification(`Salida automática (24h) procesada para ${emp.name}.`, 'success');
-                        console.log(`[AutoClockOut] ${emp.name} sacado tras ${sessionDuration / 3600000} horas.`);
                     } catch (e) {
-                        console.error("Auto clock out failed for", emp.name, e);
+                        console.error("Auto clock out failed", e);
                     }
                 }
             }
         }
     };
 
-    // Ejecutar verificación inmediatamente y luego cada 5 minutos (suficiente para el umbral de 24h)
     checkAutoClockOut();
     const interval = setInterval(checkAutoClockOut, 300000); 
     return () => clearInterval(interval);
@@ -163,16 +150,23 @@ const AppContent: React.FC = () => {
     if (!auth) { setLoading(false); return; }
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
       if (firebaseUser) {
-        try {
-          const profile = await getEmployeeProfile(firebaseUser.uid);
-          if (profile) {
-            const normalizedUser = { ...profile, role: (profile.role || 'employee').toLowerCase() as 'admin' | 'employee' };
-            setUser(normalizedUser);
-            if (!hasInitializedAuth.current && currentPageRef.current !== 'reset-password' && currentPageRef.current !== 'verify-email') {
-                setCurrentPage('tracker');
-            }
-          }
-        } catch (error) { console.error("Error fetching profile", error); }
+        // Solo permitir acceso si está verificado en Firebase
+        if (firebaseUser.emailVerified) {
+            try {
+              const profile = await getEmployeeProfile(firebaseUser.uid);
+              if (profile) {
+                const normalizedUser = { ...profile, role: (profile.role || 'employee').toLowerCase() as 'admin' | 'employee' };
+                setUser(normalizedUser);
+                if (!hasInitializedAuth.current && currentPageRef.current !== 'reset-password' && currentPageRef.current !== 'verify-email') {
+                    setCurrentPage('tracker');
+                }
+              }
+            } catch (error) { console.error("Error fetching profile", error); }
+        } else {
+            // Usuario logueado pero no verificado
+            setUser(null);
+            if (currentPageRef.current !== 'verify-email') setCurrentPage('login');
+        }
       } else {
         setUser(null);
         const current = currentPageRef.current;
@@ -205,8 +199,15 @@ const AppContent: React.FC = () => {
       const normalizedUser = { ...loggedUser, role: (loggedUser.role || 'employee').toLowerCase() as 'admin' | 'employee' };
       setUser(normalizedUser);
       setCurrentPage('tracker');
-      addNotification(`Welcome back, ${loggedUser.name}!`, 'success');
-    } catch (error: any) { addNotification(error.message || 'Login failed', 'error'); throw error; }
+      addNotification(`¡Bienvenido, ${loggedUser.name}!`, 'success');
+    } catch (error: any) { 
+      // IMPORTANTE: Si el error es de verificación, NO mostramos notificación aquí
+      // Dejamos que LoginPage maneje la interfaz de reenvío.
+      if (!error.message.includes("VERIFY_REQUIRED")) {
+          addNotification(error.message || 'Login failed', 'error');
+      }
+      throw error; 
+    }
   };
 
   const handleRegister = async (data: { fullName: string; email: string; password: string; companyName: string; inviteCode?: string }) => {
@@ -226,32 +227,22 @@ const AppContent: React.FC = () => {
       try {
           const employee = employees.find(e => e.id === employeeId);
           if (!employee) return;
-
           const timestamp = Date.now();
-          await addAttendanceLogEntry({
-              employeeId,
-              companyId: user?.companyId || '',
-              employeeName: employee.name,
-              action,
-              timestamp
-          });
-
+          await addAttendanceLogEntry({ employeeId, companyId: user?.companyId || '', employeeName: employee.name, action, timestamp });
           let newStatus = employee.status;
           if (action === 'Clock In') newStatus = 'Working';
           else if (action === 'Clock Out') newStatus = 'Clocked Out';
           else if (action.startsWith('Start ')) newStatus = action.substring(6);
           else if (action.startsWith('End ')) newStatus = 'Working';
-
           const updates: any = { status: newStatus, currentStatusStartTime: newStatus === 'Clocked Out' ? null : timestamp };
           if (action === 'Clock In') { updates.lastClockInTime = timestamp; }
-
           await updateEmployeeStatus({ ...employee, ...updates });
-          addNotification(`${action} recorded for ${employee.name}`, 'success');
-      } catch (error) { console.error(error); addNotification('Failed to update status', 'error'); }
+          addNotification(`${action} recorded`, 'success');
+      } catch (error) { addNotification('Failed to update status', 'error'); }
   };
 
   const handleUpdateLogEntry = async (logId: string, updates: Partial<AttendanceLogEntry>) => {
-      try { await updateAttendanceLogEntry(logId, updates); setIsEditActivityLogEntryModalOpen(false); addNotification('Registro actualizado.', 'success'); } catch (error) { console.error("Failed to update log entry", error); addNotification('Error al actualizar registro.', 'error'); }
+      try { await updateAttendanceLogEntry(logId, updates); setIsEditActivityLogEntryModalOpen(false); addNotification('Registro actualizado.', 'success'); } catch (error) { addNotification('Error al actualizar registro.', 'error'); }
   };
 
   const promptConfirm = (title: string, message: string, onConfirm: () => void) => {
@@ -265,7 +256,7 @@ const AppContent: React.FC = () => {
       return employees;
   }, [employees, user]);
 
-  if (loading) return <div className="flex items-center justify-center h-screen bg-bright-white text-lucius-lime">Loading...</div>;
+  if (loading) return <div className="flex items-center justify-center h-screen bg-bright-white text-lucius-lime font-bold">Iniciando...</div>;
 
   if (currentPage === 'home') return <HomePage onLogin={handleLogin} onRegister={handleRegister} onForgotPassword={handleForgotPassword} />;
   if (currentPage === 'login') return <LoginPage onLogin={handleLogin} onNavigateToRegister={() => setCurrentPage('register')} onNavigateToHome={() => setCurrentPage('home')} onForgotPassword={handleForgotPassword} />;
@@ -281,26 +272,13 @@ const AppContent: React.FC = () => {
       <div className="flex-1 flex flex-col overflow-hidden relative">
         <Header currentPage={currentPage} onNavigate={setCurrentPage} user={user} userRole={user.role} onLogout={handleLogout} onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} notifications={pendingRequests} onNotificationClick={(entry) => { setLogEntryToEdit(entry); setIsEditActivityLogEntryModalOpen(true); }} />
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-whisper-white/30 p-4 sm:p-6 lg:p-8 scroll-smooth">
-          {currentPage === 'tracker' && (
-            <TrackerPage 
-                employees={trackerEmployees} 
-                attendanceLog={attendanceLog} 
-                onEmployeeAction={handleEmployeeAction}
-                onAddEmployee={() => setIsAddEmployeeModalOpen(true)}
-                onRemoveEmployee={(id) => promptConfirm('Remove Employee', 'Are you sure?', () => removeEmployee(id))}
-                onEditTime={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeForTimeEdit(emp); setIsEditTimeModalOpen(true); }}}
-                userRole={user.role}
-                activityStatuses={activityStatuses}
-                workSchedules={workSchedules}
-                onEditEntry={(entry) => { setLogEntryToEdit(entry); setIsEditActivityLogEntryModalOpen(true); }}
-            />
-          )}
+          {currentPage === 'tracker' && <TrackerPage employees={trackerEmployees} attendanceLog={attendanceLog} onEmployeeAction={handleEmployeeAction} onAddEmployee={() => setIsAddEmployeeModalOpen(true)} onRemoveEmployee={(id) => promptConfirm('Remove Employee', 'Are you sure?', () => removeEmployee(id))} onEditTime={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeForTimeEdit(emp); setIsEditTimeModalOpen(true); }}} userRole={user.role} activityStatuses={activityStatuses} workSchedules={workSchedules} onEditEntry={(entry) => { setLogEntryToEdit(entry); setIsEditActivityLogEntryModalOpen(true); }} />}
           {currentPage === 'dashboard' && user.role === 'admin' && <DashboardPage attendanceLog={attendanceLog} employees={employees} onEmployeeAction={handleEmployeeAction} activityStatuses={activityStatuses} workSchedules={workSchedules} calendarEvents={calendarEvents} />}
           {currentPage === 'timesheet' && user.role === 'admin' && <TimesheetPage employees={employees} attendanceLog={attendanceLog} activityStatuses={activityStatuses} onEditEntry={(entry) => { setTimesheetEntryToEdit(entry); setIsEditTimesheetModalOpen(true); }} />}
           {currentPage === 'employees' && user.role === 'admin' && <EmployeesPage employees={employees} onAddEmployee={() => setIsAddEmployeeModalOpen(true)} onEditEmployee={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeToEdit(emp); setIsEditEmployeeModalOpen(true); }}} onRemoveEmployee={(id) => promptConfirm('Remove Employee', 'Are you sure?', () => removeEmployee(id))} workSchedules={workSchedules} currentUser={user} />}
           {currentPage === 'schedule' && user.role === 'admin' && <SchedulePage events={calendarEvents} employees={employees} payrollChangeTypes={payrollChangeTypes} onAddEvent={() => setIsAddEventModalOpen(true)} onEditEvent={(event) => { setEventToEdit(event); setIsEditEventModalOpen(true); }} onRemoveEvent={(event) => promptConfirm('Remove Event', 'Are you sure?', () => removeCalendarEvent(event.id))} onUpdateEventStatus={async (event, status) => { await updateCalendarEvent({ ...event, status }); setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e)); }} />}
           {currentPage === 'seating' && <SeatingPage employees={employees} activityStatuses={activityStatuses} currentUserRole={user.role} />}
-          {currentPage === 'ticketing' && <TicketingPage events={calendarEvents} currentUser={user} employees={employees} payrollChangeTypes={payrollChangeTypes} onAddRequest={async (req) => { try { await addCalendarEvent({ ...req, status: 'pending' }); addNotification('Request submitted', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Failed to submit request', 'error'); }}} onUpdateRequest={async (evt) => { try { await updateCalendarEvent(evt); addNotification('Request updated', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Failed to update request', 'error'); }}} onRemoveRequest={(evt) => promptConfirm('Delete Request', 'Are you sure you want to delete this request?', async () => { try { await removeCalendarEvent(evt.id); addNotification('Request deleted', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Failed to delete request', 'error'); }})} />}
+          {currentPage === 'ticketing' && <TicketingPage events={calendarEvents} currentUser={user} employees={employees} payrollChangeTypes={payrollChangeTypes} onAddRequest={async (req) => { try { await addCalendarEvent({ ...req, status: 'pending' }); addNotification('Request submitted', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Failed to submit request', 'error'); }}} onUpdateRequest={async (evt) => { try { await updateCalendarEvent(evt); addNotification('Request updated', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Failed to update request', 'error'); }}} onRemoveRequest={(evt) => promptConfirm('Delete Request', 'Are you sure?', async () => { try { await removeCalendarEvent(evt.id); addNotification('Request deleted', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Failed to delete request', 'error'); }})} />}
           {currentPage === 'settings' && user.role === 'admin' && <SettingsPage statuses={activityStatuses} onAddStatus={async (n, c) => { await addActivityStatus(n,c); setActivityStatuses(await getActivityStatuses()); }} onRemoveStatus={async (id) => { await removeActivityStatus(id); setActivityStatuses(await getActivityStatuses()); }} payrollChangeTypes={payrollChangeTypes} onAddPayrollChangeType={async (n,c,e,a) => { await addPayrollChangeType(n,c,e,a); setPayrollChangeTypes(await getPayrollChangeTypes()); }} onUpdatePayrollChangeType={async (id, u) => { await updatePayrollChangeType(id, u); setPayrollChangeTypes(await getPayrollChangeTypes()); }} onRemovePayrollChangeType={async (id) => { await removePayrollChangeType(id); setPayrollChangeTypes(await getPayrollChangeTypes()); }} workSchedules={workSchedules} onAddWorkSchedule={async (s) => { await addWorkSchedule(s); setWorkSchedules(await getWorkSchedules()); }} onUpdateWorkSchedule={async (id, u) => { await updateWorkSchedule(id, u); setWorkSchedules(await getWorkSchedules()); }} onRemoveWorkSchedule={async (id) => { await removeWorkSchedule(id); setWorkSchedules(await getWorkSchedules()); }} />}
           {currentPage === 'profile' && <ProfilePage user={user} />}
           {currentPage === 'calendar' && <CalendarPage events={calendarEvents} currentUser={user} payrollChangeTypes={payrollChangeTypes} />}

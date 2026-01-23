@@ -63,7 +63,7 @@ const createRealApi = () => {
                 await user.sendEmailVerification();
                 return true;
             }
-            throw new Error("Sesión no encontrada. Intenta iniciar sesión de nuevo.");
+            throw new Error("No se pudo identificar la sesión actual. Por favor intenta iniciar sesión de nuevo.");
         },
 
         verifyEmailWithToken: async (oobCode: string) => {
@@ -117,7 +117,9 @@ const createRealApi = () => {
             const cred = await auth!.signInWithEmailAndPassword(email, password);
             const user = cred.user;
 
+            // REQUISITO: Bloquear si el correo no ha sido verificado en Firebase Auth
             if (user && !user.emailVerified) {
+                // Sincronizamos flag en DB
                 await db!.collection('employees').doc(user.uid).update({ emailVerified: false });
                 throw new Error("VERIFY_REQUIRED: Tu correo no ha sido verificado.");
             }
@@ -201,7 +203,6 @@ const createRealApi = () => {
             const doc = await db!.collection('companies').doc(companyId).get();
             return doc.exists ? { id: doc.id, ...doc.data() } as Company : null;
         },
-        // FIX: Added missing methods to createRealApi to satisfy the expected API interface and destructuring.
         joinCompany: async (inviteCode: string) => {
             const user = auth!.currentUser;
             if (!user) throw new Error("Not logged in");
