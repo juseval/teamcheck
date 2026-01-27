@@ -4,6 +4,7 @@ import { Employee, WorkSchedule, CalendarEvent } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
 import EmployeeScheduleBoard from '../components/EmployeeScheduleBoard';
 import { updateEmployeeDetails, getCalendarEvents } from '../services/apiService';
+import { SearchIcon } from '../components/Icons';
 
 interface EmployeesPageProps {
   employees: Employee[];
@@ -19,6 +20,7 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
   const [allEvents, setAllEvents] = useState<CalendarEvent[]>([]);
   const [activeTab, setActiveTab] = useState<'list' | 'board' | 'vacations'>('list');
   const [selectedHistoryEmp, setSelectedHistoryEmp] = useState<Employee | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   
   useEffect(() => {
     const loadEvents = async () => {
@@ -33,6 +35,16 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
   const safeEmployees = Array.isArray(employees) ? employees : [];
   const safeWorkSchedules = Array.isArray(workSchedules) ? workSchedules : [];
   const scheduleMap = new Map(safeWorkSchedules.map(s => [s.id, s.name]));
+
+  // --- LÓGICA DE FILTRADO ---
+  const filteredEmployees = useMemo(() => {
+    if (!searchTerm.trim()) return safeEmployees;
+    const lower = searchTerm.toLowerCase();
+    return safeEmployees.filter(emp => 
+        emp.name.toLowerCase().includes(lower) || 
+        emp.email.toLowerCase().includes(lower)
+    );
+  }, [safeEmployees, searchTerm]);
 
   // --- LÓGICA DE VACACIONES CONTABLE LEGAL (30/360) ---
   const getVacationData = (emp: Employee) => {
@@ -59,13 +71,8 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
       if (m2 === 2 && d2 >= 28) d2 = 30;
 
       // Cálculo de Días Laborados (Base 360) INCLUSIVO (+1)
-      // Fórmula: ((Y2 - Y1) * 360) + ((M2 - M1) * 30) + (D2 - D1) + 1
       const accountingDays = ((y2 - y1) * 360) + ((m2 - m1) * 30) + (d2 - d1) + 1;
-      
-      // Proporción: (Días Trabajados * 15 días de vacaciones) / 360 días del año
-      // Esto da exactamente 1.25 días por cada 30 días laborados.
       const accrued = (accountingDays * 15) / 360;
-      
       const adjustment = emp.manualVacationAdjustment || 0;
 
       const myApprovedVacations = allEvents.filter(e => 
@@ -113,13 +120,37 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
 
   return (
     <div className="w-full mx-auto animate-fade-in space-y-6 pb-8">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
         <div className="flex items-center gap-4">
           <h1 className="text-3xl font-bold text-bokara-grey">Colaboradores</h1>
           <span className="bg-lucius-lime/20 text-bokara-grey text-lg font-bold px-3 py-1 rounded-full">{safeEmployees.length}</span>
         </div>
+
+        {/* BUSCADOR DE COLABORADORES */}
+        <div className="w-full xl:max-w-md relative group">
+            <input 
+                type="text" 
+                placeholder="Buscar por nombre o correo..." 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-white rounded-full py-3 pl-6 pr-14 text-bokara-grey shadow-sm border border-bokara-grey/5 focus:outline-none focus:ring-2 focus:ring-lucius-lime/20 transition-all placeholder:text-bokara-grey/30 font-medium"
+            />
+            <div className="absolute right-1.5 top-1.5 bottom-1.5">
+                <div className="h-full aspect-square bg-bokara-grey text-white rounded-full flex items-center justify-center shadow-md">
+                    <SearchIcon className="w-5 h-5" />
+                </div>
+            </div>
+            {searchTerm && (
+                <button 
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-16 top-1/2 -translate-y-1/2 text-bokara-grey/30 hover:text-bokara-grey text-xs font-bold uppercase tracking-tighter"
+                >
+                    Limpiar
+                </button>
+            )}
+        </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
             <div className="bg-white rounded-lg border border-bokara-grey/10 p-1 flex">
                 <button onClick={() => setActiveTab('list')} className={`p-2 rounded-md transition-all ${activeTab === 'list' ? 'bg-bokara-grey text-white shadow-sm' : 'text-bokara-grey/50 hover:bg-whisper-white'}`} title="Vista de Lista"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg></button>
                 <button onClick={() => setActiveTab('board')} className={`p-2 rounded-md transition-all ${activeTab === 'board' ? 'bg-bokara-grey text-white shadow-sm' : 'text-bokara-grey/50 hover:bg-whisper-white'}`} title="Vista de Tablero"><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 00-2 2" /></svg></button>
@@ -149,8 +180,8 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
                 </tr>
                 </thead>
                 <tbody>
-                {safeEmployees.length > 0 ? (
-                    safeEmployees.map(employee => {
+                {filteredEmployees.length > 0 ? (
+                    filteredEmployees.map(employee => {
                     const vac = getVacationData(employee);
                     return (
                     <tr key={employee.id} className={`border-b border-bokara-grey/10 hover:bg-whisper-white/40 transition-colors ${employee.terminationDate ? 'opacity-60 grayscale-[0.5]' : ''}`}>
@@ -192,7 +223,7 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
                     </tr>
                     )})
                 ) : (
-                    <tr><td colSpan={7} className="text-center p-16 text-bokara-grey/50 font-medium">No hay colaboradores registrados.</td></tr>
+                    <tr><td colSpan={7} className="text-center p-16 text-bokara-grey/50 font-medium">No se encontraron colaboradores que coincidan con la búsqueda.</td></tr>
                 )}
                 </tbody>
             </table>
@@ -201,7 +232,7 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
       )}
 
       {activeTab === 'board' && (
-          <div className="h-[600px] min-h-[500px]"><EmployeeScheduleBoard employees={safeEmployees} workSchedules={safeWorkSchedules} onUpdateEmployeeSchedule={handleUpdateSchedule}/></div>
+          <div className="h-[600px] min-h-[500px]"><EmployeeScheduleBoard employees={filteredEmployees} workSchedules={safeWorkSchedules} onUpdateEmployeeSchedule={handleUpdateSchedule}/></div>
       )}
 
       {activeTab === 'vacations' && (
@@ -231,11 +262,14 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
                           </tr>
                       </thead>
                       <tbody>
-                          {safeEmployees.map(emp => {
+                          {filteredEmployees.map(emp => {
                               const vac = getVacationData(emp);
                               return (
                                   <tr key={emp.id} className="border-b border-bokara-grey/5 hover:bg-whisper-white/20 transition-colors">
-                                      <td className="p-3 font-bold text-bokara-grey">{emp.name}</td>
+                                      <td className="p-3 font-bold text-bokara-grey">
+                                          <div>{emp.name}</div>
+                                          <div className="text-[9px] text-bokara-grey/40">{emp.email}</div>
+                                      </td>
                                       <td className="p-3 text-center text-xs font-mono text-bokara-grey/60">{emp.hireDate ? new Date(emp.hireDate).toLocaleDateString('es-CO') : 'Sin Fecha'}</td>
                                       <td className="p-3 text-center text-xs font-mono text-lucius-lime font-bold">{vac.daysWorked}</td>
                                       <td className="p-3 text-right font-medium text-bokara-grey/60">{vac.accrued}</td>

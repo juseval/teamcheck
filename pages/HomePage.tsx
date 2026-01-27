@@ -5,7 +5,7 @@ import { useNotification } from '../contexts/NotificationContext';
 
 interface HomePageProps {
   onLogin: (credentials: { email: string; password: string; }) => Promise<void>;
-  onRegister: (data: { fullName: string; email: string; password: string; companyName: string; inviteCode?: string }) => Promise<void>;
+  onRegister: (data: { fullName: string; email: string; password: string }) => Promise<void>;
   onForgotPassword: (email: string) => Promise<void>;
 }
 
@@ -102,14 +102,13 @@ const InputField: React.FC<{
 );
 
 const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPassword }) => {
-  const [modalView, setModalView] = useState<'none' | 'login' | 'register' | 'forgot'>('none');
+  const [modalView, setModalView] = useState<'none' | 'login' | 'register' | 'forgot' | 'already_exists'>('none');
   const { addNotification } = useNotification();
 
   // Form States
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [companyName, setCompanyName] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -117,7 +116,6 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
       setEmail('');
       setPassword('');
       setFullName('');
-      setCompanyName('');
       setConfirmPassword('');
       setIsLoading(false);
   };
@@ -137,7 +135,6 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
       setIsLoading(true);
       try {
           await onLogin({ email, password });
-          // If successful, App component will likely unmount HomePage or we wait for redirect
       } catch (error) {
           setIsLoading(false);
       }
@@ -146,16 +143,20 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
   const handleRegisterSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       if (password !== confirmPassword) {
-          addNotification("Passwords do not match", 'error');
+          addNotification("Las contraseñas no coinciden", 'error');
           return;
       }
       setIsLoading(true);
       try {
-          await onRegister({ fullName, email, password, companyName });
-          setModalView('login'); // Switch to login on success or let app handle it
+          await onRegister({ fullName, email, password });
+          setModalView('login'); 
           resetForms();
-      } catch (error) {
+      } catch (error: any) {
           setIsLoading(false);
+          // Si el email ya está en uso, mostramos la vista informativa en lugar del error genérico
+          if (error.code === 'auth/email-already-in-use' || error.message?.includes('email-already-in-use')) {
+              setModalView('already_exists');
+          }
       }
   };
 
@@ -193,10 +194,10 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
             </h1>
             <div className="flex items-center gap-4">
                 <button onClick={() => openModal('login')} className="text-bright-white font-semibold hover:text-lucius-lime transition-colors text-sm sm:text-base">
-                    Sign In
+                    Iniciar Sesión
                 </button>
                 <button onClick={() => openModal('register')} className="bg-lucius-lime hover:bg-opacity-90 text-bokara-grey font-bold py-2 px-5 rounded-lg transition-all duration-300 shadow-lg hover:shadow-lucius-lime/20 text-sm sm:text-base">
-                    Get Started
+                    Empezar
                 </button>
             </div>
           </header>
@@ -208,21 +209,21 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
             <section className="text-center py-24 sm:py-32 px-4 container mx-auto">
                 <ScrollReveal>
                     <h2 className="text-5xl sm:text-7xl lg:text-8xl font-display font-bold text-bright-white leading-tight drop-shadow-md mb-8">
-                        Time Tracking <br /> 
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-lucius-lime to-white">Reimagined</span>.
+                        Seguimiento de Tiempo <br /> 
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-lucius-lime to-white">Rediseñado</span>.
                     </h2>
                 </ScrollReveal>
                 
                 <ScrollReveal delay={200}>
                     <p className="max-w-2xl mx-auto mt-2 text-xl text-bright-white/70 leading-relaxed">
-                        Effortlessly monitor attendance, manage shift schedules, and gain actionable insights with TeamCheck's intuitive platform.
+                        Supervise la asistencia sin esfuerzo, gestione turnos y obtenga información útil con la plataforma intuitiva de TeamCheck.
                     </p>
                 </ScrollReveal>
 
                 <ScrollReveal delay={400}>
                     <div className="mt-12 flex justify-center">
                         <button onClick={() => openModal('register')} className="bg-lucius-lime hover:bg-white hover:text-bokara-grey text-bokara-grey font-bold py-4 px-10 rounded-xl transition-all duration-300 shadow-xl hover:shadow-lucius-lime/40 text-lg transform hover:-translate-y-1">
-                            Start Free Trial
+                            Prueba Gratis Ahora
                         </button>
                     </div>
                 </ScrollReveal>
@@ -233,30 +234,30 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
                 <div className="container mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-16">
                         <ScrollReveal>
-                            <h3 className="text-3xl font-bold text-white mb-4">Everything you need to manage your team</h3>
-                            <p className="text-white/60 max-w-2xl mx-auto">Stop using spreadsheets. Upgrade to a system that grows with your company.</p>
+                            <h3 className="text-3xl font-bold text-white mb-4">Todo lo que necesitas para gestionar tu equipo</h3>
+                            <p className="text-white/60 max-w-2xl mx-auto">Deja de usar hojas de cálculo. Actualízate a un sistema que crece con tu empresa.</p>
                         </ScrollReveal>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         <ScrollReveal delay={100} className="h-full">
                             <FeatureCard
                                 icon={<ClockIcon className="w-10 h-10 text-bright-white"/>}
-                                title="Smart Clock-In"
-                                description="Geolocated clock-ins ensure you know exactly where and when your team starts their day."
+                                title="Marcación Inteligente"
+                                description="Marcaciones con geolocalización para saber exactamente dónde y cuándo empieza su equipo."
                             />
                         </ScrollReveal>
                         <ScrollReveal delay={300} className="h-full">
                              <FeatureCard
                                 icon={<DashboardIcon className="w-10 h-10 text-bright-white"/>}
-                                title="Live Dashboard"
-                                description="Real-time visibility into who is working, who is on break, and who is absent."
+                                title="Panel en Vivo"
+                                description="Visibilidad en tiempo real de quién está trabajando, quién está en descanso y quién falta."
                             />
                         </ScrollReveal>
                         <ScrollReveal delay={500} className="h-full">
                              <FeatureCard
                                 icon={<ChronoLogIcon className="w-10 h-10 text-bright-white"/>}
-                                title="AI Summaries"
-                                description="Let our Gemini-powered AI analyze daily logs and provide productivity summaries instantly."
+                                title="Resúmenes con IA"
+                                description="Deja que nuestra IA impulsada por Gemini analice los registros diarios y genere informes al instante."
                             />
                         </ScrollReveal>
                     </div>
@@ -267,7 +268,7 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
             <section className="py-32 container mx-auto px-4">
                 <ScrollReveal>
                     <div className="text-center mb-20">
-                        <h3 className="text-4xl font-display font-bold text-white mb-6">Simple Workflow</h3>
+                        <h3 className="text-4xl font-display font-bold text-white mb-6">Flujo de Trabajo Simple</h3>
                         <div className="w-20 h-1 bg-lucius-lime mx-auto rounded-full"></div>
                     </div>
                 </ScrollReveal>
@@ -279,8 +280,8 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
                     <ScrollReveal delay={100}>
                         <WorkflowStep 
                             number="01" 
-                            title="Check In" 
-                            description="Employees clock in with a single tap from any device."
+                            title="Entrada" 
+                            description="Los colaboradores marcan entrada con un solo toque desde cualquier dispositivo."
                             icon={<svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" /></svg>}
                         />
                     </ScrollReveal>
@@ -288,8 +289,8 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
                     <ScrollReveal delay={300}>
                         <WorkflowStep 
                             number="02" 
-                            title="Track Activity" 
-                            description="Log specific tasks, breaks, or custom statuses in real-time."
+                            title="Actividad" 
+                            description="Registra tareas específicas, descansos o estados personalizados en tiempo real."
                             icon={<ActivityLogIcon className="w-8 h-8" />}
                         />
                     </ScrollReveal>
@@ -297,8 +298,8 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
                     <ScrollReveal delay={500}>
                         <WorkflowStep 
                             number="03" 
-                            title="Analyze" 
-                            description="Admins get instant reports and timesheets for payroll."
+                            title="Análisis" 
+                            description="Los administradores obtienen reportes instantáneos y planillas para nómina."
                             icon={<TeamIcon className="w-8 h-8" />}
                         />
                     </ScrollReveal>
@@ -315,17 +316,17 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
                 
                 <div className="container mx-auto px-4 text-center relative z-10">
                     <ScrollReveal>
-                        <h2 className="text-4xl md:text-5xl font-bold mb-6">Ready to optimize your team?</h2>
+                        <h2 className="text-4xl md:text-5xl font-bold mb-6">¿Listo para optimizar su equipo?</h2>
                         <p className="text-xl md:text-2xl opacity-80 mb-10 max-w-2xl mx-auto">
-                            Join thousands of managers who save hours every week with TeamCheck.
+                            Únete a miles de gerentes que ahorran horas cada semana con TeamCheck.
                         </p>
                         <button 
                             onClick={() => openModal('register')}
                             className="bg-bokara-grey text-white text-xl font-bold py-4 px-12 rounded-full hover:bg-white hover:text-bokara-grey transition-all duration-300 shadow-2xl transform hover:scale-105"
                         >
-                            Create Free Account
+                            Crear Cuenta Gratis
                         </button>
-                        <p className="mt-4 text-sm opacity-60">No credit card required. Cancel anytime.</p>
+                        <p className="mt-4 text-sm opacity-60">No se requiere tarjeta de crédito. Cancela en cualquier momento.</p>
                     </ScrollReveal>
                 </div>
             </section>
@@ -337,16 +338,16 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
             <div className="container mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
                 <div className="text-left">
                     <h4 className="text-2xl font-bold text-white mb-2">Team<span className="text-lucius-lime">Check</span></h4>
-                    <p className="text-white/50 text-sm">Empowering teams to work smarter, not harder.</p>
+                    <p className="text-white/50 text-sm">Empoderando a los equipos para trabajar de manera más inteligente.</p>
                 </div>
                 <div className="flex gap-8 text-sm text-white/60">
-                    <a href="#" className="hover:text-lucius-lime transition-colors">Privacy Policy</a>
-                    <a href="#" className="hover:text-lucius-lime transition-colors">Terms of Service</a>
-                    <a href="#" className="hover:text-lucius-lime transition-colors">Contact Support</a>
+                    <a href="#" className="hover:text-lucius-lime transition-colors">Privacidad</a>
+                    <a href="#" className="hover:text-lucius-lime transition-colors">Términos</a>
+                    <a href="#" className="hover:text-lucius-lime transition-colors">Soporte</a>
                 </div>
             </div>
             <div className="text-center mt-12 text-white/20 text-xs">
-                &copy; {new Date().getFullYear()} TeamCheck Inc. All rights reserved.
+                &copy; {new Date().getFullYear()} TeamCheck Inc. Todos los derechos reservados.
             </div>
           </footer>
         </div>
@@ -374,7 +375,7 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
                         </div>
                         <div className="relative z-10 mb-8">
                             <h2 className="text-3xl font-display font-bold text-white mb-4 leading-tight">
-                                Capturing Time,<br/>Creating Value
+                                Capturando Tiempo,<br/>Creando Valor
                             </h2>
                             <div className="flex gap-2">
                                 <div className="w-8 h-1 bg-lucius-lime rounded-full"></div>
@@ -390,22 +391,57 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
                             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
 
+                        {/* Already Exists View */}
+                        {modalView === 'already_exists' && (
+                             <div className="w-full max-w-sm mx-auto animate-fade-in space-y-6">
+                                <div className="bg-lucius-lime/10 border border-lucius-lime/20 p-8 rounded-3xl text-center">
+                                    <div className="w-16 h-16 bg-lucius-lime/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                                        <svg className="w-8 h-8 text-lucius-lime" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                    <h3 className="text-2xl font-bold text-white mb-3">¡Ya tienes una cuenta!</h3>
+                                    <p className="text-white/60 text-sm leading-relaxed mb-4">
+                                        El correo <span className="text-white font-bold">{email}</span> ya está registrado en TeamCheck.
+                                    </p>
+                                    <p className="text-lucius-lime font-medium text-xs uppercase tracking-widest bg-lucius-lime/5 py-2 px-4 rounded-full inline-block">
+                                       Inicia sesión para entrar a tu nuevo equipo
+                                    </p>
+                                </div>
+                                
+                                <div className="space-y-3">
+                                    <button
+                                        onClick={() => setModalView('login')}
+                                        className="w-full bg-lucius-lime text-bokara-grey font-bold py-4 px-6 rounded-xl hover:bg-white transition-all shadow-lg active:scale-95 text-lg"
+                                    >
+                                        Iniciar Sesión
+                                    </button>
+                                    <button 
+                                        onClick={() => setModalView('register')}
+                                        className="w-full py-3 text-xs font-bold text-white/40 hover:text-white uppercase tracking-widest transition-colors"
+                                    >
+                                        Usar otro correo diferente
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Login View */}
                         {modalView === 'login' && (
                             <div className="w-full max-w-sm mx-auto animate-fade-in">
-                                <h2 className="text-3xl font-bold text-white mb-2">Welcome back</h2>
-                                <p className="text-white/60 mb-8">Please enter your details to sign in.</p>
+                                <h2 className="text-3xl font-bold text-white mb-2">Bienvenido</h2>
+                                <p className="text-white/60 mb-8">Ingresa tus datos para continuar.</p>
                                 
                                 <form onSubmit={handleLoginSubmit}>
-                                    <InputField label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Enter your email" required />
+                                    <InputField label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@correo.com" required />
                                     <InputField label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
                                     
                                     <div className="flex justify-between items-center mb-6">
                                         <label className="flex items-center gap-2 cursor-pointer">
                                             <input type="checkbox" className="rounded bg-white/10 border-white/20 text-lucius-lime focus:ring-0" />
-                                            <span className="text-sm text-white/60">Remember me</span>
+                                            <span className="text-sm text-white/60">Recordarme</span>
                                         </label>
-                                        <button type="button" onClick={() => setModalView('forgot')} className="text-sm text-lucius-lime hover:underline font-medium">Forgot password?</button>
+                                        <button type="button" onClick={() => setModalView('forgot')} className="text-sm text-lucius-lime hover:underline font-medium">¿Olvidó contraseña?</button>
                                     </div>
 
                                     <button 
@@ -413,13 +449,13 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
                                         disabled={isLoading}
                                         className="w-full bg-lucius-lime hover:bg-opacity-90 text-bokara-grey font-bold py-3 rounded-lg transition-all shadow-lg disabled:opacity-50 disabled:cursor-wait"
                                     >
-                                        {isLoading ? 'Signing in...' : 'Sign in'}
+                                        {isLoading ? 'Entrando...' : 'Entrar'}
                                     </button>
                                 </form>
 
                                 <div className="mt-6 text-center">
-                                    <span className="text-white/50 text-sm">Don't have an account? </span>
-                                    <button onClick={() => openModal('register')} className="text-white font-semibold hover:underline text-sm">Sign up</button>
+                                    <span className="text-white/50 text-sm">¿No tienes cuenta? </span>
+                                    <button onClick={() => openModal('register')} className="text-white font-semibold hover:underline text-sm">Regístrate</button>
                                 </div>
                             </div>
                         )}
@@ -427,20 +463,19 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
                         {/* Register View */}
                         {modalView === 'register' && (
                             <div className="w-full max-w-sm mx-auto animate-fade-in">
-                                <h2 className="text-3xl font-bold text-white mb-2">Create an account</h2>
-                                <p className="text-white/60 mb-8">Join your team today.</p>
+                                <h2 className="text-3xl font-bold text-white mb-2">Crear Cuenta</h2>
+                                <p className="text-white/60 mb-8">Únete a tu equipo hoy mismo.</p>
                                 
                                 <form onSubmit={handleRegisterSubmit}>
-                                    <InputField label="Company Name" type="text" value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Acme Inc." required />
-                                    <InputField label="Full Name" type="text" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Jane Doe" required />
-                                    <InputField label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Enter your email" required />
-                                    <InputField label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
-                                    <InputField label="Confirm Password" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" required />
+                                    <InputField label="Nombre Completo" type="text" value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Escribe tu nombre completo" required />
+                                    <InputField label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@correo.com" required />
+                                    <InputField label="Contraseña" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required />
+                                    <InputField label="Confirmar" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="••••••••" required />
                                     
                                     <div className="mb-6">
                                         <label className="flex items-start gap-2 cursor-pointer">
                                             <input type="checkbox" required className="mt-1 rounded bg-white/10 border-white/20 text-lucius-lime focus:ring-0" />
-                                            <span className="text-xs text-white/60">I agree to the <a href="#" className="underline hover:text-white">Terms & Conditions</a></span>
+                                            <span className="text-xs text-white/60">Acepto los <a href="#" className="underline hover:text-white">Términos y Condiciones</a></span>
                                         </label>
                                     </div>
 
@@ -449,13 +484,13 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
                                         disabled={isLoading}
                                         className="w-full bg-lucius-lime hover:bg-opacity-90 text-bokara-grey font-bold py-3 rounded-lg transition-all shadow-lg disabled:opacity-50 disabled:cursor-wait"
                                     >
-                                        {isLoading ? 'Creating account...' : 'Create account'}
+                                        {isLoading ? 'Registrando...' : 'Registrarme'}
                                     </button>
                                 </form>
 
                                 <div className="mt-6 text-center">
-                                    <span className="text-white/50 text-sm">Already have an account? </span>
-                                    <button onClick={() => openModal('login')} className="text-white font-semibold hover:underline text-sm">Log in</button>
+                                    <span className="text-white/50 text-sm">¿Ya tienes cuenta? </span>
+                                    <button onClick={() => openModal('login')} className="text-white font-semibold hover:underline text-sm">Entrar</button>
                                 </div>
                             </div>
                         )}
@@ -463,18 +498,18 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
                         {/* Forgot Password View */}
                         {modalView === 'forgot' && (
                             <div className="w-full max-w-sm mx-auto animate-fade-in">
-                                <h2 className="text-3xl font-bold text-white mb-2">Reset Password</h2>
-                                <p className="text-white/60 mb-8">Enter your email to receive reset instructions.</p>
+                                <h2 className="text-3xl font-bold text-white mb-2">Recuperar Acceso</h2>
+                                <p className="text-white/60 mb-8">Ingresa tu email para recibir instrucciones.</p>
                                 
                                 <form onSubmit={handleForgotSubmit}>
-                                    <InputField label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Enter your email" required />
+                                    <InputField label="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="tu@correo.com" required />
                                     
                                     <button 
                                         type="submit" 
                                         disabled={isLoading}
                                         className="w-full bg-lucius-lime hover:bg-opacity-90 text-bokara-grey font-bold py-3 rounded-lg transition-all shadow-lg disabled:opacity-50 disabled:cursor-wait mb-4"
                                     >
-                                        {isLoading ? 'Sending...' : 'Send Reset Link'}
+                                        {isLoading ? 'Enviando...' : 'Enviar Enlace'}
                                     </button>
                                     
                                     <button 
@@ -482,7 +517,7 @@ const HomePage: React.FC<HomePageProps> = ({ onLogin, onRegister, onForgotPasswo
                                         onClick={() => openModal('login')}
                                         className="w-full bg-white/5 hover:bg-white/10 text-white font-semibold py-3 rounded-lg transition-all"
                                     >
-                                        Back to Login
+                                        Volver
                                     </button>
                                 </form>
                             </div>

@@ -5,8 +5,26 @@ export interface Company {
   id: string;
   name: string;
   ownerId: string;
-  inviteCode: string; // Added to interface for consistency
+  inviteCode: string;
   createdAt: number;
+}
+
+export interface Invitation {
+  id: string;
+  email: string;
+  companyId: string;
+  companyName: string;
+  role: 'admin' | 'employee';
+  status: 'pending' | 'accepted';
+  invitedBy: string;
+  createdAt: number;
+  // Campos de metadatos del contrato
+  hireDate?: number;
+  terminationDate?: number;
+  manualVacationAdjustment?: number;
+  phone?: string;
+  location?: string;
+  workScheduleId?: string | null;
 }
 
 export interface Employee {
@@ -31,7 +49,7 @@ export interface Employee {
   allowMobileClockIn?: boolean;
   autoClockOut24h?: boolean;
   blockEarlyClockIn?: boolean;
-  emailVerified: boolean; // Requisito de seguridad
+  emailVerified: boolean;
 }
 
 export type AttendanceAction = string;

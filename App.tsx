@@ -23,6 +23,7 @@ import { auth, isFirebaseEnabled } from './services/firebase';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import OnboardingPage from './pages/OnboardingPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import EmailVerificationPage from './pages/EmailVerificationPage';
 import DashboardPage from './pages/DashboardPage';
@@ -55,7 +56,6 @@ const AppContent: React.FC = () => {
   
   const [user, setUser] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
-  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(() => {
       const params = new URLSearchParams(window.location.search);
       if (params.get('inviteCode')) return 'register';
@@ -99,81 +99,45 @@ const AppContent: React.FC = () => {
     currentPageRef.current = currentPage;
   }, [currentPage]);
 
-  // --- AUTO CLOCK OUT LOGIC ---
-  useEffect(() => {
-    if (!employees || employees.length === 0) return;
-    const checkAutoClockOut = async () => {
-        const now = Date.now();
-        const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
-        for (const emp of employees) {
-            if (emp.status !== 'Clocked Out' && emp.currentStatusStartTime) {
-                const sessionDuration = now - emp.currentStatusStartTime;
-                if (sessionDuration >= TWENTY_FOUR_HOURS_MS) {
-                    try {
-                        const autoExitTime = emp.currentStatusStartTime + TWENTY_FOUR_HOURS_MS;
-                        await addAttendanceLogEntry({
-                            employeeId: emp.id, companyId: emp.companyId, employeeName: emp.name, action: 'Clock Out',
-                            timestamp: autoExitTime, isAutoLog: true,
-                            adminResponse: "Sistema: Salida automática tras 24h."
-                        });
-                        await updateEmployeeStatus({ ...emp, status: 'Clocked Out', currentStatusStartTime: null });
-                        addNotification(`Salida automática (24h) procesada para ${emp.name}.`, 'success');
-                    } catch (e) { console.error("Auto clock out failed", e); }
-                }
-            }
-        }
-    };
-    checkAutoClockOut();
-    const interval = setInterval(checkAutoClockOut, 300000); 
-    return () => clearInterval(interval);
-  }, [employees]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const mode = params.get('mode');
-    const oobCode = params.get('oobCode');
-    if (oobCode) {
-        if (mode === 'resetPassword') { setActionCode(oobCode); setCurrentPage('reset-password'); }
-        else if (mode === 'verifyEmail') { setActionCode(oobCode); setCurrentPage('verify-email'); }
-    }
-  }, []);
-
-  // --- LÓGICA DE INICIALIZACIÓN ROBUSTA ---
   useEffect(() => {
     if (!auth) { setLoading(false); return; }
 
-    // Timeout de seguridad: Si en 8 segundos no hay respuesta, forzar entrada
-    const timeoutId = setTimeout(() => {
-        if (loading) {
-            setLoading(false);
-            console.warn("Auth initialization timed out. Might be blocked by AdBlocker.");
-        }
-    }, 8000);
-
     const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
-      clearTimeout(timeoutId);
       if (firebaseUser) {
-        if (firebaseUser.emailVerified) {
-            try {
-              const profile = await getEmployeeProfile(firebaseUser.uid);
-              if (profile) {
-                const normalizedUser = { ...profile, role: (profile.role || 'employee').toLowerCase() as 'admin' | 'employee' };
-                setUser(normalizedUser);
-                setUnverifiedEmail(null);
-                if (!hasInitializedAuth.current && !['reset-password', 'verify-email'].includes(currentPageRef.current)) {
+          try {
+            const profile = await getEmployeeProfile(firebaseUser.uid);
+            if (profile) {
+              const normalizedUser = { ...profile, role: (profile.role || 'employee').toLowerCase() as 'admin' | 'employee' };
+              setUser(normalizedUser);
+              if (!hasInitializedAuth.current && !['reset-password', 'verify-email'].includes(currentPageRef.current)) {
+                  if (!profile.companyId) {
+                    setCurrentPage('onboarding');
+                  } else {
                     setCurrentPage('tracker');
-                }
+                  }
               }
-            } catch (error) { console.error("Error fetching profile", error); }
-        } else {
-            // Persistir que el usuario está logueado pero NO verificado
-            setUser(null);
-            setUnverifiedEmail(firebaseUser.email);
-            if (currentPageRef.current !== 'verify-email') setCurrentPage('login');
-        }
+            } else {
+                // CASO CRÍTICO: Usuario existe en Auth pero no en la DB (fue borrado)
+                const fallbackUser: Employee = {
+                    id: firebaseUser.uid,
+                    uid: firebaseUser.uid,
+                    companyId: '',
+                    name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Colaborador',
+                    email: firebaseUser.email || '',
+                    phone: '',
+                    location: '',
+                    role: 'employee',
+                    status: 'Clocked Out',
+                    lastClockInTime: null,
+                    currentStatusStartTime: null,
+                    emailVerified: firebaseUser.emailVerified
+                };
+                setUser(fallbackUser);
+                setCurrentPage('onboarding');
+            }
+          } catch (error) { console.error("Error fetching profile", error); }
       } else {
         setUser(null);
-        setUnverifiedEmail(null);
         const current = currentPageRef.current;
         if (!['reset-password', 'verify-email', 'register'].includes(current)) { setCurrentPage('home'); }
       }
@@ -184,49 +148,44 @@ const AppContent: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !user.companyId) return;
     Promise.all([getActivityStatuses(), getWorkSchedules(), getPayrollChangeTypes(), getCalendarEvents()]).then(([statuses, schedules, payrollTypes, events]) => {
       setActivityStatuses(statuses); setWorkSchedules(schedules); setPayrollChangeTypes(payrollTypes); setCalendarEvents(events);
-    }).catch(e => {
-        console.error(e);
-        if (e.message?.includes('BLOCKED_BY_CLIENT')) {
-            addNotification("Tu navegador está bloqueando la base de datos. Desactiva tu AdBlocker para TeamCheck.", 'error');
-        }
-    });
+    }).catch(e => console.error(e));
     const unsubEmployees = streamEmployees(setEmployees);
     const unsubLog = streamAttendanceLog(setAttendanceLog);
     return () => { unsubEmployees(); unsubLog(); };
   }, [user]);
 
-  const pendingRequests = useMemo(() => {
-      if (user?.role !== 'admin') return [];
-      return attendanceLog.filter(log => log.correctionStatus === 'pending');
-  }, [attendanceLog, user?.role]);
-
   const handleLogin = async (creds: {email: string, password: string}) => {
     try {
       const loggedUser = await loginWithEmailAndPassword(creds.email, creds.password);
-      const normalizedUser = { ...loggedUser, role: (loggedUser.role || 'employee').toLowerCase() as 'admin' | 'employee' };
-      setUser(normalizedUser);
-      setUnverifiedEmail(null);
-      setCurrentPage('tracker');
+      setUser(loggedUser);
+      if (!loggedUser.companyId) {
+          setCurrentPage('onboarding');
+      } else {
+          setCurrentPage('tracker');
+      }
       addNotification(`¡Bienvenido, ${loggedUser.name}!`, 'success');
     } catch (error: any) { 
-      if (!error.message.includes("VERIFY_REQUIRED")) {
-          addNotification(error.message || 'Error al entrar', 'error');
-      }
-      throw error; 
+        addNotification(error.message || 'Error al entrar', 'error');
+        throw error; 
     }
   };
 
-  const handleRegister = async (data: { fullName: string; email: string; password: string; companyName: string; inviteCode?: string }) => {
+  const handleRegister = async (data: { fullName: string; email: string; password: string }) => {
      try {
-       await registerWithEmailAndPassword(data.fullName, data.email, data.password, data.companyName, data.inviteCode);
-       addNotification('Registro exitoso. Se ha enviado un correo de verificación.', 'success');
-     } catch (error: any) { addNotification(error.message || 'Error al registrar', 'error'); throw error; }
+       await registerWithEmailAndPassword(data.fullName, data.email, data.password);
+       addNotification('Registro exitoso.', 'success');
+     } catch (error: any) { 
+        if (!error.message?.includes('auth/email-already-in-use') && error.code !== 'auth/email-already-in-use') {
+            addNotification(error.message || 'Error al registrar', 'error');
+        }
+        throw error; 
+     }
   };
 
-  const handleLogout = async () => { await logout(); setUser(null); setUnverifiedEmail(null); setCurrentPage('home'); addNotification('Sesión cerrada', 'success'); };
+  const handleLogout = async () => { await logout(); setUser(null); setCurrentPage('home'); addNotification('Sesión cerrada', 'success'); };
 
   const handleForgotPassword = async (email: string) => {
       try { await sendPasswordResetEmail(email); addNotification('Correo enviado.', 'success'); } catch (error: any) { addNotification(error.message || 'Error al enviar.', 'error'); throw error; }
@@ -273,29 +232,36 @@ const AppContent: React.FC = () => {
             <div className="w-4 h-4 rounded-full bg-lucius-lime animate-bounce"></div>
           </div>
           <p className="font-bold animate-pulse">Iniciando TeamCheck...</p>
-          <p className="text-[10px] text-bokara-grey/40 px-8 text-center max-w-xs">Si esta pantalla no desaparece, revisa si tienes un AdBlocker activado bloqueando la conexión.</p>
       </div>
   );
 
   if (currentPage === 'home') return <HomePage onLogin={handleLogin} onRegister={handleRegister} onForgotPassword={handleForgotPassword} />;
-  if (currentPage === 'login') return <LoginPage onLogin={handleLogin} onNavigateToRegister={() => setCurrentPage('register')} onNavigateToHome={() => setCurrentPage('home')} onForgotPassword={handleForgotPassword} initiallyUnverifiedEmail={unverifiedEmail} />;
+  if (currentPage === 'login') return <LoginPage onLogin={handleLogin} onNavigateToRegister={() => setCurrentPage('register')} onNavigateToHome={() => setCurrentPage('home')} onForgotPassword={handleForgotPassword} />;
   if (currentPage === 'register') return <RegisterPage onRegister={handleRegister} onNavigateToLogin={() => setCurrentPage('login')} onNavigateToHome={() => setCurrentPage('home')} />;
   if (currentPage === 'reset-password' && actionCode) return <ResetPasswordPage oobCode={actionCode} onNavigateToLogin={() => setCurrentPage('login')} />;
   if (currentPage === 'verify-email' && actionCode) return <EmailVerificationPage oobCode={actionCode} onNavigateToLogin={() => setCurrentPage('login')} />;
 
   if (!user) return <HomePage onLogin={handleLogin} onRegister={handleRegister} onForgotPassword={handleForgotPassword} />;
 
+  if (currentPage === 'onboarding' || !user.companyId) {
+    return <NotificationProvider><OnboardingPage user={user} onLogout={handleLogout} onComplete={async () => {
+      const refreshedProfile = await getEmployeeProfile(user.id);
+      if (refreshedProfile) setUser({ ...refreshedProfile, role: (refreshedProfile.role || 'employee').toLowerCase() as 'admin' | 'employee' });
+      setCurrentPage('tracker');
+    }} /></NotificationProvider>;
+  }
+
   return (
     <div className="flex h-screen bg-bright-white overflow-hidden font-sans text-bokara-grey">
       <SideNav currentPage={currentPage} onNavigate={setCurrentPage} userRole={user.role} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       <div className="flex-1 flex flex-col overflow-hidden relative">
-        <Header currentPage={currentPage} onNavigate={setCurrentPage} user={user} userRole={user.role} onLogout={handleLogout} onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} notifications={pendingRequests} onNotificationClick={(entry) => { setLogEntryToEdit(entry); setIsEditActivityLogEntryModalOpen(true); }} />
+        <Header currentPage={currentPage} onNavigate={setCurrentPage} user={user} userRole={user.role} onLogout={handleLogout} onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} notifications={[]} onNotificationClick={() => {}} />
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-whisper-white/30 p-4 sm:p-6 lg:p-8 scroll-smooth">
           {currentPage === 'tracker' && <TrackerPage employees={trackerEmployees} attendanceLog={attendanceLog} onEmployeeAction={handleEmployeeAction} onAddEmployee={() => setIsAddEmployeeModalOpen(true)} onRemoveEmployee={(id) => promptConfirm('Eliminar Colaborador', '¿Estás seguro?', () => removeEmployee(id))} onEditTime={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeForTimeEdit(emp); setIsEditTimeModalOpen(true); }}} userRole={user.role} activityStatuses={activityStatuses} workSchedules={workSchedules} onEditEntry={(entry) => { setLogEntryToEdit(entry); setIsEditActivityLogEntryModalOpen(true); }} />}
           {currentPage === 'dashboard' && user.role === 'admin' && <DashboardPage attendanceLog={attendanceLog} employees={employees} onEmployeeAction={handleEmployeeAction} activityStatuses={activityStatuses} workSchedules={workSchedules} calendarEvents={calendarEvents} />}
           {currentPage === 'timesheet' && user.role === 'admin' && <TimesheetPage employees={employees} attendanceLog={attendanceLog} activityStatuses={activityStatuses} onEditEntry={(entry) => { setTimesheetEntryToEdit(entry); setIsEditTimesheetModalOpen(true); }} />}
           {currentPage === 'employees' && user.role === 'admin' && <EmployeesPage employees={employees} onAddEmployee={() => setIsAddEmployeeModalOpen(true)} onEditEmployee={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeToEdit(emp); setIsEditEmployeeModalOpen(true); }}} onRemoveEmployee={(id) => promptConfirm('Eliminar Colaborador', '¿Estás seguro?', () => removeEmployee(id))} workSchedules={workSchedules} currentUser={user} />}
-          {currentPage === 'schedule' && user.role === 'admin' && <SchedulePage events={calendarEvents} employees={employees} payrollChangeTypes={payrollChangeTypes} onAddEvent={() => setIsAddEventModalOpen(true)} onEditEvent={(event) => { setEventToEdit(event); setIsEditEventModalOpen(true); }} onRemoveEvent={(event) => promptConfirm('Eliminar Evento', '¿Estás seguro?', () => removeCalendarEvent(event.id))} onUpdateEventStatus={async (event, status) => { await updateCalendarEvent({ ...event, status }); setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e)); }} />}
+          {currentPage === 'schedule' && user.role === 'admin' && <SchedulePage events={calendarEvents} employees={employees} payrollChangeTypes={payrollChangeTypes} onAddEvent={() => setIsAddEmployeeModalOpen(true)} onEditEvent={(event) => { setEventToEdit(event); setIsEditEventModalOpen(true); }} onRemoveEvent={(event) => promptConfirm('Eliminar Evento', '¿Estás seguro?', () => removeCalendarEvent(event.id))} onUpdateEventStatus={async (event, status) => { await updateCalendarEvent({ ...event, status }); setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e)); }} />}
           {currentPage === 'seating' && <SeatingPage employees={employees} activityStatuses={activityStatuses} currentUserRole={user.role} />}
           {currentPage === 'ticketing' && <TicketingPage events={calendarEvents} currentUser={user} employees={employees} payrollChangeTypes={payrollChangeTypes} onAddRequest={async (req) => { try { await addCalendarEvent({ ...req, status: 'pending' }); addNotification('Solicitud enviada', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Error al enviar', 'error'); }}} onUpdateRequest={async (evt) => { try { await updateCalendarEvent(evt); addNotification('Solicitud actualizada', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Error al actualizar', 'error'); }}} onRemoveRequest={(evt) => promptConfirm('Borrar Solicitud', '¿Seguro?', async () => { try { await removeCalendarEvent(evt.id); addNotification('Solicitud borrada', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Error al borrar', 'error'); }})} />}
           {currentPage === 'settings' && user.role === 'admin' && <SettingsPage statuses={activityStatuses} onAddStatus={async (n, c) => { await addActivityStatus(n,c); setActivityStatuses(await getActivityStatuses()); }} onRemoveStatus={async (id) => { await removeActivityStatus(id); setActivityStatuses(await getActivityStatuses()); }} payrollChangeTypes={payrollChangeTypes} onAddPayrollChangeType={async (n,c,e,a) => { await addPayrollChangeType(n,c,e,a); setPayrollChangeTypes(await getPayrollChangeTypes()); }} onUpdatePayrollChangeType={async (id, u) => { await updatePayrollChangeType(id, u); setPayrollChangeTypes(await getPayrollChangeTypes()); }} onRemovePayrollChangeType={async (id) => { await removePayrollChangeType(id); setPayrollChangeTypes(await getPayrollChangeTypes()); }} workSchedules={workSchedules} onAddWorkSchedule={async (s) => { await addWorkSchedule(s); setWorkSchedules(await getWorkSchedules()); }} onUpdateWorkSchedule={async (id, u) => { await updateWorkSchedule(id, u); setWorkSchedules(await getWorkSchedules()); }} onRemoveWorkSchedule={async (id) => { await removeWorkSchedule(id); setWorkSchedules(await getWorkSchedules()); }} />}
