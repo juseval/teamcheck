@@ -8,7 +8,8 @@ import { useNotification } from '../contexts/NotificationContext';
 interface SeatingPageProps {
   employees: Employee[];
   activityStatuses: ActivityStatus[];
-  currentUserRole: 'admin' | 'employee';
+  // FIX: Updated currentUserRole type to include 'master' to resolve type mismatch in App.tsx
+  currentUserRole: 'master' | 'admin' | 'employee';
 }
 
 const SeatingPage: React.FC<SeatingPageProps> = ({ employees, activityStatuses, currentUserRole }) => {

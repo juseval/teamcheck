@@ -8,7 +8,8 @@ interface AttendanceLogProps {
   entries: AttendanceLogEntry[];
   dateRange: { startDate: string; endDate: string };
   onDateRangeChange: (range: { startDate: string; endDate: string }) => void;
-  userRole: 'admin' | 'employee';
+  // FIX: Updated userRole type to include 'master' to resolve type mismatch in App.tsx
+  userRole: 'master' | 'admin' | 'employee';
   onEditEntry?: (entry: AttendanceLogEntry) => void;
   onRequestCorrection?: (entry: AttendanceLogEntry, requestText: string) => void;
 }
@@ -66,7 +67,8 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDat
       return (
         <tr key={entry.id} className={`border-b border-gray-200 hover:bg-whisper-white/40 transition-colors ${isPending ? 'bg-yellow-50' : ''}`}>
             <td className="p-3 text-bokara-grey/80 font-mono text-sm whitespace-nowrap">
-                {userRole === 'admin' ? formatDate(entry.timestamp) : formatTime(entry.timestamp)}
+                {/* FIX: Changed condition to include 'master' role for Date visibility */}
+                {userRole !== 'employee' ? formatDate(entry.timestamp) : formatTime(entry.timestamp)}
                 {/* Admin Response/Status Indicator */}
                 {entry.correctionStatus && (
                     <div className="mt-1 flex items-center gap-1">
@@ -80,7 +82,8 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDat
                     </div>
                 )}
             </td>
-            {userRole === 'admin' && (
+            {/* FIX: Changed condition to include 'master' role for detailed log data */}
+            {userRole !== 'employee' && (
                 <>
                     <td className="p-3 text-bokara-grey/80 font-mono text-sm">{formatTime(entry.timestamp)}</td>
                     <td className="p-3 text-bokara-grey">{entry.employeeName || 'Unknown'}</td>
@@ -108,7 +111,8 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDat
             <td className="p-3 text-right whitespace-nowrap">
                 <div className="flex justify-end items-center gap-2">
                     {/* Admin: Edit Button (Handles Requests too) */}
-                    {userRole === 'admin' && onEditEntry && (
+                    {/* FIX: Changed condition to include 'master' role for Edit access */}
+                    {userRole !== 'employee' && onEditEntry && (
                         <button 
                             onClick={() => onEditEntry(entry)} 
                             className={`p-1.5 rounded-full transition-colors relative ${isPending ? 'text-yellow-600 bg-yellow-100 hover:bg-yellow-200' : 'text-bokara-grey/50 hover:text-lucius-lime hover:bg-whisper-white'}`} 
@@ -157,7 +161,8 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDat
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
             <h2 className="text-2xl font-bold text-bokara-grey">{userRole === 'employee' ? "Today's Activity" : "Activity Log"}</h2>
             
-            {userRole === 'admin' && (
+            {/* FIX: Changed condition to include 'master' role for filters and export */}
+            {userRole !== 'employee' && (
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <div className="flex items-center gap-2">
                     <label htmlFor="startDate" className="text-sm text-lucius-lime flex-shrink-0">From:</label>
@@ -199,9 +204,11 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDat
                 <thead>
                 <tr className="border-b border-bokara-grey/10 bg-gray-50 sticky top-0 z-10">
                     <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider">
-                        {userRole === 'admin' ? 'Date' : 'Time'}
+                        {/* FIX: Changed condition to include 'master' role for Date header */}
+                        {userRole !== 'employee' ? 'Date' : 'Time'}
                     </th>
-                    {userRole === 'admin' && (
+                    {/* FIX: Changed condition to include 'master' role for extra columns */}
+                    {userRole !== 'employee' && (
                         <>
                             <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider">Time</th>
                             <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider">Colaborador</th>
@@ -209,7 +216,8 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDat
                     )}
                     <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider">Action</th>
                     <th className="p-3 text-sm font-semibold text-lucius-lime uppercase tracking-wider text-right">
-                        {userRole === 'admin' ? 'Actions' : 'Corrections'}
+                        {/* FIX: Changed condition to include 'master' role for Actions header */}
+                        {userRole !== 'employee' ? 'Actions' : 'Corrections'}
                     </th>
                 </tr>
                 </thead>
@@ -219,7 +227,8 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({ entries, dateRange, onDat
             </table>
             ) : (
             <p className="text-center text-bokara-grey/60 py-8">
-                {userRole === 'admin' && (dateRange.startDate || dateRange.endDate) ? 'No activity found for this date range.' : 'No activity recorded.'}
+                {/* FIX: Changed condition to include 'master' role for empty state text */}
+                {userRole !== 'employee' && (dateRange.startDate || dateRange.endDate) ? 'No activity found for this date range.' : 'No activity recorded.'}
             </p>
             )}
         </div>

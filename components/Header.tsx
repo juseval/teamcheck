@@ -8,7 +8,8 @@ interface HeaderProps {
   currentPage: string;
   onNavigate: (page: string) => void;
   user: Employee;
-  userRole: 'admin' | 'employee';
+  // FIX: Updated userRole type to include 'master' to resolve type mismatch in App.tsx
+  userRole: 'master' | 'admin' | 'employee';
   onLogout: () => void;
   onMenuClick?: () => void;
   notifications?: AttendanceLogEntry[];
@@ -63,7 +64,8 @@ const Header: React.FC<HeaderProps> = ({ currentPage, onNavigate, user, userRole
       <div className="flex items-center gap-4">
         
         {/* Admin Notifications */}
-        {userRole === 'admin' && (
+        {/* FIX: Changed condition to include 'master' role for notification access */}
+        {userRole !== 'employee' && (
             <div className="relative" ref={notificationRef}>
                 <button 
                     onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}

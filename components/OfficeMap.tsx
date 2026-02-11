@@ -7,7 +7,8 @@ import { useNotification } from '../contexts/NotificationContext';
 interface OfficeMapProps {
   employees: Employee[];
   activityStatuses: ActivityStatus[];
-  currentUserRole: 'admin' | 'employee';
+  // FIX: Updated currentUserRole type to include 'master' to resolve type mismatch in App.tsx
+  currentUserRole: 'master' | 'admin' | 'employee';
   onAssignSeat: (seatId: string, employeeId: string | null) => void;
 }
 
@@ -166,7 +167,8 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
                 e.stopPropagation(); // Crucial: Stop click from hitting the background and deselecting
                 // ALLOW 'desk' and 'meeting_table' for assignment
                 // 'custom_shape' is usually visual, but user can edit it
-                if (!isEditMode && (item.type === 'desk' || item.type === 'meeting_table') && currentUserRole === 'admin') {
+                // FIX: Updated check to include 'master' role for seat assignment
+                if (!isEditMode && (item.type === 'desk' || item.type === 'meeting_table') && currentUserRole !== 'employee') {
                     setSelectedItem(item);
                 }
                 if (isEditMode) {
@@ -389,7 +391,8 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
                         </div>
                     )}
                 </div>
-                {currentUserRole === 'admin' && (
+                {/* FIX: Changed condition to include 'master' role for map editing */}
+                {currentUserRole !== 'employee' && (
                     <div className="flex items-center gap-2">
                         {isEditMode ? (
                             <>  
@@ -559,7 +562,8 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
             </div>
 
             {/* Assignment Modal (View Mode Only) */}
-            {!isEditMode && selectedItem && (selectedItem.type === 'desk' || selectedItem.type === 'meeting_table') && (
+            {/* FIX: Changed condition to include 'master' role for assignment modal visibility */}
+            {!isEditMode && selectedItem && (selectedItem.type === 'desk' || selectedItem.type === 'meeting_table') && currentUserRole !== 'employee' && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setSelectedItem(null)}>
                     <div className="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl animate-fade-in" onClick={e => e.stopPropagation()}>
                         <h3 className="text-xl font-bold text-bokara-grey mb-4">Assign Seat {selectedItem.label}</h3>

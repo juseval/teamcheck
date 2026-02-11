@@ -78,6 +78,12 @@ export const SettingsIcon: React.FC<{className?: string}> = ({ className = sideN
     </svg>
 );
 
+export const PlugIcon: React.FC<{className?: string}> = ({ className = sideNavIconClass }) => (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+    </svg>
+);
+
 export const QuestionMarkCircleIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -110,6 +116,12 @@ export const EditIcon: React.FC<{className?: string}> = ({ className }) => (
     </svg>
 );
 
+export const TrashIcon: React.FC<{className?: string}> = ({ className }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+  </svg>
+);
+
 export const SearchIcon: React.FC<{className?: string}> = ({ className = 'w-5 h-5' }) => (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
 );
@@ -130,36 +142,6 @@ export const PaperAirplaneIcon: React.FC<{className?: string}> = ({ className })
     <svg className={className} fill="currentColor" viewBox="0 0 20 20">
         <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.428A1 1 0 0010 16.5V3a1 1 0 00-.894-.447z" />
     </svg>
-);
-
-// ... rest of icons (MenuIcon, PhoneStatusIcon, etc)
-// Menu Icon
-export const MenuIcon: React.FC<{className?: string}> = ({ className = "w-6 h-6" }) => (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-    </svg>
-);
-
-// Agent State Icons
-export const PhoneStatusIcon: React.FC<{className?: string}> = ({ className = 'w-4 h-4' }) => (
-    <svg className={className} fill="currentColor" viewBox="0 0 20 20"><path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C6.477 18 2 13.523 2 8V3z"></path></svg>
-);
-export const CrossStatusIcon: React.FC<{className?: string}> = ({ className = 'w-4 h-4' }) => (
-    <svg className={className} fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"></path></svg>
-);
-export const CheckStatusIcon: React.FC<{className?: string}> = ({ className = 'w-4 h-4' }) => (
-    <svg className={className} fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"></path></svg>
-);
-export const SpeakerStatusIcon: React.FC<{className?: string}> = ({ className = 'w-4 h-4' }) => (
-    <svg className={className} fill="currentColor" viewBox="0 0 20 20"><path d="M10 3.633a.75.75 0 01.75.75v10.234a.75.75 0 01-1.5 0V4.383a.75.75 0 01.75-.75zM6.5 6.133a.75.75 0 01.75.75v5.234a.75.75 0 01-1.5 0V6.883a.75.75 0 01.75-.75zM3 8.633a.75.75 0 01.75.75v.234a.75.75 0 01-1.5 0V9.383a.75.75 0 01.75-.75zM13.5 6.133a.75.75 0 01.75.75v5.234a.75.75 0 01-1.5 0V6.883a.75.75 0 01.75-.75zM17 8.633a.75.75 0 01.75.75v.234a.75.75 0 01-1.5 0V9.383a.75.75 0 01.75-.75z"></path></svg>
-);
-
-// Table Icons
-export const FilterIcon: React.FC<{className?: string}> = ({ className = 'w-4 h-4' }) => (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L16 11.414V16l-4 2v-6.586L3.293 6.707A1 1 0 013 6V4z"></path></svg>
-);
-export const SortUpIcon: React.FC<{className?: string}> = ({ className = 'w-4 h-4' }) => (
-    <svg className={className} fill="currentColor" viewBox="0 0 20 20"><path d="M3 3a1 1 0 000 2h14a1 1 0 100-2H3zm0 4a1 1 0 100 2h14a1 1 0 100-2H3zm0 4a1 1 0 100 2h14a1 1 0 100-2H3z"></path></svg>
 );
 
 export const CheckCircleIcon: React.FC<{className?: string}> = ({ className = 'w-6 h-6' }) => (
@@ -184,4 +166,47 @@ export const MapIcon: React.FC<{className?: string}> = ({ className = sideNavIco
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
     </svg>
+);
+
+// FIX: Added missing icons for Header, SchedulePage, AgentStateDashboard, and TimesheetOverview
+export const MenuIcon = () => (
+  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+  </svg>
+);
+
+export const FilterIcon: React.FC<{className?: string}> = ({ className = sideNavIconClass }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+  </svg>
+);
+
+export const SortUpIcon: React.FC<{className?: string}> = ({ className }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
+  </svg>
+);
+
+export const PhoneStatusIcon: React.FC<{className?: string}> = ({ className }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+  </svg>
+);
+
+export const CrossStatusIcon: React.FC<{className?: string}> = ({ className }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
+
+export const CheckStatusIcon: React.FC<{className?: string}> = ({ className }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+  </svg>
+);
+
+export const SpeakerStatusIcon: React.FC<{className?: string}> = ({ className }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+  </svg>
 );

@@ -1,7 +1,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { CalendarEvent, PayrollChangeType, Employee } from '../types';
-import { FilterIcon, EditIcon } from '../components/Icons';
+import { EditIcon, TrashIcon } from '../components/Icons';
+import { useNotification } from '../contexts/NotificationContext';
+import { getNotificationRecipients, getEmailConfig } from '../services/apiService';
 
 interface TicketingPageProps {
   events: CalendarEvent[];
@@ -30,9 +32,9 @@ interface CalendarDay {
 }
 
 const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payrollChangeTypes, employees, onAddRequest, onUpdateRequest, onRemoveRequest, onUpdateEventStatus }) => {
+    const { addNotification } = useNotification();
     const [currentDate, setCurrentDate] = useState(new Date());
     const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
-    const [isPendingModalOpen, setIsPendingModalOpen] = useState(false);
     const [viewType, setViewType] = useState('');
     const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
 
@@ -44,7 +46,6 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
     const handleNextMonth = () => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() + 1, 1));
     const handleToday = () => setCurrentDate(new Date());
 
-    const employeeMap = useMemo(() => new Map((employees || []).map(e => [e.id, e.name])), [employees]);
     const eventColorMap = useMemo(() => {
         const map = new Map<string, string>();
         payrollChangeTypes.forEach(p => map.set(p.name, p.color));
@@ -52,7 +53,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
     }, [payrollChangeTypes]);
 
     const visibleTypes = useMemo(() => {
-        if (!currentUser || currentUser.role === 'admin') return payrollChangeTypes;
+        if (!currentUser || currentUser.role === 'admin' || currentUser.role === 'master') return payrollChangeTypes;
         return payrollChangeTypes.filter(t => !t.adminOnly);
     }, [payrollChangeTypes, currentUser]);
 
@@ -63,27 +64,30 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
         }
     }, [visibleTypes, viewType, newRequestType, editingEvent]);
 
-    const quotaInfo = useMemo(() => {
-        const selectedType = payrollChangeTypes.find(t => t.name === newRequestType);
-        if (!selectedType || !selectedType.yearlyQuota) return null;
-
-        const currentYear = new Date().getFullYear();
-        const usedThisYear = events.filter(e => {
-            const startDate = new Date(e.startDate);
-            return e.employeeId === currentUser.id && 
-                   e.type === newRequestType && 
-                   e.status !== 'rejected' &&
-                   startDate.getFullYear() === currentYear;
-        }).length;
-
-        return {
-            current: usedThisYear,
-            max: selectedType.yearlyQuota
-        };
-    }, [newRequestType, events, currentUser.id, payrollChangeTypes]);
+    // --- LÓGICA DE VACACIONES (NORMATIVA CST COLOMBIA) ---
+    const vacationStats = useMemo(() => {
+        if (!currentUser.hireDate) return { accrued: 0, taken: 0, compensated: 0, balance: 0, maxCompensable: 0 };
+        const start = new Date(currentUser.hireDate);
+        const end = currentUser.terminationDate ? new Date(currentUser.terminationDate) : new Date();
+        let d1 = start.getDate(); let m1 = start.getMonth() + 1; let y1 = start.getFullYear();
+        let d2 = end.getDate(); let m2 = end.getMonth() + 1; let y2 = end.getFullYear();
+        if (d1 === 31) d1 = 30; if (d2 === 31) d2 = 30;
+        if (m1 === 2 && d1 >= 28) d1 = 30; if (m2 === 2 && d2 >= 28) d2 = 30;
+        const accountingDays = ((y2 - y1) * 360) + ((m2 - m1) * 30) + (d2 - d1) + 1;
+        const totalAccrued = ((accountingDays * 15) / 360) + (currentUser.manualVacationAdjustment || 0);
+        let taken = 0; let compensated = 0;
+        events.filter(e => e.employeeId === currentUser.id && e.status === 'approved').forEach(e => {
+            const duration = Math.ceil((new Date(e.endDate).getTime() - new Date(e.startDate).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            if (e.type === 'Vacation' || e.type === 'Vacaciones') taken += duration;
+            if (e.type === 'Vacaciones (Dinero)' || e.type === 'Compensación') compensated += duration;
+        });
+        const balance = totalAccrued - taken - compensated;
+        const maxMoneyLegal = (totalAccrued / 2) - compensated;
+        return { accrued: totalAccrued, taken, compensated, balance, maxCompensable: Math.max(0, maxMoneyLegal) };
+    }, [currentUser, events]);
 
     const handleDayClick = (date: Date, isPast: boolean) => {
-        if (isPast) return; // No permitir abrir modal en días pasados
+        if (isPast) return;
         const dateStr = date.toISOString().split('T')[0];
         setNewRequestStartDate(dateStr);
         setNewRequestEndDate(dateStr);
@@ -99,106 +103,34 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
         setIsRequestModalOpen(true);
     };
 
-    const vacationStats = useMemo(() => {
-        if (!currentUser.hireDate) return { accrued: "0.00", taken: "0.0", pending: "0.00" };
-        
-        const start = new Date(currentUser.hireDate);
-        const end = currentUser.terminationDate ? new Date(currentUser.terminationDate) : new Date();
-        
-        let d1 = start.getDate();
-        let m1 = start.getMonth() + 1;
-        let y1 = start.getFullYear();
-        
-        let d2 = end.getDate();
-        let m2 = end.getMonth() + 1;
-        let y2 = end.getFullYear();
-
-        if (d1 === 31) d1 = 30;
-        if (d2 === 31) d2 = 30;
-        if (m1 === 2 && d1 >= 28) d1 = 30;
-        if (m2 === 2 && d2 >= 28) d2 = 30;
-
-        const accountingDays = ((y2 - y1) * 360) + ((m2 - m1) * 30) + (d2 - d1) + 1;
-        const accruedBase = (accountingDays * 15) / 360;
-        const adjustment = currentUser.manualVacationAdjustment || 0;
-
-        let taken = 0;
-        events.filter(e => e.employeeId === currentUser.id && (e.type === 'Vacation' || e.type === 'Vacaciones') && e.status === 'approved').forEach(e => {
-            const s = new Date(e.startDate);
-            const f = new Date(e.endDate);
-            const duration = Math.ceil((f.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-            taken += duration;
-        });
-
-        const pending = (accruedBase + adjustment) - taken;
-
-        return {
-            accrued: accruedBase.toFixed(2),
-            taken: taken.toFixed(1),
-            pending: pending.toFixed(2)
-        };
-    }, [currentUser, events]);
-
     const calendarGrid = useMemo(() => {
         const year = currentDate.getFullYear();
         const month = currentDate.getMonth();
         const firstDayOfMonth = new Date(year, month, 1);
         const lastDayOfMonth = new Date(year, month + 1, 0);
         const days: CalendarDay[] = [];
-        
         let startDayOfWeek = firstDayOfMonth.getDay(); 
         startDayOfWeek = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1; 
-
-        const today = new Date();
-        today.setHours(0,0,0,0);
-
+        const today = new Date(); today.setHours(0,0,0,0);
         for (let i = 0; i < startDayOfWeek; i++) {
-            const date = new Date(firstDayOfMonth);
-            date.setDate(date.getDate() - (startDayOfWeek - i));
-            days.push({ 
-                date, 
-                isCurrentMonth: false, 
-                isToday: false, 
-                dayOfMonth: date.getDate(), 
-                isPast: date < today,
-                events: [] 
-            });
+            const date = new Date(firstDayOfMonth); date.setDate(date.getDate() - (startDayOfWeek - i));
+            days.push({ date, isCurrentMonth: false, isToday: false, dayOfMonth: date.getDate(), isPast: date < today, events: [] });
         }
-
         for (let i = 1; i <= lastDayOfMonth.getDate(); i++) {
-            const date = new Date(year, month, i);
-            const isToday = date.toDateString() === today.toDateString();
-            days.push({ 
-                date, 
-                isCurrentMonth: true, 
-                isToday, 
-                dayOfMonth: i, 
-                isPast: date < today,
-                events: [] 
-            });
+            const date = new Date(year, month, i); const isToday = date.toDateString() === today.toDateString();
+            days.push({ date, isCurrentMonth: true, isToday, dayOfMonth: i, isPast: date < today, events: [] });
         }
-
         const remainingDays = 42 - days.length; 
         for (let i = 1; i <= remainingDays; i++) {
-            const date = new Date(lastDayOfMonth);
-            date.setDate(date.getDate() + i);
-            days.push({ 
-                date, 
-                isCurrentMonth: false, 
-                isToday: false, 
-                dayOfMonth: date.getDate(), 
-                isPast: date < today,
-                events: [] 
-            });
+            const date = new Date(lastDayOfMonth); date.setDate(date.getDate() + i);
+            days.push({ date, isCurrentMonth: false, isToday: false, dayOfMonth: date.getDate(), isPast: date < today, events: [] });
         }
-
         const selectedTypeConfig = payrollChangeTypes.find(t => t.name === viewType);
         events.forEach(event => {
             if (event.status === 'rejected') return;
             const startDate = new Date(event.startDate + 'T00:00:00');
             const endDate = new Date(event.endDate + 'T00:00:00');
             const isMine = event.employeeId === currentUser.id;
-            
             for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
                 const dayStr = d.toISOString().split('T')[0];
                 const dayInGrid = days.find(day => day.date.toISOString().split('T')[0] === dayStr);
@@ -206,9 +138,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                     if (!isMine && selectedTypeConfig?.isExclusive && event.type === viewType && event.status === 'approved') dayInGrid.isBlocked = true;
                     if (isMine) {
                         dayInGrid.events.push({
-                            event, 
-                            isMine: true, 
-                            color: eventColorMap.get(event.type) || '#91A673',
+                            event, isMine: true, color: eventColorMap.get(event.type) || '#91A673',
                             label: event.status === 'pending' ? `${event.type} (Pendiente)` : event.type
                         });
                     }
@@ -218,49 +148,100 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
         return days;
     }, [currentDate, events, eventColorMap, currentUser.id, viewType, payrollChangeTypes]);
 
-    const handleRequestSubmit = (e: React.FormEvent) => {
+    const handleRequestSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (editingEvent) onUpdateRequest({ ...editingEvent, type: newRequestType, startDate: newRequestStartDate, endDate: newRequestEndDate, status: 'pending' });
-        else onAddRequest({ employeeId: currentUser.id, type: newRequestType, startDate: newRequestStartDate, endDate: newRequestEndDate, status: 'pending' } as any);
+        
+        const payload = { 
+            employeeId: currentUser.id, 
+            type: newRequestType, 
+            startDate: newRequestStartDate, 
+            endDate: newRequestEndDate, 
+            status: 'pending' 
+        };
+
+        if (editingEvent) {
+            onUpdateRequest({ ...editingEvent, ...payload } as CalendarEvent);
+            addNotification("Solicitud editada correctamente.", 'success');
+        } else {
+            onAddRequest(payload as any);
+            
+            // --- INTEGRACIÓN REAL CON EMAILJS ---
+            try {
+                const recipients = await getNotificationRecipients();
+                const config = await getEmailConfig();
+
+                const hasKeys = config?.serviceId && config?.templateId && config?.publicKey;
+
+                if (recipients.length > 0 && hasKeys) {
+                    // Preparamos promesas de envío paralelo para mayor velocidad
+                    const emailPromises = recipients.map(email => {
+                        return fetch('https://api.emailjs.com/api/v1.0/email/send', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                service_id: config.serviceId,
+                                template_id: config.templateId,
+                                user_id: config.publicKey,
+                                template_params: {
+                                    recipient_email: email,
+                                    user_name: currentUser.name,
+                                    request_type: newRequestType,
+                                    start_date: newRequestStartDate,
+                                    end_date: newRequestEndDate
+                                }
+                            })
+                        });
+                    });
+
+                    const results = await Promise.allSettled(emailPromises);
+                    const successful = results.filter(r => r.status === 'fulfilled' && (r.value as Response).ok).length;
+                    
+                    if (successful > 0) {
+                        addNotification(`Solicitud creada. Se notificó a ${successful} responsables por correo.`, 'success');
+                    } else {
+                        addNotification("Solicitud creada, pero falló la conexión con EmailJS. Revisa tus llaves.", 'error');
+                    }
+                } else if (recipients.length === 0) {
+                    addNotification("Solicitud creada (No hay correos en la lista de RRHH).", 'success');
+                } else {
+                    addNotification("Solicitud creada (Falta configurar EmailJS en Integraciones).", 'success');
+                }
+            } catch (e) {
+                console.error("Error al enviar el correo real", e);
+                addNotification("Solicitud creada, pero hubo un error de red enviando el aviso.", 'error');
+            }
+        }
         setIsRequestModalOpen(false);
     };
 
     const myRequests = useMemo(() => events.filter(e => e.employeeId === currentUser.id).sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()), [events, currentUser.id]);
-    const pendingRequests = useMemo(() => (events || []).filter(e => e.status === 'pending').sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime()), [events]);
 
     return (
         <div className="w-full mx-auto animate-fade-in flex flex-col gap-6">
             <div className="bg-white rounded-xl shadow-md border border-bokara-grey/10 p-6">
-                <div className="flex flex-col sm:flex-row items-center justify-start gap-8 sm:gap-16">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 sm:gap-8">
                     <div className="text-left">
-                        <p className="text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1">Total acumulados</p>
-                        <p className="text-2xl font-bold text-bokara-grey">{vacationStats.accrued}</p>
+                        <p className="text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1">Acumuladas (Ganadas)</p>
+                        <p className="text-2xl font-bold text-bokara-grey">{vacationStats.accrued.toFixed(2)} d</p>
                     </div>
                     <div className="text-left">
-                        <p className="text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1">Total tomados</p>
-                        <p className="text-2xl font-bold text-wet-sand">{vacationStats.taken}</p>
+                        <p className="text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1">Disfrutadas (Tiempo)</p>
+                        <p className="text-2xl font-bold text-red-400">{vacationStats.taken.toFixed(1)} d</p>
                     </div>
                     <div className="text-left">
-                        <p className="text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1">Saldo actual</p>
-                        <p className="text-2xl font-bold text-lucius-lime">{vacationStats.pending}</p>
+                        <p className="text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1">Compensadas (Dinero)</p>
+                        <p className="text-2xl font-bold text-wet-sand">{vacationStats.compensated.toFixed(1)} d</p>
+                    </div>
+                    <div className="text-left bg-lucius-lime/5 p-3 rounded-lg border border-lucius-lime/20">
+                        <p className="text-[10px] font-bold text-lucius-lime uppercase tracking-widest mb-1">Saldo Disponible</p>
+                        <p className="text-3xl font-display font-bold text-bokara-grey">{vacationStats.balance.toFixed(2)} d</p>
                     </div>
                 </div>
-                {!currentUser.hireDate && (
-                    <div className="mt-4 p-2 bg-yellow-50 text-yellow-700 text-xs rounded border border-yellow-100">
-                        ⚠️ No se ha definido tu fecha de ingreso. Contacta a un administrador para habilitar el conteo de vacaciones.
-                    </div>
-                )}
             </div>
 
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <h1 className="text-3xl font-bold text-bokara-grey">Tiquetera de Novedades</h1>
                 <div className="flex gap-3">
-                    {currentUser.role === 'admin' && (
-                        <button onClick={() => setIsPendingModalOpen(true)} className="relative text-bokara-grey hover:bg-whisper-white p-2 rounded-lg transition-colors border border-transparent hover:border-bokara-grey/10">
-                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
-                            {pendingRequests.length > 0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-white"></span>}
-                        </button>
-                    )}
                     <button onClick={() => { setEditingEvent(null); setIsRequestModalOpen(true); }} className="bg-lucius-lime hover:bg-opacity-80 text-bokara-grey font-bold py-2 px-4 rounded-lg shadow-md transition-all flex items-center gap-2 cursor-pointer">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
                         <span>Solicitar Tiquete</span>
@@ -276,8 +257,8 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                             </div>
                             <div className="flex-grow min-w-0">
-                                <label className="block text-[10px] font-bold text-lucius-lime uppercase tracking-widest mb-0.5">Vista de Calendario</label>
-                                <select className="appearance-none bg-transparent font-bold text-bokara-grey text-lg w-full focus:outline-none" value={viewType} onChange={(e) => setViewType(e.target.value)}>
+                                <label className="block text-[10px] font-bold text-lucius-lime uppercase tracking-widest mb-0.5">Filtrar por Novedad</label>
+                                <select className="appearance-none bg-transparent font-bold text-bokara-grey text-lg w-full focus:outline-none cursor-pointer" value={viewType} onChange={(e) => setViewType(e.target.value)}>
                                     {visibleTypes.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                                 </select>
                             </div>
@@ -330,11 +311,10 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                     <h3 className="font-bold text-bokara-grey mb-4 border-b border-bokara-grey/5 pb-2">Mis Solicitudes</h3>
                     <div className="space-y-3 overflow-y-auto flex-grow max-h-[500px] pr-1">
                         {myRequests.map(req => {
-                            const today = new Date();
-                            today.setHours(0,0,0,0);
+                            const today = new Date(); today.setHours(0,0,0,0);
                             const isPast = new Date(req.endDate + 'T00:00:00') < today;
                             return (
-                                <div key={req.id} className={`p-3 rounded-lg border border-bokara-grey/5 transition-colors group bg-whisper-white/50 hover:bg-whisper-white`}>
+                                <div key={req.id} className="p-3 rounded-lg border border-bokara-grey/5 transition-colors group bg-whisper-white/50 hover:bg-whisper-white">
                                     <div className="flex justify-between items-start mb-1">
                                         <span className="font-bold text-sm text-bokara-grey">{req.type}</span>
                                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
@@ -345,45 +325,52 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                                     </div>
                                     <div className="text-[11px] text-bokara-grey/70 font-mono mt-1 flex justify-between items-center">
                                         <span>{req.startDate} ➜ {req.endDate}</span>
-                                        <div className="flex items-center gap-2">
-                                            {isPast && <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">Histórico</span>}
+                                        <div className="flex items-center gap-1.5">
                                             {req.status === 'pending' && !isPast && (
-                                                <button onClick={() => handleEditRequest(req)} className="p-1 hover:bg-lucius-lime/10 rounded text-lucius-lime transition-all">
-                                                    <EditIcon className="w-3.5 h-3.5" />
-                                                </button>
+                                                <>
+                                                    <button 
+                                                        onClick={() => handleEditRequest(req)} 
+                                                        className="p-1 hover:bg-lucius-lime/10 rounded text-lucius-lime transition-all"
+                                                        title="Editar Solicitud"
+                                                    >
+                                                        <EditIcon className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => onRemoveRequest(req)} 
+                                                        className="p-1 hover:bg-red-100 rounded text-red-500 transition-all"
+                                                        title="Eliminar Solicitud"
+                                                    >
+                                                        <TrashIcon className="w-3.5 h-3.5" />
+                                                    </button>
+                                                </>
                                             )}
                                         </div>
                                     </div>
                                 </div>
                             );
                         })}
-                        {myRequests.length === 0 && <p className="text-center py-12 text-sm text-bokara-grey/40">No tienes solicitudes registradas.</p>}
                     </div>
                 </div>
             </div>
 
-            {/* Request Modal */}
             {isRequestModalOpen && (
                 <div className="fixed inset-0 bg-bokara-grey bg-opacity-50 flex items-center justify-center z-50 p-4 transition-opacity">
                     <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md animate-fade-in border border-bokara-grey/10">
                         <div className="flex justify-between items-center mb-6">
                             <h2 className="text-2xl font-bold text-bokara-grey">{editingEvent ? 'Editar Solicitud' : 'Nueva Solicitud'}</h2>
-                            <button onClick={() => setIsRequestModalOpen(false)} className="text-bokara-grey/40 hover:text-bokara-grey"><svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+                            <button onClick={() => setIsRequestModalOpen(false)} className="text-bokara-grey/40 hover:text-bokara-grey text-2xl">&times;</button>
                         </div>
                         <form onSubmit={handleRequestSubmit} className="space-y-5">
                             <div>
                                 <label className="block text-xs font-bold text-lucius-lime uppercase tracking-widest mb-1.5">Tipo de Novedad</label>
-                                <select 
-                                    className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-bokara-grey font-bold" 
-                                    value={newRequestType} 
-                                    onChange={e => setNewRequestType(e.target.value)}
-                                >
+                                <select className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-bokara-grey font-bold" value={newRequestType} onChange={e => setNewRequestType(e.target.value)}>
                                     {visibleTypes.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                                 </select>
-                                {quotaInfo && (
-                                    <p className={`text-[10px] mt-2 font-bold ${quotaInfo.current >= quotaInfo.max ? 'text-red-500' : 'text-bokara-grey/40'}`}>
-                                        Cupo anual: {quotaInfo.current} de {quotaInfo.max} utilizados este año.
-                                    </p>
+                                {(newRequestType === 'Vacaciones (Dinero)' || newRequestType === 'Compensación') && (
+                                    <div className="mt-3 p-2 bg-blue-50 text-blue-800 rounded border border-blue-100 text-[10px] leading-tight">
+                                        <strong>Regla CST (Dinero):</strong> Máximo 50% compensable. <br/>
+                                        Te quedan <strong>{vacationStats.maxCompensable.toFixed(2)} días</strong> para solicitar en dinero.
+                                    </div>
                                 )}
                             </div>
                             <div className="grid grid-cols-2 gap-4">
@@ -392,39 +379,11 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                             </div>
                             <div className="flex justify-end gap-3 mt-8">
                                 <button type="button" onClick={() => setIsRequestModalOpen(false)} className="px-5 py-2.5 bg-gray-100 rounded-lg font-bold text-bokara-grey text-sm">Cancelar</button>
-                                <button 
-                                    type="submit" 
-                                    className="px-5 py-2.5 bg-lucius-lime text-bokara-grey font-bold rounded-lg hover:bg-opacity-80 disabled:opacity-40 disabled:cursor-not-allowed text-sm"
-                                    disabled={quotaInfo ? quotaInfo.current >= quotaInfo.max && !editingEvent : false}
-                                >
-                                    {editingEvent ? 'Actualizar Solicitud' : 'Enviar Solicitud'}
+                                <button type="submit" className="px-5 py-2.5 bg-lucius-lime text-bokara-grey font-bold rounded-lg hover:bg-opacity-80 text-sm">
+                                    Enviar Solicitud
                                 </button>
                             </div>
                         </form>
-                    </div>
-                </div>
-            )}
-            
-            {/* Pending Requests Modal (Admin View) */}
-            {isPendingModalOpen && (
-                <div className="fixed inset-0 bg-bokara-grey bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={() => setIsPendingModalOpen(false)}>
-                    <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                        <h2 className="text-2xl font-bold mb-6 text-bokara-grey">Solicitudes Pendientes</h2>
-                        {pendingRequests.length === 0 ? <p className="text-center py-8 text-bokara-grey/40">No hay tiquetes pendientes por aprobar.</p> : 
-                        <div className="space-y-4">
-                            {pendingRequests.map(req => (
-                                <div key={req.id} className="bg-whisper-white/50 p-4 rounded-lg flex flex-col sm:flex-row justify-between items-center gap-4 border border-bokara-grey/5">
-                                    <div className="text-center sm:text-left">
-                                        <p className="font-bold text-lg text-bokara-grey">{employeeMap.get(req.employeeId) || 'Desconocido'}</p>
-                                        <p className="text-sm text-bokara-grey/70 font-medium">{req.type}: {req.startDate} al {req.endDate}</p>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => onUpdateEventStatus?.(req, 'rejected')} className="px-4 py-2 bg-red-100 text-red-700 font-bold rounded-lg hover:bg-red-200 text-sm">Rechazar</button>
-                                        <button onClick={() => onUpdateEventStatus?.(req, 'approved')} className="px-4 py-2 bg-green-100 text-green-700 font-bold rounded-lg hover:bg-green-200 text-sm">Aprobar</button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>}
                     </div>
                 </div>
             )}

@@ -37,7 +37,8 @@ const NavItem: React.FC<NavItemProps> = ({ label, pageName, currentPage, onNavig
 interface SideNavProps {
   currentPage: string;
   onNavigate: (page: string) => void;
-  userRole: 'admin' | 'employee';
+  // FIX: Updated userRole type to include 'master' to resolve type mismatch in App.tsx
+  userRole: 'master' | 'admin' | 'employee';
   isOpen?: boolean;
   onClose?: () => void;
 }
@@ -74,7 +75,8 @@ const SideNav: React.FC<SideNavProps> = ({ currentPage, onNavigate, userRole, is
                     <ClockIcon />
                 </NavItem>
                 
-                {userRole === 'admin' && (
+                {/* FIX: Changed condition to include 'master' role for admin tools */}
+                {userRole !== 'employee' && (
                 <>
                     <div className="w-full border-t border-bokara-grey/10 my-1"></div>
 
@@ -99,7 +101,8 @@ const SideNav: React.FC<SideNavProps> = ({ currentPage, onNavigate, userRole, is
                 )}
 
                 {/* Requirement: Employee cannot see Map module */}
-                {userRole === 'admin' && (
+                {/* FIX: Changed condition to include 'master' role for Map module access */}
+                {userRole !== 'employee' && (
                     <NavItem label="Map" pageName="seating" currentPage={currentPage} onNavigate={onNavigate} onClick={onClose}>
                         <MapIcon />
                     </NavItem>
@@ -109,7 +112,8 @@ const SideNav: React.FC<SideNavProps> = ({ currentPage, onNavigate, userRole, is
                     <TicketIcon />
                 </NavItem>
 
-                {userRole === 'admin' && (
+                {/* FIX: Changed condition to include 'master' role for Settings access */}
+                {userRole !== 'employee' && (
                     <NavItem label="Settings" pageName="settings" currentPage={currentPage} onNavigate={onNavigate} onClick={onClose}>
                         <SettingsIcon />
                     </NavItem>

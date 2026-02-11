@@ -6,9 +6,10 @@ import { useNotification } from '../contexts/NotificationContext';
 
 interface ProfilePageProps {
     user: Employee;
+    onUpdateProfile?: () => void;
 }
 
-const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
+const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUpdateProfile }) => {
   const [inviteCode, setInviteCode] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -43,8 +44,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
           await joinCompany(inviteCode);
           addNotification('Te has unido a la empresa exitosamente.', 'success');
           setInviteCode('');
-          // Force a reload to refresh context completely or let the stream update naturally
-          setTimeout(() => window.location.reload(), 1000); 
+          if (onUpdateProfile) onUpdateProfile();
       } catch (error: any) {
           console.error(error);
           addNotification(error.message || 'Error al unirse a la empresa.', 'error');
@@ -67,21 +67,16 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
           try {
               const downloadUrl = await uploadProfilePicture(user.id, file);
               
-              // In mock mode, we manually update the local object if needed, 
-              // but for real implementation uploadProfilePicture updates the DB.
-              // For consistency, let's trigger an update locally for immediate feedback if using mock
-              if (user.companyId === 'mock_company_id') {
-                  await updateEmployeeDetails({ ...user, avatarUrl: downloadUrl });
-                  addNotification('Foto de perfil actualizada (Modo Demo).', 'success');
-                  // In mock mode, force reload to see changes since we don't have real-time listeners on mock data array
-                  setTimeout(() => window.location.reload(), 500); 
-              } else {
-                  addNotification('Foto de perfil actualizada exitosamente.', 'success');
+              addNotification('Foto de perfil actualizada exitosamente.', 'success');
+              
+              // Disparamos la actualización del estado global
+              if (onUpdateProfile) {
+                  onUpdateProfile();
               }
               
           } catch (error: any) {
               console.error("Upload failed", error);
-              addNotification('Error al subir la imagen. Inténtalo de nuevo.', 'error');
+              addNotification('Error al subir la imagen. Verifica tu conexión e inténtalo de nuevo.', 'error');
           } finally {
               setIsUploading(false);
           }
@@ -141,7 +136,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
                   
                   <h2 className="text-2xl font-bold text-bokara-grey">{user.name}</h2>
                   <span className={`mt-2 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${user.role === 'admin' ? 'bg-bokara-grey text-white' : 'bg-gray-100 text-bokara-grey'}`}>
-                      {user.role === 'admin' ? 'Administrador' : 'Colaborador'}
+                      {user.role === 'admin' ? 'Administrador' : (user.role === 'master' ? 'Propietario' : 'Colaborador')}
                   </span>
 
                   <div className="w-full border-t border-bokara-grey/10 my-6"></div>
@@ -149,7 +144,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
                   <div className="w-full space-y-4">
                       <div className="flex items-center gap-3 p-3 rounded-lg bg-whisper-white/30 border border-bokara-grey/5">
                           <div className="p-2 bg-white rounded-full text-lucius-lime shadow-sm">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                           </div>
                           <div className="text-left overflow-hidden">
                               <p className="text-xs text-bokara-grey/50 font-bold uppercase">Correo</p>
@@ -159,7 +154,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
 
                       <div className="flex items-center gap-3 p-3 rounded-lg bg-whisper-white/30 border border-bokara-grey/5">
                           <div className="p-2 bg-white rounded-full text-lucius-lime shadow-sm">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
                           </div>
                           <div className="text-left">
                               <p className="text-xs text-bokara-grey/50 font-bold uppercase">Teléfono</p>
@@ -177,7 +172,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
               <div className="bg-white rounded-xl shadow-md border border-bokara-grey/10 p-6 sm:p-8">
                   <div className="flex items-center gap-3 mb-6">
                       <div className="p-2 bg-lucius-lime/10 rounded-lg text-lucius-lime">
-                          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                       </div>
                       <h2 className="text-xl font-bold text-bokara-grey">Información de Organización</h2>
                   </div>
@@ -196,7 +191,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
                       <div className="sm:text-right border-t sm:border-t-0 sm:border-l border-bokara-grey/10 pt-4 sm:pt-0 sm:pl-6">
                           <p className="text-xs text-bokara-grey/50 font-bold uppercase tracking-wider mb-1">Ubicación</p>
                           <div className="flex items-center gap-2 sm:justify-end">
-                              <svg className="w-4 h-4 text-bokara-grey/60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                              <svg className="w-4 h-4 text-bokara-grey/60" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                               <span className="font-medium text-bokara-grey">{user.location || 'Oficina Principal'}</span>
                           </div>
                       </div>
@@ -219,7 +214,7 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user }) => {
                           <form onSubmit={handleJoinCompany} className="flex flex-col sm:flex-row gap-3">
                               <div className="relative flex-grow">
                                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                      <svg className="h-5 w-5 text-bokara-grey/30" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
+                                      <svg className="h-5 w-5 text-bokara-grey/30" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" /></svg>
                                   </div>
                                   <input 
                                       type="text" 

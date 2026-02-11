@@ -1,137 +1,277 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Employee, WorkSchedule } from '../types';
 
-interface AddEmployeeModalProps {
+interface EditEmployeeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onAddEmployee: (employeeData: Omit<Employee, 'id' | 'status' | 'lastClockInTime' | 'currentStatusStartTime' | 'companyId'>) => void;
+  onUpdateEmployee: (employeeData: Employee) => void;
+  employeeToEdit: Employee | null;
   workSchedules: WorkSchedule[];
 }
 
-const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({ isOpen, onClose, onAddEmployee, workSchedules }) => {
-  const [employeeData, setEmployeeData] = useState({
-      name: '',
-      email: '',
-      phone: '',
-      location: 'Oficina Principal',
-      role: 'employee' as 'admin' | 'employee',
-      workScheduleId: '',
-      hireDate: new Date().toISOString().split('T')[0],
-      terminationDate: '',
-      manualVacationAdjustment: 0
-  });
+const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, onClose, onUpdateEmployee, employeeToEdit, workSchedules }) => {
+  const [activeTab, setActiveTab] = useState('info');
+  const [employeeData, setEmployeeData] = useState<Employee | null>(null);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (employeeToEdit) {
+      setEmployeeData({
+          ...employeeToEdit,
+          allowMobileClockIn: employeeToEdit.allowMobileClockIn ?? false,
+          autoClockOut24h: employeeToEdit.autoClockOut24h ?? true
+      });
+    }
+  }, [employeeToEdit]);
+
+  if (!isOpen || !employeeData) return null;
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-      const { name, value } = e.target;
-      setEmployeeData(prev => ({ 
-          ...prev, 
-          [name]: name === 'manualVacationAdjustment' ? Number(value) : value 
-      }));
+      const { name, value, type } = e.target;
+      
+      setEmployeeData(prev => {
+          if (!prev) return null;
+          let val: any = value;
+          if (type === 'checkbox') val = (e.target as HTMLInputElement).checked;
+          if (name === 'manualVacationAdjustment') val = Number(value);
+          
+          if (name === 'hireDate' || name === 'terminationDate') {
+              if (!value) {
+                  val = undefined;
+              } else {
+                  const [year, month, day] = value.split('-').map(Number);
+                  val = new Date(year, month - 1, day).getTime();
+              }
+          }
+          
+          return { ...prev, [name]: val };
+      });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (employeeData.name.trim() && employeeData.email.trim()) {
-      // FIX: Added missing property emailVerified to satisfy the Employee type.
-      onAddEmployee({
-        ...employeeData,
-        workScheduleId: employeeData.workScheduleId || null,
-        hireDate: new Date(employeeData.hireDate).getTime(),
-        terminationDate: employeeData.terminationDate ? new Date(employeeData.terminationDate).getTime() : undefined,
-        manualVacationAdjustment: employeeData.manualVacationAdjustment,
-        emailVerified: false
-      });
-      // Reset
-      setEmployeeData({
-          name: '',
-          email: '',
-          phone: '',
-          location: 'Oficina Principal',
-          role: 'employee',
-          workScheduleId: '',
-          hireDate: new Date().toISOString().split('T')[0],
-          terminationDate: '',
-          manualVacationAdjustment: 0
+    if (employeeData && employeeData.name?.trim() && employeeData.email?.trim()) {
+      onUpdateEmployee({
+          ...employeeData,
+          workScheduleId: employeeData.workScheduleId || null
       });
     }
   };
+
+  const timestampToDateString = (ts?: number) => {
+      if (!ts) return '';
+      const d = new Date(ts);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+  };
   
-  const isFormValid = employeeData.name.trim() && employeeData.email.trim();
+  const isFormValid = !!(employeeData && employeeData.name?.trim() && employeeData.email?.trim());
+
+  const tabs = [
+      { id: 'info', label: 'Información General' },
+      { id: 'permissions', label: 'Permisos' },
+      { id: 'clock', label: 'Control de Asistencia' },
+      { id: 'hr', label: 'Nómina y RRHH' }
+  ];
 
   return (
     <div className="fixed inset-0 bg-bokara-grey bg-opacity-50 flex items-center justify-center z-50 transition-opacity" onClick={onClose} aria-modal="true" role="dialog">
-      <div className="bg-bright-white rounded-xl shadow-2xl p-6 w-full max-w-2xl border border-bokara-grey/10 overflow-y-auto max-h-[90vh]" onClick={e => e.stopPropagation()}>
-        <h2 className="text-2xl font-bold text-bokara-grey mb-6">Agregar Nuevo Colaborador</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label htmlFor="employeeName" className="block text-sm font-medium text-lucius-lime mb-1">Nombre Completo</label>
-              <input id="employeeName" name="name" type="text" value={employeeData.name} onChange={handleChange} className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime" placeholder="Ej: Juan Pérez" required />
-            </div>
-             <div>
-              <label htmlFor="employeeEmail" className="block text-sm font-medium text-lucius-lime mb-1">Correo</label>
-              <input id="employeeEmail" name="email" type="email" value={employeeData.email} onChange={handleChange} className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime" placeholder="Ej: juan@empresa.com" required />
-            </div>
-             <div>
-              <label htmlFor="employeePhone" className="block text-sm font-medium text-lucius-lime mb-1">Teléfono</label>
-              <input id="employeePhone" name="phone" type="tel" value={employeeData.phone} onChange={handleChange} className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime" placeholder="(555) 123-4567" />
-            </div>
-             <div>
-              <label htmlFor="employeeLocation" className="block text-sm font-medium text-lucius-lime mb-1">Ubicación Principal</label>
-              <input id="employeeLocation" name="location" type="text" value={employeeData.location} onChange={handleChange} className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime" placeholder="Ej: Oficina Principal" />
-            </div>
-             <div>
-              <label htmlFor="employeeRole" className="block text-sm font-medium text-lucius-lime mb-1">Rol</label>
-              <select id="employeeRole" name="role" value={employeeData.role} onChange={handleChange} className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime">
-                <option value="employee">Colaborador</option>
-                <option value="admin">Administrador</option>
-              </select>
-            </div>
-             <div>
-              <label htmlFor="workScheduleId" className="block text-sm font-medium text-lucius-lime mb-1">Horario de Trabajo</label>
-                <select id="workScheduleId" name="workScheduleId" value={employeeData.workScheduleId} onChange={handleChange} className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime">
-                  <option value="">No Asignado</option>
-                  {workSchedules.map(schedule => (
-                    <option key={schedule.id} value={schedule.id}>{schedule.name}</option>
-                  ))}
-                </select>
-            </div>
-            
-            <div className="md:col-span-2 border-t border-bokara-grey/10 pt-4 mt-2">
-                <h3 className="font-bold text-bokara-grey text-sm mb-3 uppercase tracking-wider">Recursos Humanos (Libro de Vacaciones)</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label htmlFor="hireDate" className="block text-sm font-medium text-lucius-lime mb-1">Fecha de Ingreso</label>
-                        <input id="hireDate" name="hireDate" type="date" value={employeeData.hireDate} onChange={handleChange} className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime" required />
-                    </div>
-                    <div>
-                        <label htmlFor="terminationDate" className="block text-sm font-medium text-red-600 mb-1">Fecha de Retiro (Opcional)</label>
-                        <input id="terminationDate" name="terminationDate" type="date" value={employeeData.terminationDate} onChange={handleChange} className="w-full bg-whisper-white border border-red-200 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-red-500" />
-                    </div>
-                    <div className="md:col-span-2">
-                        <label htmlFor="manualVacationAdjustment" className="block text-sm font-medium text-lucius-lime mb-1">Días de Vacaciones Pendientes (Ajuste Manual)</label>
-                        <input id="manualVacationAdjustment" name="manualVacationAdjustment" type="number" step="0.5" value={employeeData.manualVacationAdjustment} onChange={handleChange} className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime" placeholder="Ej: 5.5" />
-                        <p className="text-[10px] text-bokara-grey/50 mt-1">Suma o resta días al saldo calculado automáticamente.</p>
-                    </div>
+      <div className="bg-bright-white rounded-xl shadow-2xl w-full max-w-4xl border border-bokara-grey/10 overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        
+        {/* Header */}
+        <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
+            <h2 className="text-xl font-bold text-bokara-grey uppercase">Editar Colaborador: {employeeData.name}</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="flex border-b bg-white overflow-x-auto whitespace-nowrap scrollbar-hide">
+            {tabs.map(tab => (
+                <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-6 py-3 text-sm font-bold transition-all border-b-2 ${
+                        activeTab === tab.id 
+                            ? 'border-lucius-lime text-lucius-lime bg-lucius-lime/5' 
+                            : 'border-transparent text-gray-400 hover:text-gray-600'
+                    }`}
+                >
+                    {tab.label}
+                </button>
+            ))}
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto p-8 space-y-6">
+          
+          {/* TAB: INFO */}
+          {activeTab === 'info' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
+                <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Nombre Completo</label>
+                    <input name="name" type="text" value={employeeData.name || ''} onChange={handleChange} className="w-full border border-bokara-grey/20 rounded-lg p-2 focus:ring-1 focus:ring-lucius-lime" required />
+                </div>
+                <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Correo Electrónico</label>
+                    <input name="email" type="email" value={employeeData.email || ''} onChange={handleChange} className="w-full border border-bokara-grey/20 rounded-lg p-2 focus:ring-1 focus:ring-lucius-lime" required />
+                </div>
+                <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Teléfono</label>
+                    <input name="phone" type="tel" value={employeeData.phone || ''} onChange={handleChange} className="w-full border border-bokara-grey/20 rounded-lg p-2 focus:ring-1 focus:ring-lucius-lime" />
+                </div>
+                <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Horario Asignado</label>
+                    <select name="workScheduleId" value={employeeData.workScheduleId || ''} onChange={handleChange} className="w-full border border-bokara-grey/20 rounded-lg p-2">
+                        <option value="">No Asignado</option>
+                        {workSchedules.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
                 </div>
             </div>
-          </div>
-          
-          <div className="mt-8 flex justify-end gap-3">
-            <button type="button" onClick={onClose} className="py-2 px-4 bg-gray-200 text-bokara-grey rounded-lg hover:bg-gray-300 transition-colors">
+          )}
+
+          {/* TAB: PERMISSIONS */}
+          {activeTab === 'permissions' && (
+              <div className="space-y-8 animate-fade-in">
+                  <div className="border border-bokara-grey/10 rounded-xl p-6 bg-white shadow-sm">
+                      <h3 className="text-sm font-bold text-gray-400 uppercase mb-4 tracking-wider">Tipo de Cuenta</h3>
+                      <div className="space-y-4">
+                          {employeeData.role === 'master' ? (
+                              <div className="p-4 bg-purple-50 border border-purple-100 rounded-lg">
+                                  <p className="font-bold text-purple-700">Cuenta de Propietario (Master)</p>
+                                  <p className="text-xs text-purple-600/70">Este nivel de permiso es vitalicio y no puede ser degradado ni modificado desde este panel por seguridad.</p>
+                              </div>
+                          ) : (
+                              ['admin', 'employee'].map(role => (
+                                <label key={role} className="flex items-start gap-3 cursor-pointer group">
+                                    <input 
+                                      type="radio" 
+                                      name="role" 
+                                      value={role} 
+                                      checked={employeeData.role === role} 
+                                      onChange={handleChange}
+                                      className="mt-1 text-lucius-lime focus:ring-lucius-lime"
+                                    />
+                                    <div>
+                                        <p className="font-bold text-gray-700 capitalize">{role === 'admin' ? 'Administrador' : 'Colaborador'}</p>
+                                        <p className="text-xs text-gray-400">
+                                            {role === 'admin' ? 'Tiene acceso total a la gestión de empleados y configuración.' : 'Usuario estándar con acceso solo a su propio perfil y marcaciones.'}
+                                        </p>
+                                    </div>
+                                </label>
+                              ))
+                          )}
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {/* TAB: CLOCK IN/OUT */}
+          {activeTab === 'clock' && (
+              <div className="space-y-8 animate-fade-in">
+                  <div className="border border-bokara-grey/10 rounded-xl p-6 bg-white shadow-sm">
+                      <h3 className="text-sm font-bold text-gray-400 uppercase mb-4 tracking-wider">Restricciones de Acceso</h3>
+                      <div className="space-y-4">
+                          <label className="flex items-center gap-3 cursor-pointer p-3 hover:bg-gray-50 rounded-lg transition-colors border border-transparent hover:border-gray-200">
+                              <input 
+                                type="checkbox" 
+                                name="allowMobileClockIn" 
+                                checked={employeeData.allowMobileClockIn} 
+                                onChange={handleChange}
+                                className="w-5 h-5 rounded text-lucius-lime focus:ring-lucius-lime"
+                              />
+                              <div>
+                                  <p className="font-bold text-gray-700 text-sm">Permitir marcación desde Dispositivos Móviles</p>
+                                  <p className="text-[10px] text-red-500 font-bold uppercase tracking-tighter">Si se desmarca, el usuario solo podrá marcar desde computadores de escritorio.</p>
+                              </div>
+                          </label>
+
+                          <label className="flex items-center gap-3 cursor-pointer p-3 hover:bg-gray-50 rounded-lg transition-colors border border-transparent hover:border-gray-200">
+                              <input 
+                                type="checkbox" 
+                                name="autoClockOut24h" 
+                                checked={employeeData.autoClockOut24h} 
+                                onChange={handleChange}
+                                className="w-5 h-5 rounded text-lucius-lime focus:ring-lucius-lime"
+                              />
+                              <p className="font-bold text-gray-700 text-sm">Cierre de sesión automático tras 24 horas continuas de trabajo</p>
+                          </label>
+
+                           <label className="flex items-center gap-3 cursor-pointer p-3 hover:bg-gray-50 rounded-lg transition-colors border border-transparent hover:border-gray-200">
+                              <input 
+                                type="checkbox" 
+                                name="blockEarlyClockIn" 
+                                checked={employeeData.blockEarlyClockIn} 
+                                onChange={handleChange}
+                                className="w-5 h-5 rounded text-lucius-lime focus:ring-lucius-lime"
+                              />
+                              <p className="font-bold text-gray-700 text-sm">Bloquear entrada antes de la hora programada en el horario</p>
+                          </label>
+                      </div>
+                  </div>
+              </div>
+          )}
+
+          {/* TAB: RRHH */}
+          {activeTab === 'hr' && (
+              <div className="animate-fade-in space-y-6">
+                   <div className="bg-lucius-lime/5 border border-lucius-lime/20 p-4 rounded-xl mb-4">
+                        <p className="text-xs text-lucius-lime font-bold uppercase mb-1">Información de Contrato</p>
+                        <p className="text-[11px] text-bokara-grey/60">Estas fechas definen el cálculo automático del Libro de Vacaciones (1.25 días por mes).</p>
+                   </div>
+
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className="block text-xs font-bold text-bokara-grey uppercase mb-2">Día de Entrada (Ingreso)</label>
+                            <input 
+                                name="hireDate" 
+                                type="date" 
+                                value={timestampToDateString(employeeData.hireDate)} 
+                                onChange={handleChange} 
+                                className="w-full border border-bokara-grey/20 rounded-lg p-2 focus:ring-2 focus:ring-lucius-lime outline-none" 
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-red-400 uppercase mb-2">Día de Salida (Retiro / Opcional)</label>
+                            <input 
+                                name="terminationDate" 
+                                type="date" 
+                                value={timestampToDateString(employeeData.terminationDate)} 
+                                onChange={handleChange} 
+                                className="w-full border border-red-200 rounded-lg p-2 focus:ring-2 focus:ring-red-400 outline-none" 
+                            />
+                        </div>
+                        <div className="md:col-span-2 pt-4 border-t border-bokara-grey/5">
+                            <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Ajuste Manual de Vacaciones (Días)</label>
+                            <input 
+                                name="manualVacationAdjustment" 
+                                type="number" 
+                                step="0.5" 
+                                value={employeeData.manualVacationAdjustment || 0} 
+                                onChange={handleChange} 
+                                className="w-full border border-bokara-grey/20 rounded-lg p-2" 
+                                placeholder="Ej: 5 o -2"
+                            />
+                            <p className="text-[10px] text-bokara-grey/40 mt-1 italic">Suma o resta días directamente al saldo calculado por sistema.</p>
+                        </div>
+                   </div>
+              </div>
+          )}
+
+        </form>
+
+        {/* Footer */}
+        <div className="p-4 bg-gray-50 border-t flex justify-end gap-3">
+            <button type="button" onClick={onClose} className="px-6 py-2 bg-gray-200 text-bokara-grey font-bold rounded-lg hover:bg-gray-300 transition-colors">
               Cancelar
             </button>
-            <button type="submit" className="py-2 px-4 bg-lucius-lime text-bokara-grey font-bold rounded-lg hover:bg-opacity-80 transition-colors disabled:bg-lucius-lime/40 disabled:cursor-not-allowed" disabled={!isFormValid}>
-              Agregar Colaborador
+            <button type="button" onClick={handleSubmit} className="px-10 py-2 bg-lucius-lime text-bokara-grey font-bold rounded-lg hover:bg-opacity-80 transition-colors shadow-md disabled:opacity-50" disabled={!isFormValid}>
+              Guardar Cambios
             </button>
-          </div>
-        </form>
+        </div>
       </div>
     </div>
   );
 };
 
-export default AddEmployeeModal;
+export default EditEmployeeModal;

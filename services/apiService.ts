@@ -27,7 +27,10 @@ const createMockApi = () => ({
     sendPasswordResetEmail: async (email: string) => {},
     verifyPasswordResetCode: async (code: string) => 'test@example.com',
     confirmPasswordReset: async (code: string, pass: string) => {},
-    getEmployeeProfile: async (uid: string) => null,
+    getEmployeeProfile: async (uid: string) => {
+        const found = initialEmployees.find(e => e.id === uid);
+        return found || null;
+    },
     streamEmployees: (callback: any) => () => {},
     streamAttendanceLog: (callback: any) => () => {},
     addAttendanceLogEntry: async (entry: any) => entry,
@@ -54,12 +57,19 @@ const createMockApi = () => ({
     updateCalendarEvent: async (e: any) => e,
     removeCalendarEvent: async (id: string) => {},
     updateTimesheetEntry: async (eid: string, sid: string, endid: string, s: number, end: number) => {},
-    uploadProfilePicture: async (id: string, file: File) => '',
+    uploadProfilePicture: async (id: string, file: File) => {
+        return URL.createObjectURL(file);
+    },
     changePassword: async (pass: string) => {},
     saveMapItems: async (items: any[]) => {},
     updateEmployeeSeat: async (eid: string, sid: string | null) => {},
     getPendingInvitation: async (email: string) => null,
-    acceptInvitation: async (invitationId: string) => {}
+    acceptInvitation: async (invitationId: string) => {},
+    getNotificationRecipients: async () => [],
+    addNotificationRecipient: async (email: string) => {},
+    removeNotificationRecipient: async (email: string) => {},
+    getEmailConfig: async () => null,
+    saveEmailConfig: async (config: any) => {}
 });
 
 const createRealApi = () => {
@@ -87,8 +97,8 @@ const createRealApi = () => {
             const finalCompanyId = companyRef.id;
             await companyRef.set({ id: finalCompanyId, name: name, inviteCode: code, ownerId: user.uid, createdAt: Date.now() });
             await db!.collection('employees').doc(user.uid).set({ 
-                id: user.uid, uid: user.uid, companyId: finalCompanyId, role: 'admin', 
-                name: user.displayName || user.email?.split('@')[0] || 'Admin', 
+                id: user.uid, uid: user.uid, companyId: finalCompanyId, role: 'master', 
+                name: user.displayName || user.email?.split('@')[0] || 'Master', 
                 email: user.email || '', status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, emailVerified: true, phone: '', location: '' 
             }, { merge: true });
         },
@@ -100,20 +110,7 @@ const createRealApi = () => {
             if (doc.exists) {
                 return { id: doc.id, ...doc.data() } as Employee;
             } else {
-                return {
-                    id: user.uid,
-                    uid: user.uid,
-                    companyId: '',
-                    name: user.displayName || email.split('@')[0],
-                    email: user.email || email,
-                    phone: '',
-                    location: '',
-                    role: 'employee',
-                    status: 'Clocked Out',
-                    lastClockInTime: null,
-                    currentStatusStartTime: null,
-                    emailVerified: user.emailVerified
-                } as Employee;
+                return { id: user.uid, uid: user.uid, companyId: '', name: user.displayName || email.split('@')[0], email: user.email || email, phone: '', location: '', role: 'employee', status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, emailVerified: user.emailVerified } as Employee;
             }
         },
         logout: async () => await auth!.signOut(),
@@ -230,13 +227,7 @@ const createRealApi = () => {
             const compDoc = await db!.collection('companies').doc(companyId).get();
             const companyName = compDoc.data()?.name || "Tu Empresa";
             const invRef = db!.collection('invitations').doc();
-            const invitation = cleanObject({
-                id: invRef.id, email: employeeData.email, companyId: companyId, companyName: companyName,
-                role: employeeData.role || 'employee', status: 'pending', invitedBy: user.uid, createdAt: Date.now(),
-                hireDate: employeeData.hireDate, terminationDate: employeeData.terminationDate,
-                manualVacationAdjustment: employeeData.manualVacationAdjustment, phone: employeeData.phone,
-                location: employeeData.location, workScheduleId: employeeData.workScheduleId
-            });
+            const invitation = cleanObject({ id: invRef.id, email: employeeData.email, companyId: companyId, companyName: companyName, role: employeeData.role || 'employee', status: 'pending', invitedBy: user.uid, createdAt: Date.now(), hireDate: employeeData.hireDate, terminationDate: employeeData.terminationDate, manualVacationAdjustment: employeeData.manualVacationAdjustment, phone: employeeData.phone, location: employeeData.location, workScheduleId: employeeData.workScheduleId });
             const empRef = db!.collection('employees').doc();
             const newEmp = cleanObject({ ...employeeData, id: empRef.id, companyId: companyId, status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, emailVerified: false });
             await Promise.all([invRef.set(invitation), empRef.set(newEmp)]);
@@ -246,6 +237,7 @@ const createRealApi = () => {
             const empDoc = await db!.collection('employees').doc(id).get();
             if (!empDoc.exists) return;
             const empData = empDoc.data();
+            if (empData?.role === 'master') throw new Error("No se puede eliminar al usuario Propietario (Master).");
             const email = empData?.email;
             const companyId = empData?.companyId;
             await db!.collection('employees').doc(id).delete();
@@ -268,12 +260,8 @@ const createRealApi = () => {
             await ref.set(newSchedule);
             return newSchedule;
         },
-        updateWorkSchedule: async (id: string, updates: any) => {
-            await db!.collection('workSchedules').doc(id).update(updates);
-        },
-        removeWorkSchedule: async (id: string) => {
-            await db!.collection('workSchedules').doc(id).delete();
-        },
+        updateWorkSchedule: async (id: string, updates: any) => { await db!.collection('workSchedules').doc(id).update(updates); },
+        removeWorkSchedule: async (id: string) => { await db!.collection('workSchedules').doc(id).delete(); },
         addActivityStatus: async (name: string, color: string) => {
             const user = auth!.currentUser;
             const doc = await db!.collection('employees').doc(user!.uid).get();
@@ -281,9 +269,7 @@ const createRealApi = () => {
             const ref = db!.collection('activityStatuses').doc();
             await ref.set({ id: ref.id, name, color, companyId });
         },
-        removeActivityStatus: async (id: string) => {
-            await db!.collection('activityStatuses').doc(id).delete();
-        },
+        removeActivityStatus: async (id: string) => { await db!.collection('activityStatuses').doc(id).delete(); },
         addPayrollChangeType: async (name: string, color: string, isExclusive: boolean, adminOnly: boolean, yearlyQuota?: number) => {
             const user = auth!.currentUser;
             const doc = await db!.collection('employees').doc(user!.uid).get();
@@ -291,12 +277,8 @@ const createRealApi = () => {
             const ref = db!.collection('payrollChangeTypes').doc();
             await ref.set({ id: ref.id, name, color, isExclusive, adminOnly, yearlyQuota, companyId });
         },
-        updatePayrollChangeType: async (id: string, updates: any) => {
-            await db!.collection('payrollChangeTypes').doc(id).update(updates);
-        },
-        removePayrollChangeType: async (id: string) => {
-            await db!.collection('payrollChangeTypes').doc(id).delete();
-        },
+        updatePayrollChangeType: async (id: string, updates: any) => { await db!.collection('payrollChangeTypes').doc(id).update(updates); },
+        removePayrollChangeType: async (id: string) => { await db!.collection('payrollChangeTypes').doc(id).delete(); },
         addCalendarEvent: async (eventData: any) => {
             const user = auth!.currentUser;
             const doc = await db!.collection('employees').doc(user!.uid).get();
@@ -311,9 +293,7 @@ const createRealApi = () => {
             await db!.collection('calendarEvents').doc(id).update(data);
             return event;
         },
-        removeCalendarEvent: async (id: string) => {
-            await db!.collection('calendarEvents').doc(id).delete();
-        },
+        removeCalendarEvent: async (id: string) => { await db!.collection('calendarEvents').doc(id).delete(); },
         updateTimesheetEntry: async (employeeId: string, startLogId: string, endLogId: string, startTime: number, endTime: number) => {
             await db!.collection('attendanceLog').doc(startLogId).update({ timestamp: startTime });
             await db!.collection('attendanceLog').doc(endLogId).update({ timestamp: endTime });
@@ -343,9 +323,7 @@ const createRealApi = () => {
             });
             await batch.commit();
         },
-        updateEmployeeSeat: async (employeeId: string, seatId: string | null) => {
-            await db!.collection('employees').doc(employeeId).update({ seatId });
-        },
+        updateEmployeeSeat: async (employeeId: string, seatId: string | null) => { await db!.collection('employees').doc(employeeId).update({ seatId }); },
         getPendingInvitation: async (email: string) => {
             const q = await db!.collection('invitations').where('email', '==', email).where('status', '==', 'pending').limit(1).get();
             if (q.empty) return null;
@@ -357,16 +335,58 @@ const createRealApi = () => {
             const invDoc = await db!.collection('invitations').doc(invitationId).get();
             if (!invDoc.exists) throw new Error("Invitation not found");
             const data = invDoc.data() as Invitation;
-            await db!.collection('employees').doc(user.uid).set(cleanObject({ 
-                id: user.uid, uid: user.uid, email: user.email, name: user.displayName || user.email?.split('@')[0] || 'Colaborador',
-                companyId: data.companyId, role: data.role || 'employee', hireDate: data.hireDate,
-                terminationDate: data.terminationDate, manualVacationAdjustment: data.manualVacationAdjustment,
-                phone: data.phone, location: data.location, workScheduleId: data.workScheduleId,
-                status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, emailVerified: user.emailVerified
-            }));
+            await db!.collection('employees').doc(user.uid).set(cleanObject({ id: user.uid, uid: user.uid, email: user.email, name: user.displayName || user.email?.split('@')[0] || 'Colaborador', companyId: data.companyId, role: data.role || 'employee', hireDate: data.hireDate, terminationDate: data.terminationDate, manualVacationAdjustment: data.manualVacationAdjustment, phone: data.phone, location: data.location, workScheduleId: data.workScheduleId, status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, emailVerified: user.emailVerified }));
             await db!.collection('invitations').doc(invitationId).update({ status: 'accepted' });
             const empsQuery = await db!.collection('employees').where('email', '==', data.email).get();
             for (const doc of empsQuery.docs) { if (doc.id !== user.uid) await doc.ref.delete(); }
+        },
+        getNotificationRecipients: async () => {
+            const user = auth!.currentUser;
+            if (!user) return [];
+            const empDoc = await db!.collection('employees').doc(user.uid).get();
+            const cid = empDoc.data()?.companyId;
+            if (!cid) return [];
+            const doc = await db!.collection('notificationSettings').doc(cid).get();
+            return doc.exists ? (doc.data()?.emails || []) : [];
+        },
+        addNotificationRecipient: async (email: string) => {
+            const user = auth!.currentUser;
+            const empDoc = await db!.collection('employees').doc(user!.uid).get();
+            const cid = empDoc.data()?.companyId;
+            if (cid) {
+                await db!.collection('notificationSettings').doc(cid).set({
+                    emails: firebase.firestore.FieldValue.arrayUnion(email)
+                }, { merge: true });
+            }
+        },
+        removeNotificationRecipient: async (email: string) => {
+            const user = auth!.currentUser;
+            const empDoc = await db!.collection('employees').doc(user!.uid).get();
+            const cid = empDoc.data()?.companyId;
+            if (cid) {
+                await db!.collection('notificationSettings').doc(cid).set({
+                    emails: firebase.firestore.FieldValue.arrayRemove(email)
+                }, { merge: true });
+            }
+        },
+        getEmailConfig: async () => {
+            const user = auth!.currentUser;
+            if (!user) return null;
+            const empDoc = await db!.collection('employees').doc(user.uid).get();
+            const cid = empDoc.data()?.companyId;
+            if (!cid) return null;
+            const doc = await db!.collection('notificationSettings').doc(cid).get();
+            return doc.exists ? doc.data()?.emailConfig : null;
+        },
+        saveEmailConfig: async (config: any) => {
+            const user = auth!.currentUser;
+            const empDoc = await db!.collection('employees').doc(user!.uid).get();
+            const cid = empDoc.data()?.companyId;
+            if (cid) {
+                await db!.collection('notificationSettings').doc(cid).set({
+                    emailConfig: config
+                }, { merge: true });
+            }
         }
     };
 };
@@ -374,5 +394,5 @@ const createRealApi = () => {
 const api = isFirebaseEnabled ? createRealApi() : createMockApi();
 
 export const {
-    resendVerificationEmail, verifyEmailWithToken, joinCompany, createCompany, getCompanyDetails, registerWithEmailAndPassword, loginWithEmailAndPassword, logout, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset, getEmployeeProfile, streamEmployees, streamAttendanceLog, updateEmployeeStatus, updateAttendanceLogEntry, getActivityStatuses, getWorkSchedules, getPayrollChangeTypes, getCalendarEvents, getMapItems, updateEmployeeDetails, addEmployee, removeEmployee, addAttendanceLogEntry, updateEmployeeCurrentSession, addWorkSchedule, updateWorkSchedule, removeWorkSchedule, addActivityStatus, removeActivityStatus, addPayrollChangeType, updatePayrollChangeType, removePayrollChangeType, addCalendarEvent, updateCalendarEvent, removeCalendarEvent, updateTimesheetEntry, uploadProfilePicture, changePassword, saveMapItems, updateEmployeeSeat, getPendingInvitation, acceptInvitation
+    resendVerificationEmail, verifyEmailWithToken, joinCompany, createCompany, getCompanyDetails, registerWithEmailAndPassword, loginWithEmailAndPassword, logout, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset, getEmployeeProfile, streamEmployees, streamAttendanceLog, updateEmployeeStatus, updateAttendanceLogEntry, getActivityStatuses, getWorkSchedules, getPayrollChangeTypes, getCalendarEvents, getMapItems, updateEmployeeDetails, addEmployee, removeEmployee, addAttendanceLogEntry, updateEmployeeCurrentSession, addWorkSchedule, updateWorkSchedule, removeWorkSchedule, addActivityStatus, removeActivityStatus, addPayrollChangeType, updatePayrollChangeType, removePayrollChangeType, addCalendarEvent, updateCalendarEvent, removeCalendarEvent, updateTimesheetEntry, uploadProfilePicture, changePassword, saveMapItems, updateEmployeeSeat, getPendingInvitation, acceptInvitation, getNotificationRecipients, addNotificationRecipient, removeNotificationRecipient, getEmailConfig, saveEmailConfig
 } = api;

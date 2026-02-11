@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { ChatBubbleIcon, ArrowLeftIcon, TeamIcon } from './Icons';
 import { Employee, Message } from '../types';
@@ -53,7 +54,8 @@ const mockConversationsData: { [key: string]: Conversation } = {
 interface ChatWidgetProps {
   employees: Employee[];
   currentUser: Employee;
-  userRole: 'admin' | 'employee';
+  // FIX: Updated userRole type to include 'master' to resolve type mismatch in App.tsx
+  userRole: 'master' | 'admin' | 'employee';
 }
 
 

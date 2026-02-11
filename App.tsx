@@ -99,6 +99,16 @@ const AppContent: React.FC = () => {
     currentPageRef.current = currentPage;
   }, [currentPage]);
 
+  const refreshUserProfile = async () => {
+    if (user?.id) {
+        const profile = await getEmployeeProfile(user.id);
+        if (profile) {
+            const normalizedUser = { ...profile, role: (profile.role || 'employee').toLowerCase() as 'master' | 'admin' | 'employee' };
+            setUser(normalizedUser);
+        }
+    }
+  };
+
   useEffect(() => {
     if (!auth) { setLoading(false); return; }
 
@@ -107,7 +117,7 @@ const AppContent: React.FC = () => {
           try {
             const profile = await getEmployeeProfile(firebaseUser.uid);
             if (profile) {
-              const normalizedUser = { ...profile, role: (profile.role || 'employee').toLowerCase() as 'admin' | 'employee' };
+              const normalizedUser = { ...profile, role: (profile.role || 'employee').toLowerCase() as 'master' | 'admin' | 'employee' };
               setUser(normalizedUser);
               if (!hasInitializedAuth.current && !['reset-password', 'verify-email'].includes(currentPageRef.current)) {
                   if (!profile.companyId) {
@@ -224,6 +234,8 @@ const AppContent: React.FC = () => {
       return employees;
   }, [employees, user]);
 
+  const isAdminOrMaster = user?.role === 'admin' || user?.role === 'master';
+
   if (loading) return (
       <div className="flex flex-col items-center justify-center h-screen bg-bright-white text-lucius-lime gap-4">
           <div className="flex space-x-2">
@@ -246,7 +258,7 @@ const AppContent: React.FC = () => {
   if (currentPage === 'onboarding' || !user.companyId) {
     return <NotificationProvider><OnboardingPage user={user} onLogout={handleLogout} onComplete={async () => {
       const refreshedProfile = await getEmployeeProfile(user.id);
-      if (refreshedProfile) setUser({ ...refreshedProfile, role: (refreshedProfile.role || 'employee').toLowerCase() as 'admin' | 'employee' });
+      if (refreshedProfile) setUser({ ...refreshedProfile, role: (refreshedProfile.role || 'employee').toLowerCase() as 'master' | 'admin' | 'employee' });
       setCurrentPage('tracker');
     }} /></NotificationProvider>;
   }
@@ -258,14 +270,14 @@ const AppContent: React.FC = () => {
         <Header currentPage={currentPage} onNavigate={setCurrentPage} user={user} userRole={user.role} onLogout={handleLogout} onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} notifications={[]} onNotificationClick={() => {}} />
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-whisper-white/30 p-4 sm:p-6 lg:p-8 scroll-smooth">
           {currentPage === 'tracker' && <TrackerPage employees={trackerEmployees} attendanceLog={attendanceLog} onEmployeeAction={handleEmployeeAction} onAddEmployee={() => setIsAddEmployeeModalOpen(true)} onRemoveEmployee={(id) => promptConfirm('Eliminar Colaborador', '¿Estás seguro?', () => removeEmployee(id))} onEditTime={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeForTimeEdit(emp); setIsEditTimeModalOpen(true); }}} userRole={user.role} activityStatuses={activityStatuses} workSchedules={workSchedules} onEditEntry={(entry) => { setLogEntryToEdit(entry); setIsEditActivityLogEntryModalOpen(true); }} />}
-          {currentPage === 'dashboard' && user.role === 'admin' && <DashboardPage attendanceLog={attendanceLog} employees={employees} onEmployeeAction={handleEmployeeAction} activityStatuses={activityStatuses} workSchedules={workSchedules} calendarEvents={calendarEvents} />}
-          {currentPage === 'timesheet' && user.role === 'admin' && <TimesheetPage employees={employees} attendanceLog={attendanceLog} activityStatuses={activityStatuses} onEditEntry={(entry) => { setTimesheetEntryToEdit(entry); setIsEditTimesheetModalOpen(true); }} />}
-          {currentPage === 'employees' && user.role === 'admin' && <EmployeesPage employees={employees} onAddEmployee={() => setIsAddEmployeeModalOpen(true)} onEditEmployee={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeToEdit(emp); setIsEditEmployeeModalOpen(true); }}} onRemoveEmployee={(id) => promptConfirm('Eliminar Colaborador', '¿Estás seguro?', () => removeEmployee(id))} workSchedules={workSchedules} currentUser={user} />}
-          {currentPage === 'schedule' && user.role === 'admin' && <SchedulePage events={calendarEvents} employees={employees} payrollChangeTypes={payrollChangeTypes} onAddEvent={() => setIsAddEmployeeModalOpen(true)} onEditEvent={(event) => { setEventToEdit(event); setIsEditEventModalOpen(true); }} onRemoveEvent={(event) => promptConfirm('Eliminar Evento', '¿Estás seguro?', () => removeCalendarEvent(event.id))} onUpdateEventStatus={async (event, status) => { await updateCalendarEvent({ ...event, status }); setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e)); }} />}
+          {currentPage === 'dashboard' && isAdminOrMaster && <DashboardPage attendanceLog={attendanceLog} employees={employees} onEmployeeAction={handleEmployeeAction} activityStatuses={activityStatuses} workSchedules={workSchedules} calendarEvents={calendarEvents} />}
+          {currentPage === 'timesheet' && isAdminOrMaster && <TimesheetPage employees={employees} attendanceLog={attendanceLog} activityStatuses={activityStatuses} onEditEntry={(entry) => { setTimesheetEntryToEdit(entry); setIsEditTimesheetModalOpen(true); }} />}
+          {currentPage === 'employees' && isAdminOrMaster && <EmployeesPage employees={employees} onAddEmployee={() => setIsAddEmployeeModalOpen(true)} onEditEmployee={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeToEdit(emp); setIsEditEmployeeModalOpen(true); }}} onRemoveEmployee={(id) => promptConfirm('Eliminar Colaborador', '¿Estás seguro?', () => removeEmployee(id))} workSchedules={workSchedules} currentUser={user} />}
+          {currentPage === 'schedule' && isAdminOrMaster && <SchedulePage events={calendarEvents} employees={employees} payrollChangeTypes={payrollChangeTypes} onAddEvent={() => setIsAddEmployeeModalOpen(true)} onEditEvent={(event) => { setEventToEdit(event); setIsEditEventModalOpen(true); }} onRemoveEvent={(event) => promptConfirm('Eliminar Evento', '¿Estás seguro?', () => removeCalendarEvent(event.id))} onUpdateEventStatus={async (event, status) => { await updateCalendarEvent({ ...event, status }); setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e)); }} />}
           {currentPage === 'seating' && <SeatingPage employees={employees} activityStatuses={activityStatuses} currentUserRole={user.role} />}
           {currentPage === 'ticketing' && <TicketingPage events={calendarEvents} currentUser={user} employees={employees} payrollChangeTypes={payrollChangeTypes} onAddRequest={async (req) => { try { await addCalendarEvent({ ...req, status: 'pending' }); addNotification('Solicitud enviada', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Error al enviar', 'error'); }}} onUpdateRequest={async (evt) => { try { await updateCalendarEvent(evt); addNotification('Solicitud actualizada', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Error al actualizar', 'error'); }}} onRemoveRequest={(evt) => promptConfirm('Borrar Solicitud', '¿Seguro?', async () => { try { await removeCalendarEvent(evt.id); addNotification('Solicitud borrada', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Error al borrar', 'error'); }})} />}
-          {currentPage === 'settings' && user.role === 'admin' && <SettingsPage statuses={activityStatuses} onAddStatus={async (n, c) => { await addActivityStatus(n,c); setActivityStatuses(await getActivityStatuses()); }} onRemoveStatus={async (id) => { await removeActivityStatus(id); setActivityStatuses(await getActivityStatuses()); }} payrollChangeTypes={payrollChangeTypes} onAddPayrollChangeType={async (n,c,e,a) => { await addPayrollChangeType(n,c,e,a); setPayrollChangeTypes(await getPayrollChangeTypes()); }} onUpdatePayrollChangeType={async (id, u) => { await updatePayrollChangeType(id, u); setPayrollChangeTypes(await getPayrollChangeTypes()); }} onRemovePayrollChangeType={async (id) => { await removePayrollChangeType(id); setPayrollChangeTypes(await getPayrollChangeTypes()); }} workSchedules={workSchedules} onAddWorkSchedule={async (s) => { await addWorkSchedule(s); setWorkSchedules(await getWorkSchedules()); }} onUpdateWorkSchedule={async (id, u) => { await updateWorkSchedule(id, u); setWorkSchedules(await getWorkSchedules()); }} onRemoveWorkSchedule={async (id) => { await removeWorkSchedule(id); setWorkSchedules(await getWorkSchedules()); }} />}
-          {currentPage === 'profile' && <ProfilePage user={user} />}
+          {currentPage === 'settings' && isAdminOrMaster && <SettingsPage statuses={activityStatuses} onAddStatus={async (n, c) => { await addActivityStatus(n,c); setActivityStatuses(await getActivityStatuses()); }} onRemoveStatus={async (id) => { await removeActivityStatus(id); setActivityStatuses(await getActivityStatuses()); }} payrollChangeTypes={payrollChangeTypes} onAddPayrollChangeType={async (n,c,e,a) => { await addPayrollChangeType(n,c,e,a); setPayrollChangeTypes(await getPayrollChangeTypes()); }} onUpdatePayrollChangeType={async (id, u) => { await updatePayrollChangeType(id, u); setPayrollChangeTypes(await getPayrollChangeTypes()); }} onRemovePayrollChangeType={async (id) => { await removePayrollChangeType(id); setPayrollChangeTypes(await getPayrollChangeTypes()); }} workSchedules={workSchedules} onAddWorkSchedule={async (s) => { await addWorkSchedule(s); setWorkSchedules(await getWorkSchedules()); }} onUpdateWorkSchedule={async (id, u) => { await updateWorkSchedule(id, u); setWorkSchedules(await getWorkSchedules()); }} onRemoveWorkSchedule={async (id) => { await removeWorkSchedule(id); setWorkSchedules(await getWorkSchedules()); }} companyId={user.companyId} />}
+          {currentPage === 'profile' && <ProfilePage user={user} onUpdateProfile={refreshUserProfile} />}
           {currentPage === 'calendar' && <CalendarPage events={calendarEvents} currentUser={user} payrollChangeTypes={payrollChangeTypes} />}
           {currentPage === 'password' && <ChangePasswordPage />}
         </main>

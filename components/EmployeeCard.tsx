@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Employee, AttendanceAction, ActivityStatus } from '../types';
 import ActivityPickerModal from '../components/ActivityPickerModal';
 import { EditIcon, AlertIcon } from '../components/Icons';
@@ -10,7 +10,8 @@ interface EmployeeCardProps {
   onRemove: (employeeId: string) => void;
   onEditTime: (employeeId: string) => void;
   activityStatuses: ActivityStatus[];
-  userRole: 'admin' | 'employee';
+  // FIX: Updated userRole type to include 'master' to resolve type mismatch in App.tsx
+  userRole: 'master' | 'admin' | 'employee';
 }
 
 const formatTime = (totalSeconds: number): string => {
@@ -50,23 +51,38 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
   const [elapsedTime, setElapsedTime] = useState(0);
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [isMobileDevice, setIsMobileDevice] = useState(false);
+  const hasAutoClockedOut = useRef(false);
 
   useEffect(() => {
+    // Reset auto-out flag if employee is clocked out
+    if (employee.status === 'Clocked Out') {
+        hasAutoClockedOut.current = false;
+    }
+
     // Detección robusta de móvil (UA + Ancho de pantalla)
     const mobileCheck = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (window.innerWidth <= 768);
     setIsMobileDevice(mobileCheck);
 
     if (employee.status !== 'Clocked Out' && employee.currentStatusStartTime) {
-      setElapsedTime(Math.floor((Date.now() - (employee.currentStatusStartTime || 0)) / 1000));
-      const interval = setInterval(() => {
+      const updateTimer = () => {
         const seconds = Math.floor((Date.now() - (employee.currentStatusStartTime || 0)) / 1000);
         setElapsedTime(seconds);
-      }, 1000);
+
+        // --- LÓGICA DE AUTO-DESCONEXIÓN 24H ---
+        // 24 horas = 86,400 segundos
+        if (employee.autoClockOut24h !== false && seconds >= 86400 && !hasAutoClockedOut.current) {
+            hasAutoClockedOut.current = true; // Prevenir múltiples llamadas
+            onAction(employee.id, 'Clock Out');
+        }
+      };
+
+      updateTimer();
+      const interval = setInterval(updateTimer, 1000);
       return () => clearInterval(interval);
     } else {
       setElapsedTime(0);
     }
-  }, [employee.status, employee.currentStatusStartTime]);
+  }, [employee.status, employee.currentStatusStartTime, employee.autoClockOut24h, employee.id, onAction]);
 
   const handleSelectActivity = (activityName: string) => {
     onAction(employee.id, `Start ${activityName}`);
@@ -134,11 +150,15 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
   const isClockedIn = employee.status !== 'Clocked Out';
   const initials = getInitials(employee.name);
 
+  // Alerta si lleva más de 24h conectado
+  const isOverdue = elapsedTime >= 86400;
+
   return (
     <>
-    <div className="bg-white rounded-xl shadow-md p-4 flex flex-col gap-4 border border-bokara-grey/10 relative transition-all duration-300 ease-in-out">
+    <div className={`bg-white rounded-xl shadow-md p-4 flex flex-col gap-4 border border-bokara-grey/10 relative transition-all duration-300 ease-in-out ${isOverdue && isClockedIn ? 'ring-2 ring-red-500 bg-red-50/30' : ''}`}>
       <div className="absolute top-2 right-2 flex items-center gap-1 z-10">
-        {userRole === 'admin' && (
+        {/* FIX: Changed condition to include 'master' role for admin card actions */}
+        {userRole !== 'employee' && (
           <>
             <button
               onClick={handleEditClick}
@@ -186,10 +206,13 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
         </div>
       </div>
 
-      <div className="text-center">
-        <div className="font-display text-4xl text-bokara-grey tracking-widest tabular-nums">
+      <div className="text-center relative">
+        <div className={`font-display text-4xl tracking-widest tabular-nums transition-colors ${isOverdue && isClockedIn ? 'text-red-600' : 'text-bokara-grey'}`}>
           {formatTime(elapsedTime)}
         </div>
+        {isOverdue && isClockedIn && (
+            <div className="text-[10px] font-bold text-red-600 uppercase animate-pulse">Sesión Crítica +24h</div>
+        )}
         <div className="text-xs text-bokara-grey/60 -mt-1 truncate">
           {employee.status !== 'Clocked Out' && employee.lastClockInTime ? `Session | In since ${new Date(employee.lastClockInTime).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}` : 'Offline'}
         </div>

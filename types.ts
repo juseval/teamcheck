@@ -14,7 +14,7 @@ export interface Invitation {
   email: string;
   companyId: string;
   companyName: string;
-  role: 'admin' | 'employee';
+  role: 'master' | 'admin' | 'employee';
   status: 'pending' | 'accepted';
   invitedBy: string;
   createdAt: number;
@@ -35,7 +35,7 @@ export interface Employee {
   email: string;
   phone: string;
   location: string;
-  role: 'admin' | 'employee';
+  role: 'master' | 'admin' | 'employee';
   status: EmployeeStatus;
   lastClockInTime: number | null;
   currentStatusStartTime: number | null;
