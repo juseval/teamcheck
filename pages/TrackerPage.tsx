@@ -17,7 +17,8 @@ interface TrackerPageProps {
   onRemoveEmployee: (employeeId: string) => void;
   // FIX: Changed employeeId type from number to string.
   onEditTime: (employeeId: string) => void;
-  userRole: 'admin' | 'employee';
+  // FIX: Updated userRole type to include 'master' to resolve type mismatch in App.tsx
+  userRole: 'master' | 'admin' | 'employee';
   activityStatuses: ActivityStatus[];
   workSchedules: WorkSchedule[];
   // New prop for handling log editing
@@ -45,7 +46,7 @@ const TrackerPage: React.FC<TrackerPageProps> = ({
     let logsToFilter = attendanceLog;
     
     // Safety check: if userRole is employee, find the matching employee ID from the employees prop (which should be length 1)
-    if (userRole === 'employee' && employees.length > 0) {
+    if (userRole === 'employee' && employees.length > 0 && employees[0]) {
         logsToFilter = attendanceLog.filter(log => log.employeeId === employees[0].id);
     }
 
@@ -84,7 +85,8 @@ const TrackerPage: React.FC<TrackerPageProps> = ({
 
   // Grouping logic for admin view
   const employeesBySchedule = useMemo(() => {
-    if (userRole !== 'admin') {
+    // FIX: Updated condition to allow 'master' role to see grouped schedules
+    if (userRole === 'employee') {
       return null;
     }
 
@@ -112,10 +114,11 @@ const TrackerPage: React.FC<TrackerPageProps> = ({
   return (
     <>
         <div className="flex flex-col items-center gap-8 pt-8 w-full max-w-full overflow-x-hidden">
-            <div className={`w-full ${userRole === 'admin' ? 'max-w-6xl' : 'max-w-md'}`}>
+            <div className={`w-full ${userRole !== 'employee' ? 'max-w-6xl' : 'max-w-md'}`}>
                 <div className="flex justify-between items-center mb-6 px-2">
                     <h2 className="text-3xl font-bold text-bokara-grey">{pageTitle}</h2>
-                    {userRole === 'admin' && (
+                    {/* FIX: Changed condition to include 'master' role for Add button */}
+                    {userRole !== 'employee' && (
                       <button
                         onClick={onAddEmployee}
                         className="bg-lucius-lime hover:bg-opacity-80 text-bokara-grey font-bold py-2 px-4 rounded-lg transition-all duration-300 shadow-md flex items-center gap-2 transform hover:scale-105"
@@ -127,7 +130,8 @@ const TrackerPage: React.FC<TrackerPageProps> = ({
                     )}
                 </div>
                 
-                {userRole === 'admin' && employeesBySchedule ? (
+                {/* FIX: Updated condition to include 'master' role for grouped view */}
+                {userRole !== 'employee' && employeesBySchedule ? (
                   <div className="space-y-8">
                     {/* Render employees grouped by their assigned schedule */}
                     {workSchedules.map(schedule => (
@@ -172,7 +176,7 @@ const TrackerPage: React.FC<TrackerPageProps> = ({
                   </div>
                 ) : (
                   // Original view for 'employee' role
-                  <div className={`grid gap-6 ${userRole === 'admin' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-1'}`}>
+                  <div className={`grid gap-6 ${userRole !== 'employee' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4' : 'grid-cols-1'}`}>
                       {employees.map(employee => (
                       <EmployeeCard 
                           key={employee.id} 
@@ -188,7 +192,8 @@ const TrackerPage: React.FC<TrackerPageProps> = ({
                 )}
             </div>
             
-            {userRole === 'admin' && (
+            {/* FIX: Changed condition to include 'master' role for Timeline visibility */}
+            {userRole !== 'employee' && (
                 <div className="w-full max-w-6xl bg-white rounded-xl shadow-md p-6 border border-bokara-grey/10 transition-colors duration-300">
                      <EmployeeTimeline 
                         employees={employees} 
@@ -198,7 +203,7 @@ const TrackerPage: React.FC<TrackerPageProps> = ({
                 </div>
             )}
 
-            <div className={`w-full ${userRole === 'admin' ? 'max-w-6xl' : 'max-w-4xl'}`}>
+            <div className={`w-full ${userRole !== 'employee' ? 'max-w-6xl' : 'max-w-4xl'}`}>
                 <AttendanceLog 
                     entries={filteredLogs}
                     dateRange={dateRange}

@@ -21,12 +21,16 @@ const formatTime = (totalSeconds: number): string => {
   return `${hours}:${minutes}:${seconds}`;
 };
 
-const getInitials = (name: string) => {
-  const names = name.trim().split(' ');
+const getInitials = (name: string = '') => {
+  if (!name) return '??';
+  const trimmedName = name.trim();
+  if (!trimmedName) return '??';
+  
+  const names = trimmedName.split(' ');
   if (names.length > 1) {
     return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
   }
-  return name.substring(0, 2).toUpperCase();
+  return trimmedName.substring(0, 2).toUpperCase();
 };
 
 const StatusIndicator: React.FC<{ status: Employee['status'], activityStatuses: ActivityStatus[] }> = ({ status, activityStatuses }) => {
@@ -131,7 +135,7 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
             </button>
           </div>
         );
-      default:
+      default: {
         const customStatus = activityStatuses.find(s => s.name === employee.status);
         const endButtonColor = customStatus ? customStatus.color : '#AE8F60';
         return (
@@ -143,6 +147,7 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
             End {employee.status}
           </button>
         );
+      }
     }
   };
 

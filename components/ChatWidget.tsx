@@ -121,12 +121,16 @@ const ChatWidget: React.FC<ChatWidgetProps> = ({ employees, currentUser, userRol
 
   const selectedConversation = selectedConversationId ? conversations[selectedConversationId] : null;
 
-  const getInitials = (name: string) => {
-    const names = name.trim().split(' ');
+  const getInitials = (name: string = '') => {
+    if (!name) return '??';
+    const trimmedName = name.trim();
+    if (!trimmedName) return '??';
+    
+    const names = trimmedName.split(' ');
     if (names.length > 1) {
       return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
     }
-    return name.substring(0, 2).toUpperCase();
+    return trimmedName.substring(0, 2).toUpperCase();
   };
   
   const renderChatView = () => (

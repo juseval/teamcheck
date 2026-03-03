@@ -69,8 +69,8 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
         if (!currentUser.hireDate) return { accrued: 0, taken: 0, compensated: 0, balance: 0, maxCompensable: 0 };
         const start = new Date(currentUser.hireDate);
         const end = currentUser.terminationDate ? new Date(currentUser.terminationDate) : new Date();
-        let d1 = start.getDate(); let m1 = start.getMonth() + 1; let y1 = start.getFullYear();
-        let d2 = end.getDate(); let m2 = end.getMonth() + 1; let y2 = end.getFullYear();
+        let d1 = start.getDate(); const m1 = start.getMonth() + 1; const y1 = start.getFullYear();
+        let d2 = end.getDate(); const m2 = end.getMonth() + 1; const y2 = end.getFullYear();
         if (d1 === 31) d1 = 30; if (d2 === 31) d2 = 30;
         if (m1 === 2 && d1 >= 28) d1 = 30; if (m2 === 2 && d2 >= 28) d2 = 30;
         const accountingDays = ((y2 - y1) * 360) + ((m2 - m1) * 30) + (d2 - d1) + 1;
@@ -173,7 +173,6 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                 const hasKeys = config?.serviceId && config?.templateId && config?.publicKey;
 
                 if (recipients.length > 0 && hasKeys) {
-                    // Preparamos promesas de envío paralelo para mayor velocidad
                     const emailPromises = recipients.map(email => {
                         return fetch('https://api.emailjs.com/api/v1.0/email/send', {
                             method: 'POST',
@@ -313,6 +312,8 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                         {myRequests.map(req => {
                             const today = new Date(); today.setHours(0,0,0,0);
                             const isPast = new Date(req.endDate + 'T00:00:00') < today;
+                            const isPending = req.status === 'pending';
+
                             return (
                                 <div key={req.id} className="p-3 rounded-lg border border-bokara-grey/5 transition-colors group bg-whisper-white/50 hover:bg-whisper-white">
                                     <div className="flex justify-between items-start mb-1">
@@ -325,21 +326,13 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                                     </div>
                                     <div className="text-[11px] text-bokara-grey/70 font-mono mt-1 flex justify-between items-center">
                                         <span>{req.startDate} ➜ {req.endDate}</span>
-                                        <div className="flex items-center gap-1.5">
-                                            {req.status === 'pending' && !isPast && (
+                                        <div className="flex items-center gap-2">
+                                            {isPending && !isPast && (
                                                 <>
-                                                    <button 
-                                                        onClick={() => handleEditRequest(req)} 
-                                                        className="p-1 hover:bg-lucius-lime/10 rounded text-lucius-lime transition-all"
-                                                        title="Editar Solicitud"
-                                                    >
+                                                    <button onClick={() => handleEditRequest(req)} className="p-1 hover:bg-lucius-lime/10 rounded text-lucius-lime transition-all" title="Editar">
                                                         <EditIcon className="w-3.5 h-3.5" />
                                                     </button>
-                                                    <button 
-                                                        onClick={() => onRemoveRequest(req)} 
-                                                        className="p-1 hover:bg-red-100 rounded text-red-500 transition-all"
-                                                        title="Eliminar Solicitud"
-                                                    >
+                                                    <button onClick={() => onRemoveRequest(req)} className="p-1 hover:bg-red-100 rounded text-red-500 transition-all" title="Eliminar">
                                                         <TrashIcon className="w-3.5 h-3.5" />
                                                     </button>
                                                 </>

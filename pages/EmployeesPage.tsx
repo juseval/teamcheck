@@ -13,9 +13,10 @@ interface EmployeesPageProps {
   onRemoveEmployee: (employeeId: string) => void;
   workSchedules: WorkSchedule[];
   currentUser: Employee;
+  inviteCode?: string;
 }
 
-const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee, onEditEmployee, onRemoveEmployee, workSchedules, currentUser }) => {
+const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee, onEditEmployee, onRemoveEmployee, workSchedules, currentUser, inviteCode }) => {
   const { addNotification } = useNotification();
   const [allEvents, setAllEvents] = useState<CalendarEvent[]>([]);
   const [activeTab, setActiveTab] = useState<'list' | 'board' | 'vacations'>('list');
@@ -54,11 +55,11 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
       
       // Normalización Contable (Método 30/360)
       let d1 = start.getDate();
-      let m1 = start.getMonth() + 1;
-      let y1 = start.getFullYear();
+      const m1 = start.getMonth() + 1;
+      const y1 = start.getFullYear();
       let d2 = end.getDate();
-      let m2 = end.getMonth() + 1;
-      let y2 = end.getFullYear();
+      const m2 = end.getMonth() + 1;
+      const y2 = end.getFullYear();
 
       if (d1 === 31) d1 = 30;
       if (d2 === 31) d2 = 30;
@@ -109,7 +110,8 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
   };
 
   const copyToClipboard = () => {
-      navigator.clipboard.writeText(currentUser.companyId).then(() => {
+      const codeToCopy = inviteCode || currentUser.companyId;
+      navigator.clipboard.writeText(codeToCopy).then(() => {
           addNotification("Código de organización copiado.", 'success');
       }).catch(() => {
           addNotification("Error al copiar el código.", 'error');
@@ -151,6 +153,13 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
         </div>
         
         <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+            <button 
+                onClick={copyToClipboard}
+                className="bg-white hover:bg-whisper-white text-bokara-grey font-bold py-2 px-4 rounded-lg border border-bokara-grey/10 shadow-sm flex items-center gap-2 transition-all active:scale-95"
+            >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                <span className="hidden sm:inline">Copiar Código Equipo</span>
+            </button>
             <div className="bg-white rounded-lg border border-bokara-grey/10 p-1 flex">
                 <button onClick={() => setActiveTab('list')} className={`p-2 rounded-md transition-all ${activeTab === 'list' ? 'bg-bokara-grey text-white shadow-sm' : 'text-bokara-grey/50 hover:bg-whisper-white'}`}><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg></button>
                 <button onClick={() => setActiveTab('board')} className={`p-2 rounded-md transition-all ${activeTab === 'board' ? 'bg-bokara-grey text-white shadow-sm' : 'text-bokara-grey/50 hover:bg-whisper-white'}`}><svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 00-2 2" /></svg></button>

@@ -211,8 +211,28 @@ const createRealApi = () => {
         joinCompany: async (inviteCode: string) => {
             const user = auth!.currentUser;
             if (!user) throw new Error("Not logged in");
-            const compQuery = await db!.collection('companies').where('inviteCode', '==', inviteCode.toUpperCase()).limit(1).get();
+            
+            const trimmedCode = inviteCode.trim();
+            
+            // 1. Intentar buscar por inviteCode exacto (para códigos largos o mixtos)
+            let compQuery = await db!.collection('companies').where('inviteCode', '==', trimmedCode).limit(1).get();
+            
+            // 2. Si no encuentra, intentar buscar por inviteCode en mayúsculas (para el formato estándar ABC-123)
+            if (compQuery.empty) {
+                compQuery = await db!.collection('companies').where('inviteCode', '==', trimmedCode.toUpperCase()).limit(1).get();
+            }
+            
+            // 3. Si sigue sin encontrar, intentar buscar por ID de documento (por si el usuario ingresó el ID de la empresa)
+            if (compQuery.empty) {
+                const docById = await db!.collection('companies').doc(trimmedCode).get();
+                if (docById.exists) {
+                    await db!.collection('employees').doc(user.uid).set({ companyId: docById.id }, { merge: true });
+                    return;
+                }
+            }
+
             if (compQuery.empty) throw new Error("Código de equipo inválido.");
+            
             const companyId = compQuery.docs[0].id;
             await db!.collection('employees').doc(user.uid).set({ companyId }, { merge: true });
         },
@@ -222,14 +242,47 @@ const createRealApi = () => {
         addEmployee: async (employeeData: any) => {
             const user = auth!.currentUser;
             if (!user) throw new Error("No autenticado");
-            const adminDoc = await db!.collection('employees').doc(user.uid).get();
-            const companyId = adminDoc.data()?.companyId;
+            
+            let companyId = employeeData.companyId;
+            if (!companyId) {
+                const adminDoc = await db!.collection('employees').doc(user.uid).get();
+                companyId = adminDoc.data()?.companyId;
+            }
+            
+            if (!companyId) throw new Error("No se encontró una organización vinculada a tu cuenta.");
+
             const compDoc = await db!.collection('companies').doc(companyId).get();
             const companyName = compDoc.data()?.name || "Tu Empresa";
+            
             const invRef = db!.collection('invitations').doc();
-            const invitation = cleanObject({ id: invRef.id, email: employeeData.email, companyId: companyId, companyName: companyName, role: employeeData.role || 'employee', status: 'pending', invitedBy: user.uid, createdAt: Date.now(), hireDate: employeeData.hireDate, terminationDate: employeeData.terminationDate, manualVacationAdjustment: employeeData.manualVacationAdjustment, phone: employeeData.phone, location: employeeData.location, workScheduleId: employeeData.workScheduleId });
+            const invitation = cleanObject({ 
+                id: invRef.id, 
+                email: employeeData.email, 
+                companyId: companyId, 
+                companyName: companyName, 
+                role: employeeData.role || 'employee', 
+                status: 'pending', 
+                invitedBy: user.uid, 
+                createdAt: Date.now(), 
+                hireDate: employeeData.hireDate, 
+                terminationDate: employeeData.terminationDate, 
+                manualVacationAdjustment: employeeData.manualVacationAdjustment, 
+                phone: employeeData.phone, 
+                location: employeeData.location, 
+                workScheduleId: employeeData.workScheduleId 
+            });
+            
             const empRef = db!.collection('employees').doc();
-            const newEmp = cleanObject({ ...employeeData, id: empRef.id, companyId: companyId, status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, emailVerified: false });
+            const newEmp = cleanObject({ 
+                ...employeeData, 
+                id: empRef.id, 
+                companyId: companyId, 
+                status: 'Clocked Out', 
+                lastClockInTime: null, 
+                currentStatusStartTime: null, 
+                emailVerified: false 
+            });
+            
             await Promise.all([invRef.set(invitation), empRef.set(newEmp)]);
             return newEmp;
         },

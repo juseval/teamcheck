@@ -1,277 +1,402 @@
+import React, { useState } from 'react';
+import { WorkSchedule } from '../types';
 
-import React, { useState, useEffect } from 'react';
-import { Employee, WorkSchedule } from '../types';
-
-interface EditEmployeeModalProps {
+interface AddEmployeeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onUpdateEmployee: (employeeData: Employee) => void;
-  employeeToEdit: Employee | null;
+  onAddEmployee: (data: {
+    name: string;
+    email: string;
+    phone: string;
+    role: 'admin' | 'employee';
+    workScheduleId: string | null;
+    status: string;
+  }) => Promise<void>;
   workSchedules: WorkSchedule[];
+  inviteCode?: string;
+  companyName?: string;
 }
 
-const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, onClose, onUpdateEmployee, employeeToEdit, workSchedules }) => {
-  const [activeTab, setActiveTab] = useState('info');
-  const [employeeData, setEmployeeData] = useState<Employee | null>(null);
+type Step = 'form' | 'invite';
 
-  useEffect(() => {
-    if (employeeToEdit) {
-      setEmployeeData({
-          ...employeeToEdit,
-          allowMobileClockIn: employeeToEdit.allowMobileClockIn ?? false,
-          autoClockOut24h: employeeToEdit.autoClockOut24h ?? true
-      });
+const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
+  isOpen,
+  onClose,
+  onAddEmployee,
+  workSchedules,
+  inviteCode,
+  companyName,
+}) => {
+  const [step, setStep] = useState<Step>('form');
+  const [isLoading, setIsLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [addedEmail, setAddedEmail] = useState('');
+  const [addedName, setAddedName] = useState('');
+
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    role: 'employee' as 'admin' | 'employee',
+    workScheduleId: '' as string | null,
+  });
+
+  const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
+
+  if (!isOpen) return null;
+
+  const validate = () => {
+    const newErrors: { name?: string; email?: string } = {};
+    if (!formData.name.trim()) newErrors.name = 'El nombre es obligatorio.';
+    if (!formData.email.trim()) {
+      newErrors.email = 'El correo es obligatorio.';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'Ingresa un correo válido.';
     }
-  }, [employeeToEdit]);
-
-  if (!isOpen || !employeeData) return null;
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-      const { name, value, type } = e.target;
-      
-      setEmployeeData(prev => {
-          if (!prev) return null;
-          let val: any = value;
-          if (type === 'checkbox') val = (e.target as HTMLInputElement).checked;
-          if (name === 'manualVacationAdjustment') val = Number(value);
-          
-          if (name === 'hireDate' || name === 'terminationDate') {
-              if (!value) {
-                  val = undefined;
-              } else {
-                  const [year, month, day] = value.split('-').map(Number);
-                  val = new Date(year, month - 1, day).getTime();
-              }
-          }
-          
-          return { ...prev, [name]: val };
-      });
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (employeeData && employeeData.name?.trim() && employeeData.email?.trim()) {
-      onUpdateEmployee({
-          ...employeeData,
-          workScheduleId: employeeData.workScheduleId || null
-      });
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (errors[name as keyof typeof errors]) {
+      setErrors((prev) => ({ ...prev, [name]: undefined }));
     }
   };
 
-  const timestampToDateString = (ts?: number) => {
-      if (!ts) return '';
-      const d = new Date(ts);
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
+  const handleSubmit = async () => {
+    if (!validate()) return;
+    setIsLoading(true);
+    try {
+      await onAddEmployee({
+        name: formData.name.trim(),
+        email: formData.email.trim().toLowerCase(),
+        phone: formData.phone.trim(),
+        role: formData.role,
+        workScheduleId: formData.workScheduleId || null,
+        status: 'Clocked Out',
+      });
+      setAddedEmail(formData.email.trim().toLowerCase());
+      setAddedName(formData.name.trim());
+      setStep('invite');
+    } catch {
+      // Error handled in parent via addNotification
+    } finally {
+      setIsLoading(false);
+    }
   };
-  
-  const isFormValid = !!(employeeData && employeeData.name?.trim() && employeeData.email?.trim());
 
-  const tabs = [
-      { id: 'info', label: 'Información General' },
-      { id: 'permissions', label: 'Permisos' },
-      { id: 'clock', label: 'Control de Asistencia' },
-      { id: 'hr', label: 'Nómina y RRHH' }
-  ];
+  const inviteLink = inviteCode
+    ? `${window.location.origin}?inviteCode=${inviteCode}`
+    : '';
+
+  const handleCopyLink = () => {
+    const textToCopy = inviteLink || inviteCode || '';
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    });
+  };
+
+  const handleSendEmail = () => {
+    const subject = encodeURIComponent(
+      `Invitación a TeamCheck${companyName ? ` — ${companyName}` : ''}`
+    );
+    const body = encodeURIComponent(
+      `Hola ${addedName},\n\nHas sido añadido a ${companyName || 'nuestra organización'} en TeamCheck.\n\nAccede con este enlace:\n${inviteLink || inviteCode}\n\nSi ya tienes cuenta, ingresa el código: ${inviteCode}\n\n¡Bienvenido al equipo!`
+    );
+    window.open(`mailto:${addedEmail}?subject=${subject}&body=${body}`);
+  };
+
+  const handleClose = () => {
+    setStep('form');
+    setFormData({ name: '', email: '', phone: '', role: 'employee', workScheduleId: '' });
+    setErrors({});
+    setCopied(false);
+    onClose();
+  };
 
   return (
-    <div className="fixed inset-0 bg-bokara-grey bg-opacity-50 flex items-center justify-center z-50 transition-opacity" onClick={onClose} aria-modal="true" role="dialog">
-      <div className="bg-bright-white rounded-xl shadow-2xl w-full max-w-4xl border border-bokara-grey/10 overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-        
-        {/* Header */}
-        <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
-            <h2 className="text-xl font-bold text-bokara-grey uppercase">Editar Colaborador: {employeeData.name}</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex border-b bg-white overflow-x-auto whitespace-nowrap scrollbar-hide">
-            {tabs.map(tab => (
-                <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`px-6 py-3 text-sm font-bold transition-all border-b-2 ${
-                        activeTab === tab.id 
-                            ? 'border-lucius-lime text-lucius-lime bg-lucius-lime/5' 
-                            : 'border-transparent text-gray-400 hover:text-gray-600'
-                    }`}
-                >
-                    {tab.label}
-                </button>
-            ))}
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex-grow overflow-y-auto p-8 space-y-6">
-          
-          {/* TAB: INFO */}
-          {activeTab === 'info' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fade-in">
-                <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Nombre Completo</label>
-                    <input name="name" type="text" value={employeeData.name || ''} onChange={handleChange} className="w-full border border-bokara-grey/20 rounded-lg p-2 focus:ring-1 focus:ring-lucius-lime" required />
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Correo Electrónico</label>
-                    <input name="email" type="email" value={employeeData.email || ''} onChange={handleChange} className="w-full border border-bokara-grey/20 rounded-lg p-2 focus:ring-1 focus:ring-lucius-lime" required />
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Teléfono</label>
-                    <input name="phone" type="tel" value={employeeData.phone || ''} onChange={handleChange} className="w-full border border-bokara-grey/20 rounded-lg p-2 focus:ring-1 focus:ring-lucius-lime" />
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Horario Asignado</label>
-                    <select name="workScheduleId" value={employeeData.workScheduleId || ''} onChange={handleChange} className="w-full border border-bokara-grey/20 rounded-lg p-2">
-                        <option value="">No Asignado</option>
-                        {workSchedules.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                </div>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
+      style={{ backgroundColor: 'rgba(26, 26, 24, 0.6)', backdropFilter: 'blur(4px)' }}
+      onClick={handleClose}
+    >
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-bokara-grey/10"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* ── STEP 1: FORMULARIO ── */}
+        {step === 'form' && (
+          <>
+            {/* Header */}
+            <div className="flex items-center justify-between px-7 pt-7 pb-5 border-b border-bokara-grey/8">
+              <div>
+                <h2 className="text-xl font-bold text-bokara-grey">Nuevo Colaborador</h2>
+                <p className="text-xs text-bokara-grey/40 mt-0.5">
+                  Tras guardarlo, podrás enviarle la invitación al equipo.
+                </p>
+              </div>
+              <button
+                onClick={handleClose}
+                className="w-8 h-8 flex items-center justify-center rounded-full text-bokara-grey/30 hover:text-bokara-grey hover:bg-gray-100 transition-all text-xl font-bold"
+              >
+                &times;
+              </button>
             </div>
-          )}
 
-          {/* TAB: PERMISSIONS */}
-          {activeTab === 'permissions' && (
-              <div className="space-y-8 animate-fade-in">
-                  <div className="border border-bokara-grey/10 rounded-xl p-6 bg-white shadow-sm">
-                      <h3 className="text-sm font-bold text-gray-400 uppercase mb-4 tracking-wider">Tipo de Cuenta</h3>
-                      <div className="space-y-4">
-                          {employeeData.role === 'master' ? (
-                              <div className="p-4 bg-purple-50 border border-purple-100 rounded-lg">
-                                  <p className="font-bold text-purple-700">Cuenta de Propietario (Master)</p>
-                                  <p className="text-xs text-purple-600/70">Este nivel de permiso es vitalicio y no puede ser degradado ni modificado desde este panel por seguridad.</p>
-                              </div>
-                          ) : (
-                              ['admin', 'employee'].map(role => (
-                                <label key={role} className="flex items-start gap-3 cursor-pointer group">
-                                    <input 
-                                      type="radio" 
-                                      name="role" 
-                                      value={role} 
-                                      checked={employeeData.role === role} 
-                                      onChange={handleChange}
-                                      className="mt-1 text-lucius-lime focus:ring-lucius-lime"
-                                    />
-                                    <div>
-                                        <p className="font-bold text-gray-700 capitalize">{role === 'admin' ? 'Administrador' : 'Colaborador'}</p>
-                                        <p className="text-xs text-gray-400">
-                                            {role === 'admin' ? 'Tiene acceso total a la gestión de empleados y configuración.' : 'Usuario estándar con acceso solo a su propio perfil y marcaciones.'}
-                                        </p>
-                                    </div>
-                                </label>
-                              ))
-                          )}
+            {/* Body */}
+            <div className="px-7 py-6 space-y-5">
+              {/* Nombre */}
+              <div>
+                <label className="block text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1.5">
+                  Nombre Completo <span className="text-red-400">*</span>
+                </label>
+                <input
+                  name="name"
+                  type="text"
+                  placeholder="Ej: María García López"
+                  value={formData.name}
+                  onChange={handleChange}
+                  autoComplete="off"
+                  className={`w-full rounded-xl border px-4 py-3 text-sm font-medium text-bokara-grey placeholder:text-bokara-grey/25 focus:outline-none focus:ring-2 transition-all ${
+                    errors.name
+                      ? 'border-red-300 bg-red-50 focus:ring-red-200'
+                      : 'border-bokara-grey/15 bg-[#F9F8F6] focus:ring-lucius-lime/30'
+                  }`}
+                />
+                {errors.name && (
+                  <p className="text-[10px] text-red-500 font-bold mt-1 ml-1">{errors.name}</p>
+                )}
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1.5">
+                  Correo Electrónico <span className="text-red-400">*</span>
+                </label>
+                <input
+                  name="email"
+                  type="email"
+                  placeholder="correo@empresa.com"
+                  value={formData.email}
+                  onChange={handleChange}
+                  autoComplete="off"
+                  className={`w-full rounded-xl border px-4 py-3 text-sm font-medium text-bokara-grey placeholder:text-bokara-grey/25 focus:outline-none focus:ring-2 transition-all ${
+                    errors.email
+                      ? 'border-red-300 bg-red-50 focus:ring-red-200'
+                      : 'border-bokara-grey/15 bg-[#F9F8F6] focus:ring-lucius-lime/30'
+                  }`}
+                />
+                {errors.email && (
+                  <p className="text-[10px] text-red-500 font-bold mt-1 ml-1">{errors.email}</p>
+                )}
+              </div>
+
+              {/* Teléfono + Horario */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1.5">
+                    Teléfono
+                  </label>
+                  <input
+                    name="phone"
+                    type="tel"
+                    placeholder="+57 300 000 0000"
+                    value={formData.phone}
+                    onChange={handleChange}
+                    className="w-full rounded-xl border border-bokara-grey/15 bg-[#F9F8F6] px-4 py-3 text-sm font-medium text-bokara-grey placeholder:text-bokara-grey/25 focus:outline-none focus:ring-2 focus:ring-lucius-lime/30 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1.5">
+                    Horario
+                  </label>
+                  <select
+                    name="workScheduleId"
+                    value={formData.workScheduleId || ''}
+                    onChange={handleChange}
+                    className="w-full rounded-xl border border-bokara-grey/15 bg-[#F9F8F6] px-4 py-3 text-sm font-medium text-bokara-grey focus:outline-none focus:ring-2 focus:ring-lucius-lime/30 transition-all"
+                  >
+                    <option value="">Sin asignar</option>
+                    {workSchedules.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Rol */}
+              <div>
+                <label className="block text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-2">
+                  Tipo de cuenta
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {(['employee', 'admin'] as const).map((role) => (
+                    <label
+                      key={role}
+                      className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all ${
+                        formData.role === role
+                          ? 'border-lucius-lime bg-lucius-lime/5'
+                          : 'border-bokara-grey/10 hover:border-bokara-grey/20'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="role"
+                        value={role}
+                        checked={formData.role === role}
+                        onChange={handleChange}
+                        className="accent-lucius-lime"
+                      />
+                      <div>
+                        <p className="text-xs font-bold text-bokara-grey">
+                          {role === 'employee' ? 'Colaborador' : 'Administrador'}
+                        </p>
+                        <p className="text-[9px] text-bokara-grey/40">
+                          {role === 'employee' ? 'Acceso básico' : 'Acceso total'}
+                        </p>
                       </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-7 pb-7 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="flex-1 py-3 rounded-xl border-2 border-bokara-grey/10 text-bokara-grey/60 font-bold text-sm hover:bg-gray-50 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={isLoading}
+                className="flex-1 py-3 rounded-xl bg-lucius-lime text-bokara-grey font-bold text-sm shadow-md shadow-lucius-lime/20 hover:bg-opacity-80 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-bokara-grey/30 border-t-bokara-grey rounded-full animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    Guardar Colaborador
+                  </>
+                )}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── STEP 2: INVITACIÓN ── */}
+        {step === 'invite' && (
+          <>
+            {/* Header */}
+            <div className="px-7 pt-7 pb-5 border-b border-bokara-grey/8 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-lucius-lime/15 rounded-full flex items-center justify-center">
+                  <svg className="w-5 h-5 text-lucius-lime" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-bokara-grey">¡Colaborador creado!</h2>
+                  <p className="text-xs text-bokara-grey/40">{addedName} ha sido añadido al equipo.</p>
+                </div>
+              </div>
+              <button
+                onClick={handleClose}
+                className="w-8 h-8 flex items-center justify-center rounded-full text-bokara-grey/30 hover:text-bokara-grey hover:bg-gray-100 transition-all text-xl font-bold"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-7 py-6 space-y-5">
+              <p className="text-sm text-bokara-grey/60 leading-relaxed">
+                Para que <span className="font-bold text-bokara-grey">{addedName}</span> pueda acceder a TeamCheck,
+                necesita registrarse con el correo{' '}
+                <span className="font-bold text-bokara-grey">{addedEmail}</span> usando el siguiente enlace o código:
+              </p>
+
+              {/* Invite link */}
+              {inviteLink && (
+                <div className="bg-[#F9F8F6] border border-bokara-grey/10 rounded-xl p-4">
+                  <p className="text-[9px] font-bold text-bokara-grey/40 uppercase tracking-widest mb-2">
+                    Enlace de acceso directo
+                  </p>
+                  <p className="text-xs text-bokara-grey/70 font-mono break-all leading-relaxed">
+                    {inviteLink}
+                  </p>
+                </div>
+              )}
+
+              {/* Invite code */}
+              {inviteCode && (
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 bg-bokara-grey rounded-xl px-5 py-3 flex items-center justify-between">
+                    <div>
+                      <p className="text-[9px] font-bold text-white/40 uppercase tracking-widest">Código de equipo</p>
+                      <p className="text-lg font-mono font-bold text-white tracking-widest">{inviteCode}</p>
+                    </div>
+                    <button
+                      onClick={handleCopyLink}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        copied
+                          ? 'bg-lucius-lime text-bokara-grey'
+                          : 'bg-white/10 text-white hover:bg-white/20'
+                      }`}
+                    >
+                      {copied ? '✓ Copiado' : 'Copiar'}
+                    </button>
                   </div>
-              </div>
-          )}
+                </div>
+              )}
 
-          {/* TAB: CLOCK IN/OUT */}
-          {activeTab === 'clock' && (
-              <div className="space-y-8 animate-fade-in">
-                  <div className="border border-bokara-grey/10 rounded-xl p-6 bg-white shadow-sm">
-                      <h3 className="text-sm font-bold text-gray-400 uppercase mb-4 tracking-wider">Restricciones de Acceso</h3>
-                      <div className="space-y-4">
-                          <label className="flex items-center gap-3 cursor-pointer p-3 hover:bg-gray-50 rounded-lg transition-colors border border-transparent hover:border-gray-200">
-                              <input 
-                                type="checkbox" 
-                                name="allowMobileClockIn" 
-                                checked={employeeData.allowMobileClockIn} 
-                                onChange={handleChange}
-                                className="w-5 h-5 rounded text-lucius-lime focus:ring-lucius-lime"
-                              />
-                              <div>
-                                  <p className="font-bold text-gray-700 text-sm">Permitir marcación desde Dispositivos Móviles</p>
-                                  <p className="text-[10px] text-red-500 font-bold uppercase tracking-tighter">Si se desmarca, el usuario solo podrá marcar desde computadores de escritorio.</p>
-                              </div>
-                          </label>
+              <p className="text-[10px] text-bokara-grey/40 text-center">
+                El colaborador deberá registrarse en TeamCheck y al ingresar el código, quedará vinculado a tu organización automáticamente.
+              </p>
+            </div>
 
-                          <label className="flex items-center gap-3 cursor-pointer p-3 hover:bg-gray-50 rounded-lg transition-colors border border-transparent hover:border-gray-200">
-                              <input 
-                                type="checkbox" 
-                                name="autoClockOut24h" 
-                                checked={employeeData.autoClockOut24h} 
-                                onChange={handleChange}
-                                className="w-5 h-5 rounded text-lucius-lime focus:ring-lucius-lime"
-                              />
-                              <p className="font-bold text-gray-700 text-sm">Cierre de sesión automático tras 24 horas continuas de trabajo</p>
-                          </label>
-
-                           <label className="flex items-center gap-3 cursor-pointer p-3 hover:bg-gray-50 rounded-lg transition-colors border border-transparent hover:border-gray-200">
-                              <input 
-                                type="checkbox" 
-                                name="blockEarlyClockIn" 
-                                checked={employeeData.blockEarlyClockIn} 
-                                onChange={handleChange}
-                                className="w-5 h-5 rounded text-lucius-lime focus:ring-lucius-lime"
-                              />
-                              <p className="font-bold text-gray-700 text-sm">Bloquear entrada antes de la hora programada en el horario</p>
-                          </label>
-                      </div>
-                  </div>
-              </div>
-          )}
-
-          {/* TAB: RRHH */}
-          {activeTab === 'hr' && (
-              <div className="animate-fade-in space-y-6">
-                   <div className="bg-lucius-lime/5 border border-lucius-lime/20 p-4 rounded-xl mb-4">
-                        <p className="text-xs text-lucius-lime font-bold uppercase mb-1">Información de Contrato</p>
-                        <p className="text-[11px] text-bokara-grey/60">Estas fechas definen el cálculo automático del Libro de Vacaciones (1.25 días por mes).</p>
-                   </div>
-
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label className="block text-xs font-bold text-bokara-grey uppercase mb-2">Día de Entrada (Ingreso)</label>
-                            <input 
-                                name="hireDate" 
-                                type="date" 
-                                value={timestampToDateString(employeeData.hireDate)} 
-                                onChange={handleChange} 
-                                className="w-full border border-bokara-grey/20 rounded-lg p-2 focus:ring-2 focus:ring-lucius-lime outline-none" 
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-red-400 uppercase mb-2">Día de Salida (Retiro / Opcional)</label>
-                            <input 
-                                name="terminationDate" 
-                                type="date" 
-                                value={timestampToDateString(employeeData.terminationDate)} 
-                                onChange={handleChange} 
-                                className="w-full border border-red-200 rounded-lg p-2 focus:ring-2 focus:ring-red-400 outline-none" 
-                            />
-                        </div>
-                        <div className="md:col-span-2 pt-4 border-t border-bokara-grey/5">
-                            <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Ajuste Manual de Vacaciones (Días)</label>
-                            <input 
-                                name="manualVacationAdjustment" 
-                                type="number" 
-                                step="0.5" 
-                                value={employeeData.manualVacationAdjustment || 0} 
-                                onChange={handleChange} 
-                                className="w-full border border-bokara-grey/20 rounded-lg p-2" 
-                                placeholder="Ej: 5 o -2"
-                            />
-                            <p className="text-[10px] text-bokara-grey/40 mt-1 italic">Suma o resta días directamente al saldo calculado por sistema.</p>
-                        </div>
-                   </div>
-              </div>
-          )}
-
-        </form>
-
-        {/* Footer */}
-        <div className="p-4 bg-gray-50 border-t flex justify-end gap-3">
-            <button type="button" onClick={onClose} className="px-6 py-2 bg-gray-200 text-bokara-grey font-bold rounded-lg hover:bg-gray-300 transition-colors">
-              Cancelar
-            </button>
-            <button type="button" onClick={handleSubmit} className="px-10 py-2 bg-lucius-lime text-bokara-grey font-bold rounded-lg hover:bg-opacity-80 transition-colors shadow-md disabled:opacity-50" disabled={!isFormValid}>
-              Guardar Cambios
-            </button>
-        </div>
+            {/* Footer */}
+            <div className="px-7 pb-7 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleSendEmail}
+                className="flex-1 py-3 rounded-xl border-2 border-bokara-grey/10 text-bokara-grey font-bold text-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+                Enviar por correo
+              </button>
+              <button
+                type="button"
+                onClick={handleClose}
+                className="flex-1 py-3 rounded-xl bg-bokara-grey text-white font-bold text-sm hover:bg-opacity-80 transition-all active:scale-95"
+              >
+                Listo
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
 };
 
-export default EditEmployeeModal;
+export default AddEmployeeModal;

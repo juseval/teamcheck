@@ -9,6 +9,7 @@ interface OnboardingPageProps {
   user: Employee;
   onLogout: () => void;
   onComplete: () => void;
+  initialInviteCode?: string;
 }
 
 // Custom Illustrations as SVG components for reliability
@@ -57,10 +58,10 @@ const TeamIllustration = () => (
   </div>
 );
 
-const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, onLogout, onComplete }) => {
-  const [view, setView] = useState<'selection' | 'create' | 'join'>('selection');
+const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, onLogout, onComplete, initialInviteCode }) => {
+  const [view, setView] = useState<'selection' | 'create' | 'join'>(initialInviteCode ? 'join' : 'selection');
   const [companyName, setCompanyName] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
+  const [inviteCode, setInviteCode] = useState(initialInviteCode || '');
   const [isLoading, setIsLoading] = useState(false);
   const [pendingInv, setPendingInv] = useState<Invitation | null>(null);
   const [isCheckingInv, setIsCheckingInv] = useState(true);
@@ -100,7 +101,7 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, onLogout, onCompl
     if (!inviteCode.trim()) return;
     setIsLoading(true);
     try {
-      await joinCompany(inviteCode.trim().toUpperCase());
+      await joinCompany(inviteCode.trim());
       addNotification("Te has unido al equipo correctamente.", 'success');
       onComplete();
     } catch (error: any) {
@@ -180,7 +181,7 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, onLogout, onCompl
         </div>
         <div className="max-w-md w-full bg-white rounded-[2.5rem] shadow-2xl p-10 border border-bokara-grey/5 animate-fade-in overflow-hidden">
             <h2 className="text-3xl font-bold text-bokara-grey mb-2 text-center">Ingresar Código</h2>
-            <p className="text-bokara-grey/50 text-sm mb-8 font-medium text-center">Introduce el código de 6 dígitos de tu equipo.</p>
+            <p className="text-bokara-grey/50 text-sm mb-8 font-medium text-center">Introduce el código de tu equipo. Pídeselo al administrador de tu organización.</p>
             <form onSubmit={handleJoin} className="space-y-6">
                 <div>
                   <label className="block text-[10px] font-bold text-bokara-grey/30 uppercase tracking-widest mb-2 ml-1">Código de Invitación</label>
@@ -189,8 +190,8 @@ const OnboardingPage: React.FC<OnboardingPageProps> = ({ user, onLogout, onCompl
                       value={inviteCode} 
                       onChange={e => setInviteCode(e.target.value)}
                       placeholder="ABC-123"
-                      maxLength={7}
-                      className="w-full bg-[#F3F0E9]/50 border border-bokara-grey/5 rounded-2xl px-5 py-4 text-center text-4xl font-mono tracking-[0.2em] font-bold focus:outline-none focus:ring-2 focus:ring-lucius-lime text-bokara-grey shadow-inner"
+                      maxLength={32}
+                      className={`w-full bg-[#F3F0E9]/50 border border-bokara-grey/5 rounded-2xl px-5 py-4 text-center font-mono font-bold focus:outline-none focus:ring-2 focus:ring-lucius-lime text-bokara-grey shadow-inner transition-all ${inviteCode.length > 10 ? 'text-xl tracking-normal' : 'text-4xl tracking-[0.2em]'}`}
                       required
                   />
                 </div>

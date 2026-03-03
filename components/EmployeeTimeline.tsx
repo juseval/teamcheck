@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Employee, AttendanceLogEntry, ActivityStatus } from '../types.ts';
+import { Employee, AttendanceLogEntry, ActivityStatus } from '../types';
 
 // Segment type for processed activities
 interface Segment {
   id: string;
-  employeeId: number;
+  employeeId: string;
   employeeName: string;
   activity: string;
   startTime: number;
@@ -29,7 +29,7 @@ const EmployeeTimeline: React.FC<{
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [now, setNow] = useState(Date.now());
   const [view, setView] = useState<ViewMode>('day');
-  const containerRef = useRef<HTMLDivElement>(null);
+  const timelineContainerRef = useRef<HTMLDivElement>(null);
 
   // State for mouse dragging
   const [isDragging, setIsDragging] = useState(false);
@@ -43,29 +43,27 @@ const EmployeeTimeline: React.FC<{
   
   // Mouse event handlers for drag-to-scroll
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!containerRef.current) return;
+    if (!timelineContainerRef.current) return;
     setIsDragging(true);
-    // Capture the starting position and scroll offset
-    setStartX(e.pageX - containerRef.current.offsetLeft);
-    setScrollLeft(containerRef.current.scrollLeft);
-    // Improve UX by changing cursor and preventing text selection
-    containerRef.current.style.cursor = 'grabbing';
-    containerRef.current.style.userSelect = 'none';
+    setStartX(e.pageX - timelineContainerRef.current.offsetLeft);
+    setScrollLeft(timelineContainerRef.current.scrollLeft);
+    timelineContainerRef.current.style.cursor = 'grabbing';
+    timelineContainerRef.current.style.userSelect = 'none';
   };
 
   const handleMouseLeaveOrUp = () => {
-    if (!containerRef.current) return;
+    if (!timelineContainerRef.current) return;
     setIsDragging(false);
-    containerRef.current.style.cursor = 'grab';
-    containerRef.current.style.userSelect = 'auto';
+    timelineContainerRef.current.style.cursor = 'grab';
+    timelineContainerRef.current.style.userSelect = 'auto';
   };
   
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isDragging || !containerRef.current) return;
+    if (!isDragging || !timelineContainerRef.current) return;
     e.preventDefault();
-    const x = e.pageX - containerRef.current.offsetLeft;
-    const walk = (x - startX) * 2; // The multiplier can be adjusted for scroll speed
-    containerRef.current.scrollLeft = scrollLeft - walk;
+    const x = e.pageX - timelineContainerRef.current.offsetLeft;
+    const walk = (x - startX) * 2;
+    timelineContainerRef.current.scrollLeft = scrollLeft - walk;
   };
 
   const statusColorMap = useMemo(() => {
@@ -75,7 +73,7 @@ const EmployeeTimeline: React.FC<{
     return map;
   }, [activityStatuses]);
 
-  const { laidOutSegments, dayBoundaries, gridHeaders } = useMemo(() => {
+  const { laidOutSegments, dayBoundaries, gridHeaders, employeeLanes } = useMemo(() => {
     const calculationNow = Date.now();
     const dayStart = new Date(selectedDate);
     let dayEnd: Date;
@@ -91,7 +89,7 @@ const EmployeeTimeline: React.FC<{
         dayStart.setDate(dayStart.getDate() - dayOfWeek);
         dayStart.setHours(0, 0, 0, 0);
         dayEnd = new Date(dayStart);
-        dayEnd.setDate(dayEnd.getDate() + 6);
+        dayEnd.setDate(dayStart.getDate() + 6);
         dayEnd.setHours(23, 59, 59, 999);
         headers = Array.from({ length: 7 }, (_, i) => {
             const date = new Date(dayStart);
@@ -116,6 +114,12 @@ const EmployeeTimeline: React.FC<{
     const dayStartTs = dayStart.getTime();
     const dayEndTs = dayEnd.getTime();
     
+    // Create a map of employeeId to lane index and name
+    const employeeLaneMap = new Map<string, { lane: number; name: string }>();
+    employees.forEach((emp, index) => {
+        employeeLaneMap.set(emp.id, { lane: index, name: emp.name });
+    });
+
     const allSegments: Omit<Segment, 'lane'>[] = [];
     for (const employee of employees) {
       const employeeLog = attendanceLog
@@ -126,7 +130,7 @@ const EmployeeTimeline: React.FC<{
         const currentLog = employeeLog[i];
         if (currentLog.action === 'Clock Out') continue;
 
-        let activity = currentLog.action.startsWith('Start ') ? currentLog.action.substring(6) : 'Working';
+        const activity = currentLog.action.startsWith('Start ') ? currentLog.action.substring(6) : 'Working';
         const startTime = currentLog.timestamp;
         let endTime;
         let isOngoing = false;
@@ -159,28 +163,17 @@ const EmployeeTimeline: React.FC<{
       }
     }
     
-    allSegments.sort((a, b) => a.startTime - b.startTime);
+    const finalSegments: Segment[] = allSegments.map(segment => ({
+        ...segment,
+        lane: employeeLaneMap.get(segment.employeeId)?.lane ?? -1
+    })).filter(segment => segment.lane !== -1);
 
-    const lanes: { endTime: number }[] = [];
-    const finalSegments: Segment[] = [];
-
-    for (const segment of allSegments) {
-      let placedInLane = -1;
-      for (let i = 0; i < lanes.length; i++) {
-        if (segment.startTime >= lanes[i].endTime) {
-          lanes[i].endTime = segment.endTime;
-          placedInLane = i;
-          break;
-        }
-      }
-      if (placedInLane === -1) {
-        lanes.push({ endTime: segment.endTime });
-        placedInLane = lanes.length - 1;
-      }
-      finalSegments.push({ ...segment, lane: placedInLane });
-    }
-
-    return { laidOutSegments: finalSegments, dayBoundaries: { start: dayStartTs, end: dayEndTs }, gridHeaders: headers };
+    return { 
+        laidOutSegments: finalSegments, 
+        dayBoundaries: { start: dayStartTs, end: dayEndTs }, 
+        gridHeaders: headers,
+        employeeLanes: Array.from(employeeLaneMap.values()).sort((a,b) => a.lane - b.lane)
+    };
   }, [selectedDate, attendanceLog, employees, statusColorMap, now, view]);
 
   const handlePrev = () => setSelectedDate(d => {
@@ -251,63 +244,82 @@ const EmployeeTimeline: React.FC<{
           </div>
       </div>
 
-      <div 
-        className="overflow-x-hidden cursor-grab"
-        ref={containerRef}
-        onMouseDown={handleMouseDown}
-        onMouseLeave={handleMouseLeaveOrUp}
-        onMouseUp={handleMouseLeaveOrUp}
-        onMouseMove={handleMouseMove}
-      >
-        <div style={{minWidth: `${containerMinWidth}px`}} className="relative h-auto pb-4">
-          <div className="relative flex h-8 border-b-2 border-bokara-grey/10">
-            {gridHeaders.map((header, index) => (
-              <div key={index} className={`flex-1 text-center text-xs text-bokara-grey/60 border-r border-bokara-grey/10 pt-2 ${header.isWeekend ? 'bg-bokara-grey/5' : ''}`}>
-                {header.label}
+      <div className="flex">
+        <div className="w-48 flex-shrink-0">
+          <div className="h-8 border-b-2 border-bokara-grey/10 flex items-center p-2">
+            <span className="font-semibold text-sm text-bokara-grey/80">Employee</span>
+          </div>
+          <div className="relative">
+            {employeeLanes.map(emp => (
+              <div key={emp.lane} className="h-12 flex items-center p-2 border-b border-r border-bokara-grey/10 truncate" style={{top: `${emp.lane * 48}px`}}>
+                <span className="text-sm font-medium text-bokara-grey" title={emp.name}>{emp.name}</span>
               </div>
             ))}
           </div>
-          
-          <div className="relative" style={{ minHeight: '4rem', height: `${laidOutSegments.reduce((max, seg) => Math.max(max, seg.lane + 1), 0) * 48}px`}}>
-            {gridHeaders.map((header, index) => (
-              <div key={index} className={`absolute top-0 bottom-0 border-r border-bokara-grey/10 ${header.isWeekend ? 'bg-bokara-grey/5' : ''}`} style={{ left: `${(index / gridHeaders.length) * 100}%`, width: `${(1 / gridHeaders.length) * 100}%`}}></div>
-            ))}
-            
-            {isNowInRange && nowPosition > 0 && (
-              <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20" style={{ left: `${nowPosition}%` }}>
-                <div className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-red-500 rounded-full border-2 border-white"></div>
-              </div>
-            )}
-            
-            {laidOutSegments.map(segment => {
-              const left = ((segment.startTime - dayBoundaries.start) / totalMs) * 100;
-              const width = ((segment.endTime - segment.startTime) / totalMs) * 100;
-              
-              return (
-                <div 
-                  key={segment.id}
-                  className="absolute h-10 rounded-lg p-2 flex items-center shadow-sm group transition-all duration-200"
-                  style={{
-                    left: `calc(${left}% + 2px)`,
-                    width: `calc(${width}% - 4px)`,
-                    top: `${segment.lane * 48 + 4}px`,
-                    backgroundColor: segment.color,
-                  }}
-                  title={`${segment.employeeName}: ${segment.activity}`}
-                >
-                  <span className="text-white text-sm font-semibold truncate select-none">
-                    {`${segment.employeeName}: ${segment.activity}`}
-                  </span>
-                  {segment.isOngoing && <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full animate-pulse mr-2"></div>}
+        </div>
+        <div 
+          className="flex-grow overflow-x-auto cursor-grab"
+          ref={timelineContainerRef}
+          onMouseDown={handleMouseDown}
+          onMouseLeave={handleMouseLeaveOrUp}
+          onMouseUp={handleMouseLeaveOrUp}
+          onMouseMove={handleMouseMove}
+        >
+          <div style={{minWidth: `${containerMinWidth}px`}} className="relative h-auto pb-4">
+            <div className="relative flex h-8 border-b-2 border-bokara-grey/10">
+              {gridHeaders.map((header, index) => (
+                <div key={index} className={`flex-1 text-center text-xs text-bokara-grey/60 border-r border-bokara-grey/10 pt-2 ${header.isWeekend ? 'bg-bokara-grey/5' : ''}`}>
+                  {header.label}
                 </div>
-              );
-            })}
+              ))}
+            </div>
+            
+            <div className="relative" style={{ minHeight: '4rem', height: `${employeeLanes.length * 48}px`}}>
+              {gridHeaders.map((header, index) => (
+                <div key={index} className={`absolute top-0 bottom-0 border-r border-bokara-grey/10 ${header.isWeekend ? 'bg-bokara-grey/5' : ''}`} style={{ left: `${(index / gridHeaders.length) * 100}%`, width: `${(1 / gridHeaders.length) * 100}%`}}></div>
+              ))}
+              
+              {isNowInRange && nowPosition > 0 && (
+                <div className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-20" style={{ left: `${nowPosition}%` }}>
+                  <div className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-red-500 rounded-full border-2 border-white"></div>
+                </div>
+              )}
+              
+              {laidOutSegments.map(segment => {
+                const left = ((segment.startTime - dayBoundaries.start) / totalMs) * 100;
+                const width = ((segment.endTime - segment.startTime) / totalMs) * 100;
+                
+                return (
+                  <div 
+                    key={segment.id}
+                    className="absolute h-10 rounded-lg p-2 flex items-center shadow-sm group transition-all duration-200"
+                    style={{
+                      left: `calc(${left}% + 2px)`,
+                      width: `calc(${width}% - 4px)`,
+                      top: `${segment.lane * 48 + 4}px`,
+                      backgroundColor: segment.color,
+                    }}
+                    title={`${segment.employeeName}: ${segment.activity}`}
+                  >
+                    <span className="text-white text-sm font-semibold truncate select-none">
+                      {segment.activity}
+                    </span>
+                    {segment.isOngoing && <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2 h-2 bg-white rounded-full animate-pulse mr-2"></div>}
+                  </div>
+                );
+              })}
 
-            {laidOutSegments.length === 0 && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <p className="text-bokara-grey/60">No activity recorded for this period.</p>
-              </div>
-            )}
+              {employees.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <p className="text-bokara-grey/60">No employees to display.</p>
+                </div>
+              )}
+              {employees.length > 0 && laidOutSegments.length === 0 && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <p className="text-bokara-grey/60">No activity recorded for this period.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

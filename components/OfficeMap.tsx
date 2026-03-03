@@ -151,8 +151,16 @@ const OfficeMap: React.FC<OfficeMapProps> = ({ employees, activityStatuses, curr
         return custom ? custom.color : '#AE8F60'; // wet-sand default
     };
 
-    const getInitials = (name: string) => {
-        return name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    const getInitials = (name: string = '') => {
+        if (!name) return '??';
+        const trimmedName = name.trim();
+        if (!trimmedName) return '??';
+        
+        const names = trimmedName.split(' ');
+        if (names.length > 1) {
+          return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+        }
+        return trimmedName.substring(0, 2).toUpperCase();
     };
 
     // --- Item Renderers ---

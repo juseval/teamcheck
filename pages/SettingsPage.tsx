@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { ActivityStatus, PayrollChangeType, WorkSchedule } from '../types';
 import { useNotification } from '../contexts/NotificationContext';
@@ -17,6 +18,7 @@ interface SettingsPageProps {
   onUpdateWorkSchedule: (id: string, updates: Partial<Omit<WorkSchedule, 'id'>>) => Promise<void>;
   onRemoveWorkSchedule: (id: string) => Promise<void>;
   companyId?: string;
+  inviteCode?: string;
 }
 
 const dayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -50,7 +52,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     statuses, onAddStatus, onRemoveStatus, payrollChangeTypes,
     onAddPayrollChangeType, onUpdatePayrollChangeType, onRemovePayrollChangeType,
     workSchedules, onAddWorkSchedule, onUpdateWorkSchedule, onRemoveWorkSchedule,
-    companyId
+    companyId, inviteCode
 }) => {
     const { addNotification } = useNotification();
     const [activeSection, setActiveSection] = useState<'general' | 'integrations'>('general');
@@ -237,6 +239,37 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
         {activeSection === 'general' ? (
             <div className="space-y-8">
+                {/* 0. CÓDIGO DE INVITACIÓN (NUEVA SECCIÓN) */}
+                <div className="bg-lucius-lime rounded-2xl shadow-xl p-8 border border-bokara-grey/5 relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-12 opacity-10 transform translate-x-1/4 -translate-y-1/4 group-hover:scale-110 transition-transform">
+                        <svg className="w-64 h-64" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
+                    </div>
+                    <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+                        <div className="text-center md:text-left">
+                            <h2 className="text-3xl font-black text-bokara-grey mb-2 uppercase tracking-tight">Código de tu Equipo</h2>
+                            <p className="text-bokara-grey/60 font-medium max-w-md">Comparte este código con tus colaboradores para que se unan a tu organización automáticamente.</p>
+                        </div>
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="bg-white/40 backdrop-blur-md border-2 border-bokara-grey/10 rounded-3xl px-10 py-6 shadow-inner flex flex-col items-center group/code">
+                                <span className="text-[10px] font-bold text-bokara-grey/40 uppercase tracking-[0.3em] mb-2">Código de Invitación</span>
+                                <span className="text-5xl font-black text-bokara-grey font-mono tracking-widest">{inviteCode || '--- ---'}</span>
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    if (inviteCode) {
+                                        navigator.clipboard.writeText(inviteCode);
+                                        addNotification("¡Código copiado!", 'success');
+                                    }
+                                }}
+                                className="flex items-center gap-2 bg-bokara-grey text-white px-6 py-3 rounded-2xl font-bold hover:bg-black transition-all shadow-lg active:scale-95"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                                Copiar Código
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 {/* 1. NOTIFICACIONES DE RRHH */}
                 <div className="bg-white rounded-xl shadow-md border border-bokara-grey/10 p-6">
                     <div className="flex items-center gap-3 mb-4">
@@ -404,8 +437,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                         </div>
                         <div>
-                            <h2 className="text-2xl font-bold text-bokara-grey">Servicio de Correo Real (EmailJS)</h2>
-                            <p className="text-bokara-grey/50">Conecta tu cuenta para enviar notificaciones reales.</p>
+                            <h2 className="text-2xl font-bold text-bokara-grey">Servicio de Alertas (EmailJS)</h2>
+                            <p className="text-bokara-grey/50">Esta integración es gratuita y te permite recibir correos sin pagar suscripciones a Google.</p>
                         </div>
                     </div>
 
@@ -415,14 +448,17 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                                 <div>
                                     <label className="block text-[10px] font-bold text-bokara-grey/40 uppercase tracking-widest mb-1">Service ID <span className="text-red-500">*</span></label>
                                     <input type="text" value={emailConfig.serviceId} onChange={e => setEmailConfig({...emailConfig, serviceId: e.target.value})} className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-2 text-sm focus:ring-2 focus:ring-lucius-lime outline-none" placeholder="service_xxxxxx" required />
+                                    <p className="text-[9px] text-bokara-grey/30 mt-1 italic">Obtenido en la sección 'Email Services' de EmailJS.</p>
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-bold text-bokara-grey/40 uppercase tracking-widest mb-1">Template ID <span className="text-red-500">*</span></label>
                                     <input type="text" value={emailConfig.templateId} onChange={e => setEmailConfig({...emailConfig, templateId: e.target.value})} className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-2 text-sm focus:ring-2 focus:ring-lucius-lime outline-none" placeholder="template_xxxxxx" required />
+                                    <p className="text-[9px] text-bokara-grey/30 mt-1 italic">Este es el ID de la plantilla de correo, NO tu dirección de email.</p>
                                 </div>
                                 <div>
                                     <label className="block text-[10px] font-bold text-bokara-grey/40 uppercase tracking-widest mb-1">Public Key <span className="text-red-500">*</span></label>
                                     <input type="text" value={emailConfig.publicKey} onChange={e => setEmailConfig({...emailConfig, publicKey: e.target.value})} className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-2 text-sm focus:ring-2 focus:ring-lucius-lime outline-none" placeholder="user_xxxxxx o llave pública" required />
+                                    <p className="text-[9px] text-bokara-grey/30 mt-1 italic">Obtenido en 'Account' -&gt; 'API Keys'.</p>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <button type="submit" disabled={isSavingEmail} className="bg-bokara-grey text-white font-bold py-3 rounded-lg hover:bg-black transition-all shadow-md text-sm">
@@ -449,21 +485,22 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                         <div className="bg-blue-50/50 rounded-2xl p-6 border border-blue-100">
                             <h4 className="font-bold text-blue-800 mb-3 flex items-center gap-2">
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                Instrucciones para recibir alertas
+                                ¿Por qué EmailJS?
                             </h4>
-                            <ol className="text-xs text-blue-700/80 space-y-3 list-decimal pl-4">
-                                <li><strong>Sin estos campos no llegarán correos.</strong> Crea una cuenta en <a href="https://www.emailjs.com" target="_blank" className="underline font-bold">emailjs.com</a>.</li>
-                                <li>En <strong>Email Services</strong>, conecta tu Gmail (esto te dará el Service ID).</li>
-                                <li>En <strong>Email Templates</strong>, crea una plantilla. Debe contener obligatoriamente estas variables entre llaves dobles:
-                                    <ul className="mt-2 space-y-1">
-                                        <li><code className="bg-blue-100 px-1 rounded text-blue-900 font-mono">{'{{recipient_email}}'}</code> (Para el destinatario de la lista de RRHH)</li>
-                                        <li><code className="bg-blue-100 px-1 rounded text-blue-900 font-mono">{'{{user_name}}'}</code> (Nombre del que solicita)</li>
-                                        <li><code className="bg-blue-100 px-1 rounded text-blue-900 font-mono">{'{{request_type}}'}</code> (Tipo de novedad)</li>
-                                    </ul>
-                                </li>
-                                <li>En <strong>Account</strong> {"->"} API Keys, copia tu <strong>Public Key</strong>.</li>
-                                <li>Usa el botón <strong>Probar Conexión</strong> para verificar que todo esté correcto antes de avisar al equipo.</li>
-                            </ol>
+                            <div className="text-xs text-blue-700/80 space-y-3">
+                                <p>Firebase (Google) cobra una suscripción obligatoria para enviar correos automáticos desde sus servidores. Para mantener tu aplicación **gratuita**, usamos esta integración externa.</p>
+                                <ol className="list-decimal pl-4 space-y-2">
+                                    <li><strong>Service ID:</strong> Conecta tu Gmail en EmailJS para obtenerlo.</li>
+                                    <li><strong>Template ID:</strong> Crea el diseño del correo en EmailJS y pega el ID aquí.</li>
+                                    <li><strong>Variables:</strong> Tu plantilla debe usar estos nombres exactos entre llaves:
+                                        <ul className="mt-1 font-mono bg-white/40 p-1 rounded">
+                                            <li>{'{{recipient_email}}'}</li>
+                                            <li>{'{{user_name}}'}</li>
+                                            <li>{'{{request_type}}'}</li>
+                                        </ul>
+                                    </li>
+                                </ol>
+                            </div>
                         </div>
                     </div>
                 </div>
