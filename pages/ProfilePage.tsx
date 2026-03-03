@@ -1,12 +1,16 @@
-
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Employee } from '../types';
-import { joinCompany, getCompanyDetails, uploadProfilePicture, updateEmployeeDetails } from '../services/apiService';
+import { 
+  joinCompany, 
+  getCompanyDetails, 
+  uploadProfilePicture, 
+  removeProfilePicture // Importamos la nueva función
+} from '../services/apiService';
 import { useNotification } from '../contexts/NotificationContext';
 
 interface ProfilePageProps {
-    user: Employee;
-    onUpdateProfile?: () => void;
+  user: Employee;
+  onUpdateProfile?: () => void;
 }
 
 const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUpdateProfile }) => {
@@ -15,6 +19,9 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUpdateProfile }) => {
   const [isUploading, setIsUploading] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const { addNotification } = useNotification();
+  
+  // Referencia para el input de archivo (Nuevo)
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Helper to fetch company name if user is already in one
   React.useEffect(() => {
@@ -53,34 +60,60 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUpdateProfile }) => {
       }
   };
 
+  // --- LÓGICA DE SUBIDA DE IMAGEN (Actualizada) ---
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (e.target.files && e.target.files[0]) {
           const file = e.target.files[0];
           
-          // Basic validation
-          if (file.size > 5 * 1024 * 1024) { // 5MB limit
-              addNotification("La imagen es demasiado grande. Máximo 5MB.", 'error');
+          // Validación de tipo
+          if (!file.type.startsWith('image/')) {
+              addNotification('Por favor sube un archivo de imagen válido', 'error');
+              return;
+          }
+
+          // Validación de tamaño (500KB para Base64)
+          if (file.size > 0.5 * 1024 * 1024) { 
+              addNotification("La imagen es demasiado grande. Máximo 500KB para la versión gratuita.", 'error');
               return;
           }
 
           setIsUploading(true);
           try {
-              const downloadUrl = await uploadProfilePicture(user.id, file);
+              // Llamamos a la función actualizada en apiService
+              await uploadProfilePicture(user.id, file);
               
               addNotification('Foto de perfil actualizada exitosamente.', 'success');
               
-              // Disparamos la actualización del estado global
-              if (onUpdateProfile) {
-                  onUpdateProfile();
-              }
+              if (onUpdateProfile) onUpdateProfile();
               
           } catch (error: any) {
               console.error("Upload failed", error);
-              addNotification('Error al subir la imagen. Verifica tu conexión e inténtalo de nuevo.', 'error');
+              addNotification(error.message || 'Error al subir la imagen.', 'error');
           } finally {
               setIsUploading(false);
+              // Limpiar el input para permitir reintentar con el mismo archivo
+              if (fileInputRef.current) fileInputRef.current.value = '';
           }
       }
+  };
+
+  // --- LÓGICA DE BORRADO DE IMAGEN (Nueva) ---
+  const handleDeletePhoto = async (e: React.MouseEvent) => {
+    e.stopPropagation(); // Evita que se abra el selector de archivos
+    e.preventDefault();  // Previene comportamientos extraños del label
+
+    if (!window.confirm("¿Quieres eliminar tu foto de perfil?")) return;
+
+    try {
+        setIsUploading(true);
+        await removeProfilePicture(user.id);
+        addNotification('Foto eliminada correctamente', 'success');
+        if (onUpdateProfile) onUpdateProfile();
+    } catch (error: any) {
+        addNotification('Error al eliminar la foto', 'error');
+    } finally {
+        setIsUploading(false);
+    }
   };
 
   const getInitials = (name: string = '') => {
@@ -106,8 +139,12 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUpdateProfile }) => {
           {/* Left Column: Personal Identity */}
           <div className="lg:col-span-1">
               <div className="bg-white rounded-xl shadow-md border border-bokara-grey/10 p-6 flex flex-col items-center text-center h-full">
+                  
+                  {/* --- ÁREA DEL AVATAR --- */}
                   <div className="relative mb-4 group cursor-pointer">
-                      <div className="w-32 h-32 rounded-full flex items-center justify-center border-4 border-lucius-lime/20 text-4xl font-bold text-bokara-grey shadow-inner overflow-hidden bg-lucius-lime/10">
+                      
+                      {/* Círculo de la imagen/iniciales */}
+                      <div className="w-32 h-32 rounded-full flex items-center justify-center border-4 border-lucius-lime/20 text-4xl font-bold text-bokara-grey shadow-inner overflow-hidden bg-lucius-lime/10 relative">
                           {user.avatarUrl ? (
                               <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
                           ) : (
@@ -115,27 +152,47 @@ const ProfilePage: React.FC<ProfilePageProps> = ({ user, onUpdateProfile }) => {
                           )}
                       </div>
                       
-                      {/* Upload Overlay */}
-                      <label htmlFor="profile-upload" className="absolute inset-0 bg-black/40 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      {/* Upload Overlay (Capa oscura al pasar mouse) */}
+                      <label htmlFor="profile-upload" className={`absolute inset-0 bg-black/40 rounded-full flex items-center justify-center transition-opacity duration-200 cursor-pointer ${isUploading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                           {isUploading ? (
                               <div className="w-8 h-8 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                           ) : (
-                              <svg className="w-8 h-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                              </svg>
+                              <div className="flex flex-col items-center text-white">
+                                <svg className="w-6 h-6 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                <span className="text-[10px] font-bold uppercase tracking-wider">Cambiar</span>
+                              </div>
                           )}
-                          <input 
-                              id="profile-upload" 
-                              type="file" 
-                              accept="image/*" 
-                              className="hidden" 
-                              onChange={handleImageUpload}
-                              disabled={isUploading}
-                          />
                       </label>
 
-                      <div className={`absolute bottom-1 right-1 w-6 h-6 rounded-full border-4 border-white ${user.status === 'Working' ? 'bg-lucius-lime' : 'bg-gray-300'}`} title={user.status}></div>
+                      {/* Input oculto */}
+                      <input 
+                          id="profile-upload" 
+                          type="file" 
+                          accept="image/png, image/jpeg, image/jpg" 
+                          className="hidden" 
+                          onChange={handleImageUpload}
+                          disabled={isUploading}
+                          ref={fileInputRef}
+                      />
+
+                      {/* BOTÓN DE BORRAR (Solo si hay foto y no carga) */}
+                      {user.avatarUrl && !isUploading && (
+                          <button
+                            onClick={handleDeletePhoto}
+                            className="absolute top-0 right-0 bg-red-500 text-white p-1.5 rounded-full shadow-lg hover:bg-red-600 transition-colors z-20 transform hover:scale-110"
+                            title="Eliminar foto"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                      )}
+
+                      {/* Indicador de estado */}
+                      <div className={`absolute bottom-1 right-1 w-6 h-6 rounded-full border-4 border-white z-10 ${user.status === 'Working' ? 'bg-lucius-lime' : 'bg-gray-300'}`} title={user.status}></div>
                   </div>
                   
                   <h2 className="text-2xl font-bold text-bokara-grey">{user.name}</h2>

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { CalendarEvent, PayrollChangeType, Employee } from '../types';
 import { EditIcon, TrashIcon } from '../components/Icons';
@@ -64,7 +63,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
         }
     }, [visibleTypes, viewType, newRequestType, editingEvent]);
 
-    // --- LÓGICA DE VACACIONES (NORMATIVA CST COLOMBIA) ---
+    // --- LÓGICA DE VACACIONES ---
     const vacationStats = useMemo(() => {
         if (!currentUser.hireDate) return { accrued: 0, taken: 0, compensated: 0, balance: 0, maxCompensable: 0 };
         const start = new Date(currentUser.hireDate);
@@ -86,6 +85,42 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
         return { accrued: totalAccrued, taken, compensated, balance, maxCompensable: Math.max(0, maxMoneyLegal) };
     }, [currentUser, events]);
 
+    // --- HELPER PARA ENVIAR CORREOS ---
+    const sendEmail = async (recipients: string[], subjectUser: string, type: string, start: string, end: string, statusInfo?: string) => {
+        try {
+            const config = await getEmailConfig();
+            const hasKeys = config?.serviceId && config?.templateId && config?.publicKey;
+
+            if (recipients.length > 0 && hasKeys) {
+                const emailPromises = recipients.map(email => {
+                    return fetch('https://api.emailjs.com/api/v1.0/email/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            service_id: config.serviceId,
+                            template_id: config.templateId,
+                            user_id: config.publicKey,
+                            template_params: {
+                                recipient_email: email,
+                                user_name: subjectUser,
+                                // Si hay statusInfo (ej: APROBADO), lo concatenamos al tipo para que se vea en el asunto/cuerpo
+                                request_type: statusInfo ? `${statusInfo}: ${type}` : type, 
+                                start_date: start,
+                                end_date: end
+                            }
+                        })
+                    });
+                });
+                await Promise.allSettled(emailPromises);
+                return true;
+            }
+            return false;
+        } catch (e) {
+            console.error("Error enviando email", e);
+            return false;
+        }
+    };
+
     const handleDayClick = (date: Date, isPast: boolean) => {
         if (isPast) return;
         const dateStr = date.toISOString().split('T')[0];
@@ -103,6 +138,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
         setIsRequestModalOpen(true);
     };
 
+    // --- LÓGICA DE CALENDARIO ---
     const calendarGrid = useMemo(() => {
         const year = currentDate.getFullYear();
         const month = currentDate.getMonth();
@@ -148,6 +184,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
         return days;
     }, [currentDate, events, eventColorMap, currentUser.id, viewType, payrollChangeTypes]);
 
+    // --- MANEJO DE CREACIÓN DE TICKET (Notifica a RRHH) ---
     const handleRequestSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         
@@ -165,70 +202,86 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
         } else {
             onAddRequest(payload as any);
             
-            // --- INTEGRACIÓN REAL CON EMAILJS ---
+            // Notificar a RRHH
             try {
                 const recipients = await getNotificationRecipients();
-                const config = await getEmailConfig();
-
-                const hasKeys = config?.serviceId && config?.templateId && config?.publicKey;
-
-                if (recipients.length > 0 && hasKeys) {
-                    const emailPromises = recipients.map(email => {
-                        return fetch('https://api.emailjs.com/api/v1.0/email/send', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                service_id: config.serviceId,
-                                template_id: config.templateId,
-                                user_id: config.publicKey,
-                                template_params: {
-                                    recipient_email: email,
-                                    user_name: currentUser.name,
-                                    request_type: newRequestType,
-                                    start_date: newRequestStartDate,
-                                    end_date: newRequestEndDate
-                                }
-                            })
-                        });
-                    });
-
-                    const results = await Promise.allSettled(emailPromises);
-                    const successful = results.filter(r => r.status === 'fulfilled' && (r.value as Response).ok).length;
-                    
-                    if (successful > 0) {
-                        addNotification(`Solicitud creada. Se notificó a ${successful} responsables por correo.`, 'success');
-                    } else {
-                        addNotification("Solicitud creada, pero falló la conexión con EmailJS. Revisa tus llaves.", 'error');
-                    }
-                } else if (recipients.length === 0) {
-                    addNotification("Solicitud creada (No hay correos en la lista de RRHH).", 'success');
+                const sent = await sendEmail(recipients, currentUser.name, newRequestType, newRequestStartDate, newRequestEndDate, "(NUEVA)");
+                
+                if (sent) {
+                    addNotification(`Solicitud creada. Notificación enviada a RRHH.`, 'success');
                 } else {
-                    addNotification("Solicitud creada (Falta configurar EmailJS en Integraciones).", 'success');
+                    addNotification("Solicitud creada (Sin notificación de correo).", 'success');
                 }
             } catch (e) {
-                console.error("Error al enviar el correo real", e);
-                addNotification("Solicitud creada, pero hubo un error de red enviando el aviso.", 'error');
+                console.error("Error flujo email", e);
             }
         }
         setIsRequestModalOpen(false);
     };
 
+    // --- MANEJO DE APROBACIÓN/RECHAZO (Notifica al Empleado) ---
+    const handleStatusAction = async (event: CalendarEvent, newStatus: 'approved' | 'rejected') => {
+        if (!onUpdateEventStatus) return;
+
+        // 1. Actualizar en Base de Datos
+        onUpdateEventStatus(event, newStatus);
+
+        // 2. Buscar Email del Empleado
+        const targetEmployee = employees.find(e => e.id === event.employeeId);
+        
+        if (targetEmployee && targetEmployee.email) {
+            // 3. Enviar Correo al Empleado
+            const statusLabel = newStatus === 'approved' ? 'APROBADO' : 'RECHAZADO';
+            
+            // Nota: Aquí "currentUser.name" es el Admin que aprueba. 
+            // Pero en el template de EmailJS usamos 'user_name' usualmente para decir DE QUIEN es la novedad.
+            // Para que el empleado entienda, el asunto dirá "APROBADO: Vacaciones"
+            
+            const sent = await sendEmail(
+                [targetEmployee.email], // Destinatario: El empleado
+                targetEmployee.name,    // Nombre en el correo: El nombre del empleado
+                event.type, 
+                event.startDate, 
+                event.endDate, 
+                statusLabel // "APROBADO" o "RECHAZADO"
+            );
+
+            if (sent) {
+                addNotification(`Estado actualizado y notificado a ${targetEmployee.email}`, 'success');
+            } else {
+                addNotification("Estado actualizado (No se pudo enviar correo al empleado).", 'warning');
+            }
+        } else {
+            addNotification("Estado actualizado (Empleado sin email registrado).", 'warning');
+        }
+    };
+
     const myRequests = useMemo(() => events.filter(e => e.employeeId === currentUser.id).sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()), [events, currentUser.id]);
+
+    // Filtrar solicitudes pendientes de OTROS (Para vista Admin)
+    const pendingRequests = useMemo(() => {
+        if (currentUser.role !== 'admin' && currentUser.role !== 'master') return [];
+        return events
+            .filter(e => e.status === 'pending')
+            .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+    }, [events, currentUser.role]);
 
     return (
         <div className="w-full mx-auto animate-fade-in flex flex-col gap-6">
+            
+            {/* ... (STATS DE VACACIONES - Sin cambios) ... */}
             <div className="bg-white rounded-xl shadow-md border border-bokara-grey/10 p-6">
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 sm:gap-8">
                     <div className="text-left">
-                        <p className="text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1">Acumuladas (Ganadas)</p>
+                        <p className="text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1">Acumuladas</p>
                         <p className="text-2xl font-bold text-bokara-grey">{vacationStats.accrued.toFixed(2)} d</p>
                     </div>
                     <div className="text-left">
-                        <p className="text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1">Disfrutadas (Tiempo)</p>
+                        <p className="text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1">Disfrutadas</p>
                         <p className="text-2xl font-bold text-red-400">{vacationStats.taken.toFixed(1)} d</p>
                     </div>
                     <div className="text-left">
-                        <p className="text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1">Compensadas (Dinero)</p>
+                        <p className="text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1">Compensadas</p>
                         <p className="text-2xl font-bold text-wet-sand">{vacationStats.compensated.toFixed(1)} d</p>
                     </div>
                     <div className="text-left bg-lucius-lime/5 p-3 rounded-lg border border-lucius-lime/20">
@@ -248,7 +301,48 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                 </div>
             </div>
 
+            {/* --- SECCIÓN ADMIN: SOLICITUDES PENDIENTES (NUEVO) --- */}
+            {(currentUser.role === 'admin' || currentUser.role === 'master') && pendingRequests.length > 0 && (
+                <div className="bg-white rounded-xl shadow-lg border border-orange-200 p-6 animate-pulse-slow">
+                    <h3 className="font-bold text-orange-600 mb-4 flex items-center gap-2">
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                        Solicitudes Pendientes por Aprobar
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {pendingRequests.map(req => {
+                            const empName = employees.find(e => e.id === req.employeeId)?.name || 'Desconocido';
+                            return (
+                                <div key={req.id} className="border border-orange-100 bg-orange-50/50 p-4 rounded-lg flex flex-col justify-between gap-3">
+                                    <div>
+                                        <div className="flex justify-between">
+                                            <span className="font-bold text-bokara-grey">{empName}</span>
+                                            <span className="text-xs font-bold bg-white px-2 py-1 rounded border border-orange-200 text-orange-600">{req.type}</span>
+                                        </div>
+                                        <p className="text-sm text-bokara-grey/70 mt-1 font-mono">{req.startDate} ➜ {req.endDate}</p>
+                                    </div>
+                                    <div className="flex gap-2 justify-end mt-2">
+                                        <button 
+                                            onClick={() => handleStatusAction(req, 'rejected')}
+                                            className="px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded-md text-sm font-bold hover:bg-red-50"
+                                        >
+                                            Rechazar
+                                        </button>
+                                        <button 
+                                            onClick={() => handleStatusAction(req, 'approved')}
+                                            className="px-3 py-1.5 bg-lucius-lime text-bokara-grey rounded-md text-sm font-bold shadow-sm hover:bg-opacity-80"
+                                        >
+                                            Aprobar
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* --- CALENDARIO --- */}
                 <div className="lg:col-span-2 bg-white rounded-xl shadow-md border border-bokara-grey/10 p-6 flex flex-col">
                     <div className="mb-6 flex flex-col sm:flex-row gap-4 items-center">
                         <div className="bg-[#F3F0E9] p-3 rounded-2xl border border-[#E5E0D6] flex items-center gap-4 w-full shadow-sm">
@@ -306,9 +400,11 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                     </div>
                 </div>
 
+                {/* --- MIS SOLICITUDES --- */}
                 <div className="bg-white rounded-xl shadow-md border border-bokara-grey/10 p-6 flex flex-col">
                     <h3 className="font-bold text-bokara-grey mb-4 border-b border-bokara-grey/5 pb-2">Mis Solicitudes</h3>
                     <div className="space-y-3 overflow-y-auto flex-grow max-h-[500px] pr-1">
+                        {myRequests.length === 0 && <p className="text-sm text-gray-400 italic">No tienes solicitudes.</p>}
                         {myRequests.map(req => {
                             const today = new Date(); today.setHours(0,0,0,0);
                             const isPast = new Date(req.endDate + 'T00:00:00') < today;
@@ -346,6 +442,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({ events, currentUser, payr
                 </div>
             </div>
 
+            {/* --- MODAL --- */}
             {isRequestModalOpen && (
                 <div className="fixed inset-0 bg-bokara-grey bg-opacity-50 flex items-center justify-center z-50 p-4 transition-opacity">
                     <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md animate-fade-in border border-bokara-grey/10">

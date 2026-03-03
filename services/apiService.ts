@@ -1,9 +1,10 @@
-
 import { Employee, AttendanceLogEntry, ActivityStatus, CalendarEvent, PayrollChangeType, WorkSchedule, Company, MapItem, Invitation } from '../types';
 import { db, auth, isFirebaseEnabled } from './firebase';
 import firebase from 'firebase/compat/app';
-import 'firebase/compat/storage';
+import 'firebase/compat/storage'; // Se mantiene por compatibilidad, aunque no lo usaremos activamente para esto
 import { initialEmployees } from '../data/initialData';
+
+// --- HELPERS ---
 
 // Helper para limpiar undefined de objetos antes de enviar a Firebase
 const cleanObject = (obj: any) => {
@@ -14,7 +15,17 @@ const cleanObject = (obj: any) => {
     return newObj;
 };
 
-// --- MOCK DATA & API ---
+// Helper para convertir archivo a Base64 (Para guardar imagen en BD sin pagar Storage)
+const convertFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = error => reject(error);
+    });
+};
+
+// --- MOCK DATA & API (Modo Offline) ---
 const createMockApi = () => ({
     resendVerificationEmail: async (email: string) => true,
     verifyEmailWithToken: async (oobCode: string) => true,
@@ -57,9 +68,12 @@ const createMockApi = () => ({
     updateCalendarEvent: async (e: any) => e,
     removeCalendarEvent: async (id: string) => {},
     updateTimesheetEntry: async (eid: string, sid: string, endid: string, s: number, end: number) => {},
+    // En modo Mock solo creamos una URL temporal
     uploadProfilePicture: async (id: string, file: File) => {
         return URL.createObjectURL(file);
     },
+    // Placeholder para mock
+    removeProfilePicture: async (id: string) => {},
     changePassword: async (pass: string) => {},
     saveMapItems: async (items: any[]) => {},
     updateEmployeeSeat: async (eid: string, sid: string | null) => {},
@@ -72,6 +86,7 @@ const createMockApi = () => ({
     saveEmailConfig: async (config: any) => {}
 });
 
+// --- REAL API (Firebase) ---
 const createRealApi = () => {
     if (!db || !auth) throw new Error("Firebase not initialized");
 
@@ -214,15 +229,12 @@ const createRealApi = () => {
             
             const trimmedCode = inviteCode.trim();
             
-            // 1. Intentar buscar por inviteCode exacto (para códigos largos o mixtos)
             let compQuery = await db!.collection('companies').where('inviteCode', '==', trimmedCode).limit(1).get();
             
-            // 2. Si no encuentra, intentar buscar por inviteCode en mayúsculas (para el formato estándar ABC-123)
             if (compQuery.empty) {
                 compQuery = await db!.collection('companies').where('inviteCode', '==', trimmedCode.toUpperCase()).limit(1).get();
             }
             
-            // 3. Si sigue sin encontrar, intentar buscar por ID de documento (por si el usuario ingresó el ID de la empresa)
             if (compQuery.empty) {
                 const docById = await db!.collection('companies').doc(trimmedCode).get();
                 if (docById.exists) {
@@ -351,13 +363,34 @@ const createRealApi = () => {
             await db!.collection('attendanceLog').doc(startLogId).update({ timestamp: startTime });
             await db!.collection('attendanceLog').doc(endLogId).update({ timestamp: endTime });
         },
+        // --- MODIFICADO: Subida de Imágenes (Base64 en Firestore) ---
         uploadProfilePicture: async (employeeId: string, file: File) => {
-            const storageRef = firebase.storage().ref();
-            const fileRef = storageRef.child(`avatars/${employeeId}_${Date.now()}`);
-            await fileRef.put(file);
-            const downloadUrl = await fileRef.getDownloadURL();
-            await db!.collection('employees').doc(employeeId).update({ avatarUrl: downloadUrl });
-            return downloadUrl;
+            const MAX_SIZE = 500 * 1024; // 500KB
+            if (file.size > MAX_SIZE) {
+                throw new Error("La imagen es demasiado grande. Por favor usa una imagen menor a 500KB.");
+            }
+
+            try {
+                // 1. Convertir imagen a texto Base64
+                const base64String = await convertFileToBase64(file);
+                
+                // 2. Guardar directamente en la colección 'employees'
+                await db!.collection('employees').doc(employeeId).update({ 
+                    avatarUrl: base64String 
+                });
+                
+                return base64String;
+            } catch (error) {
+                console.error("Error al guardar imagen en Firestore:", error);
+                throw new Error("No se pudo guardar la imagen.");
+            }
+        },
+        // --- NUEVO: Borrado de Imágenes ---
+        removeProfilePicture: async (employeeId: string) => {
+            // Actualizamos el campo a null para borrar la foto
+            await db!.collection('employees').doc(employeeId).update({ 
+                avatarUrl: null 
+            });
         },
         changePassword: async (newPassword: string) => {
             const user = auth!.currentUser;
@@ -447,5 +480,5 @@ const createRealApi = () => {
 const api = isFirebaseEnabled ? createRealApi() : createMockApi();
 
 export const {
-    resendVerificationEmail, verifyEmailWithToken, joinCompany, createCompany, getCompanyDetails, registerWithEmailAndPassword, loginWithEmailAndPassword, logout, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset, getEmployeeProfile, streamEmployees, streamAttendanceLog, updateEmployeeStatus, updateAttendanceLogEntry, getActivityStatuses, getWorkSchedules, getPayrollChangeTypes, getCalendarEvents, getMapItems, updateEmployeeDetails, addEmployee, removeEmployee, addAttendanceLogEntry, updateEmployeeCurrentSession, addWorkSchedule, updateWorkSchedule, removeWorkSchedule, addActivityStatus, removeActivityStatus, addPayrollChangeType, updatePayrollChangeType, removePayrollChangeType, addCalendarEvent, updateCalendarEvent, removeCalendarEvent, updateTimesheetEntry, uploadProfilePicture, changePassword, saveMapItems, updateEmployeeSeat, getPendingInvitation, acceptInvitation, getNotificationRecipients, addNotificationRecipient, removeNotificationRecipient, getEmailConfig, saveEmailConfig
+    resendVerificationEmail, verifyEmailWithToken, joinCompany, createCompany, getCompanyDetails, registerWithEmailAndPassword, loginWithEmailAndPassword, logout, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset, getEmployeeProfile, streamEmployees, streamAttendanceLog, updateEmployeeStatus, updateAttendanceLogEntry, getActivityStatuses, getWorkSchedules, getPayrollChangeTypes, getCalendarEvents, getMapItems, updateEmployeeDetails, addEmployee, removeEmployee, addAttendanceLogEntry, updateEmployeeCurrentSession, addWorkSchedule, updateWorkSchedule, removeWorkSchedule, addActivityStatus, removeActivityStatus, addPayrollChangeType, updatePayrollChangeType, removePayrollChangeType, addCalendarEvent, updateCalendarEvent, removeCalendarEvent, updateTimesheetEntry, uploadProfilePicture, removeProfilePicture, changePassword, saveMapItems, updateEmployeeSeat, getPendingInvitation, acceptInvitation, getNotificationRecipients, addNotificationRecipient, removeNotificationRecipient, getEmailConfig, saveEmailConfig
 } = api;
