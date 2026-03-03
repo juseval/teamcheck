@@ -367,7 +367,50 @@ const AppContent: React.FC = () => {
           {currentPage === 'schedule' && isAdminOrMaster && <SchedulePage events={calendarEvents} employees={employees} payrollChangeTypes={payrollChangeTypes} onAddEvent={() => setIsAddEventModalOpen(true)} onEditEvent={(event) => { setEventToEdit(event); setIsEditEventModalOpen(true); }} onRemoveEvent={(event) => promptConfirm('Eliminar Evento', '¿Estás seguro?', () => removeCalendarEvent(event.id))} onUpdateEventStatus={async (event, status) => { await updateCalendarEvent({ ...event, status }); setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e)); }} />}
           {currentPage === 'seating' && <SeatingPage employees={employees} activityStatuses={activityStatuses} currentUserRole={user.role} />}
           {currentPage === 'ticketing' && <TicketingPage events={calendarEvents} currentUser={user} employees={employees} payrollChangeTypes={payrollChangeTypes} onAddRequest={async (req) => { try { await addCalendarEvent({ ...req, status: 'pending' }); addNotification('Solicitud enviada', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Error al enviar', 'error'); }}} onUpdateRequest={async (evt) => { try { await updateCalendarEvent(evt); addNotification('Solicitud actualizada', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Error al actualizar', 'error'); }}} onRemoveRequest={(evt) => promptConfirm('Borrar Solicitud', '¿Seguro?', async () => { try { await removeCalendarEvent(evt.id); addNotification('Solicitud borrada', 'success'); const updatedEvents = await getCalendarEvents(); setCalendarEvents(updatedEvents); } catch(e) { addNotification('Error al borrar', 'error'); }})} />}
-          {currentPage === 'settings' && isAdminOrMaster && <SettingsPage statuses={activityStatuses} onAddStatus={async (n, c) => { await addActivityStatus(n,c); setActivityStatuses(await getActivityStatuses()); }} onRemoveStatus={async (id) => { await removeActivityStatus(id); setActivityStatuses(await getActivityStatuses()); }} payrollChangeTypes={payrollChangeTypes} onAddPayrollChangeType={async (n,c,e,a) => { await addPayrollChangeType(n,c,e,a); setPayrollChangeTypes(await getPayrollChangeTypes()); }} onUpdatePayrollChangeType={async (id, u) => { await updatePayrollChangeType(id, u); setPayrollChangeTypes(await getPayrollChangeTypes()); }} onRemovePayrollChangeType={async (id) => { await removePayrollChangeType(id); setPayrollChangeTypes(await getPayrollChangeTypes()); }} workSchedules={workSchedules} onAddWorkSchedule={async (s) => { await addWorkSchedule(s); setWorkSchedules(await getWorkSchedules()); }} onUpdateWorkSchedule={async (id, u) => { await updateWorkSchedule(id, u); setWorkSchedules(await getWorkSchedules()); }} onRemoveWorkSchedule={async (id) => { await removeWorkSchedule(id); setWorkSchedules(await getWorkSchedules()); }} companyId={user.companyId} inviteCode={company?.inviteCode} />}
+
+          {/* ── FIX: onAddPayrollChangeType ahora recibe los 5 parámetros correctamente ── */}
+          {currentPage === 'settings' && isAdminOrMaster && (
+            <SettingsPage
+              statuses={activityStatuses}
+              onAddStatus={async (n, c) => {
+                await addActivityStatus(n, c);
+                setActivityStatuses(await getActivityStatuses());
+              }}
+              onRemoveStatus={async (id) => {
+                await removeActivityStatus(id);
+                setActivityStatuses(await getActivityStatuses());
+              }}
+              payrollChangeTypes={payrollChangeTypes}
+              onAddPayrollChangeType={async (n, c, e, a, quota) => {
+                await addPayrollChangeType(n, c, e, a, quota);
+                setPayrollChangeTypes(await getPayrollChangeTypes());
+              }}
+              onUpdatePayrollChangeType={async (id, u) => {
+                await updatePayrollChangeType(id, u);
+                setPayrollChangeTypes(await getPayrollChangeTypes());
+              }}
+              onRemovePayrollChangeType={async (id) => {
+                await removePayrollChangeType(id);
+                setPayrollChangeTypes(await getPayrollChangeTypes());
+              }}
+              workSchedules={workSchedules}
+              onAddWorkSchedule={async (s) => {
+                await addWorkSchedule(s);
+                setWorkSchedules(await getWorkSchedules());
+              }}
+              onUpdateWorkSchedule={async (id, u) => {
+                await updateWorkSchedule(id, u);
+                setWorkSchedules(await getWorkSchedules());
+              }}
+              onRemoveWorkSchedule={async (id) => {
+                await removeWorkSchedule(id);
+                setWorkSchedules(await getWorkSchedules());
+              }}
+              companyId={user.companyId}
+              inviteCode={company?.inviteCode}
+            />
+          )}
+
           {currentPage === 'profile' && <ProfilePage user={user} onUpdateProfile={refreshUserProfile} />}
           {currentPage === 'calendar' && <CalendarPage events={calendarEvents} currentUser={user} payrollChangeTypes={payrollChangeTypes} />}
           {currentPage === 'password' && <ChangePasswordPage />}
@@ -384,10 +427,9 @@ const AppContent: React.FC = () => {
             try {
               await addEmployee({ ...data, companyId: user.companyId });
               addNotification('Colaborador añadido', 'success');
-              // No cerramos aquí — el modal avanza al paso de invitación
             } catch (e: any) {
               addNotification(e.message || 'Error al añadir colaborador', 'error');
-              throw e; // Re-lanzamos para que el modal no avance si falla
+              throw e;
             }
           }}
         />
