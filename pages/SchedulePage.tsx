@@ -1,7 +1,6 @@
-
 import React, { useState, useMemo } from 'react';
 import { CalendarEvent, Employee, PayrollChangeType } from '../types';
-import { FilterIcon, SortUpIcon } from '../components/Icons';
+import { EditIcon, TrashIcon } from '../components/Icons';
 
 interface SchedulePageProps {
   events: CalendarEvent[];
@@ -399,7 +398,7 @@ const SchedulePage: React.FC<SchedulePageProps> = ({ events = [], employees = []
                                                 style={{ backgroundColor: isPending ? '#f3f4f6' : color, color: isPending ? '#374151' : 'white' }}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    onEditEvent(event);
+                                                    setDayModalData(day);
                                                 }}
                                                 title={`${employeeName}: ${event.type}`}
                                             >
@@ -451,7 +450,7 @@ const SchedulePage: React.FC<SchedulePageProps> = ({ events = [], employees = []
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {reportMatrix.map((row, idx) => (
+                                    {reportMatrix.map((row) => (
                                         <tr key={row.id} className="bg-white border-b border-gray-50 hover:bg-whisper-white/30 transition-colors">
                                             <td className="px-6 py-3 font-medium text-bokara-grey whitespace-nowrap">
                                                 {row.name}
@@ -555,16 +554,37 @@ const SchedulePage: React.FC<SchedulePageProps> = ({ events = [], employees = []
                                             <h4 className="font-bold text-bokara-grey">{employeeName}</h4>
                                             <p className="text-sm text-bokara-grey/70">{event.type}</p>
                                         </div>
-                                        <div className="text-right">
-                                            {isPending && <span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-1 rounded-full uppercase">Pendiente</span>}
+                                        
+                                        {/* ACCIONES: EDITAR Y ELIMINAR */}
+                                        <div className="flex items-center gap-2">
+                                            {isPending && <span className="bg-yellow-100 text-yellow-800 text-[10px] font-bold px-2 py-1 rounded-full uppercase mr-2">Pendiente</span>}
+                                            
                                             <button 
                                                 onClick={() => {
                                                     setDayModalData(null);
                                                     onEditEvent(event);
                                                 }}
-                                                className="ml-2 text-xs text-lucius-lime hover:underline font-bold"
+                                                className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-md transition-colors"
+                                                title="Editar"
                                             >
-                                                Editar
+                                                <EditIcon className="w-4 h-4" />
+                                            </button>
+                                            
+                                            <button 
+                                                onClick={() => {
+                                                    if(window.confirm('¿Estás seguro de que deseas eliminar esta novedad?')) {
+                                                        onRemoveEvent(event);
+                                                        // Actualizamos el modal localmente removiendo el evento
+                                                        setDayModalData(prev => prev ? ({
+                                                            ...prev,
+                                                            events: prev.events.filter(e => e.event.id !== event.id)
+                                                        }) : null);
+                                                    }
+                                                }}
+                                                className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition-colors"
+                                                title="Eliminar"
+                                            >
+                                                <TrashIcon className="w-4 h-4" />
                                             </button>
                                         </div>
                                     </div>
