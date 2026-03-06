@@ -40,7 +40,7 @@ import ChangePasswordPage from './pages/ChangePasswordPage';
 import SeatingPage from './pages/SeatingPage';
 
 // Components
-import Header from './components/Header';
+import Header, { BellNotification } from './components/Header';
 import SideNav from './components/SideNav';
 import AddEmployeeModal from './components/AddEmployeeModal';
 import EditEmployeeModal from './components/EditEmployeeModal';
@@ -198,6 +198,57 @@ const AppContent: React.FC = () => {
     return () => { unsubEmployees(); unsubLog(); };
   }, [user]);
 
+  // ── Notificaciones de la campana (solo admins/masters) ──
+  // Fuente 1: tiquetes con status 'pending'
+  // Fuente 2: entradas del log con correctionRequest
+  const bellNotifications = useMemo((): BellNotification[] => {
+    const isAdminOrMaster = user?.role === 'admin' || user?.role === 'master';
+    if (!isAdminOrMaster) return [];
+
+    // Tiquetes pendientes → navegar a 'ticketing'
+    const ticketNotifs: BellNotification[] = calendarEvents
+      .filter(e => e.status === 'pending')
+      .map(e => {
+        const empName = employees.find(emp => emp.id === e.employeeId)?.name || 'Colaborador';
+        return {
+          id: `ticket-${e.id}`,
+          type: 'ticket_pending' as const,
+          title: empName,
+          subtitle: `${e.type} · ${e.startDate}${e.startDate !== e.endDate ? ` → ${e.endDate}` : ''}`,
+          timestamp: Date.now(),
+          navigateTo: 'ticketing',
+        };
+      });
+
+    // Solicitudes de corrección de hora → navegar a 'tracker' y abrir modal
+    const correctionNotifs: BellNotification[] = attendanceLog
+      .filter(entry => !!(entry as any).correctionRequest)
+      .map(entry => ({
+        id: `correction-${entry.id}`,
+        type: 'correction_request' as const,
+        title: entry.employeeName,
+        subtitle: (entry as any).correctionRequest as string,
+        timestamp: entry.timestamp,
+        navigateTo: 'tracker',
+      }));
+
+    return [...ticketNotifs, ...correctionNotifs]
+      .sort((a, b) => b.timestamp - a.timestamp);
+  }, [calendarEvents, attendanceLog, employees, user?.role]);
+
+  // Click en notificación → navegar + abrir modal si aplica
+  const handleBellNotificationClick = (notif: BellNotification) => {
+    setCurrentPage(notif.navigateTo);
+    if (notif.type === 'correction_request') {
+      const entryId = notif.id.replace('correction-', '');
+      const entry = attendanceLog.find(e => e.id === entryId);
+      if (entry) {
+        setLogEntryToEdit(entry);
+        setIsEditActivityLogEntryModalOpen(true);
+      }
+    }
+  };
+
   // Handlers
   const handleLogin = async (creds: { email: string; password: string }) => {
     try {
@@ -321,7 +372,18 @@ const AppContent: React.FC = () => {
     <div className="flex h-screen bg-bright-white overflow-hidden font-sans text-bokara-grey">
       <SideNav currentPage={currentPage} onNavigate={setCurrentPage} userRole={user.role} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       <div className="flex-1 flex flex-col overflow-hidden relative">
-        <Header currentPage={currentPage} onNavigate={setCurrentPage} user={user} userRole={user.role} onLogout={handleLogout} onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} notifications={[]} onNotificationClick={() => {}} />
+
+        <Header
+          currentPage={currentPage}
+          onNavigate={setCurrentPage}
+          user={user}
+          userRole={user.role}
+          onLogout={handleLogout}
+          onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          notifications={bellNotifications}
+          onNotificationClick={handleBellNotificationClick}
+        />
+
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-whisper-white/30 p-4 sm:p-6 lg:p-8 scroll-smooth">
 
           {/* TRACKER */}
@@ -363,7 +425,7 @@ const AppContent: React.FC = () => {
             />
           )}
 
-          {/* SCHEDULE — FIX: onRemoveEvent refresca calendarEvents tras eliminar */}
+          {/* SCHEDULE */}
           {currentPage === 'schedule' && (
             <SchedulePage
               events={calendarEvents}
@@ -372,16 +434,13 @@ const AppContent: React.FC = () => {
               onAddEvent={() => setIsAddEventModalOpen(true)}
               onEditEvent={(event) => { setEventToEdit(event); setIsEditEventModalOpen(true); }}
               onRemoveEvent={(event) => promptConfirm(
-                'Eliminar Evento',
-                '¿Estás seguro?',
+                'Eliminar Evento', '¿Estás seguro?',
                 async () => {
                   try {
                     await removeCalendarEvent(event.id);
                     setCalendarEvents(await getCalendarEvents());
                     addNotification('Evento eliminado', 'success');
-                  } catch {
-                    addNotification('Error al eliminar', 'error');
-                  }
+                  } catch { addNotification('Error al eliminar', 'error'); }
                 }
               )}
               onUpdateEventStatus={async (event, status) => {
@@ -497,7 +556,6 @@ const AppContent: React.FC = () => {
           }}
         />
 
-        {/* FIX: updateTimesheetEntry espera strings — convertimos todo a String() */}
         <EditTimesheetEntryModal
           isOpen={isEditTimesheetModalOpen}
           onClose={() => setIsEditTimesheetModalOpen(false)}
@@ -506,10 +564,7 @@ const AppContent: React.FC = () => {
             try {
               await updateTimesheetEntry(
                 timesheetEntryToEdit!.employeeId,
-                String(sid),
-                String(eid),
-                String(start),
-                String(end),
+                String(sid), String(eid), String(start), String(end),
               );
               setIsEditTimesheetModalOpen(false);
               addNotification('Entrada actualizada', 'success');
