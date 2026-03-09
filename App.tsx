@@ -222,7 +222,7 @@ const AppContent: React.FC = () => {
 
     // Solicitudes de corrección de hora → navegar a 'tracker' y abrir modal
     const correctionNotifs: BellNotification[] = attendanceLog
-      .filter(entry => !!(entry as any).correctionRequest)
+      .filter(entry => entry.correctionRequest && entry.correctionStatus === 'pending')
       .map(entry => ({
         id: `correction-${entry.id}`,
         type: 'correction_request' as const,
@@ -582,7 +582,7 @@ const AppContent: React.FC = () => {
             try {
               await updateTimesheetEntry(
                 timesheetEntryToEdit!.employeeId,
-                String(sid), String(eid), String(start), String(end),
+                String(sid), String(eid), Number(start), Number(end),
               );
               setIsEditTimesheetModalOpen(false);
               addNotification('Entrada actualizada', 'success');
