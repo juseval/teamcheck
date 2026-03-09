@@ -1,15 +1,23 @@
 import React, { useState } from 'react';
 import { AttendanceLogEntry } from '../types';
 import { exportActivityLog } from '../services/exportService';
-import { EditIcon, ChatBubbleIcon, AlertIcon } from './Icons';
+import { EditIcon, ChatBubbleIcon, AlertIcon, TrashIcon } from './Icons';
+
+interface CorrectionData {
+  text: string;
+  suggestedTime: string;   // "HH:MM" en hora local
+  suggestedAction: string;
+}
 
 interface AttendanceLogProps {
   entries: AttendanceLogEntry[];
   dateRange: { startDate: string; endDate: string };
   onDateRangeChange: (range: { startDate: string; endDate: string }) => void;
   userRole: 'master' | 'admin' | 'employee';
+  activityStatuses?: { id: string; name: string; color: string }[];
   onEditEntry?: (entry: AttendanceLogEntry) => void;
-  onRequestCorrection?: (entry: AttendanceLogEntry, requestText: string) => void;
+  onRemoveEntry?: (entry: AttendanceLogEntry) => void;
+  onRequestCorrection?: (entry: AttendanceLogEntry, data: CorrectionData) => void;
 }
 
 const formatDate = (timestamp: number) => {
@@ -25,27 +33,41 @@ const formatTime = (timestamp: number) => {
 };
 
 const AttendanceLog: React.FC<AttendanceLogProps> = ({
-  entries, dateRange, onDateRangeChange, userRole, onEditEntry, onRequestCorrection
+  entries, dateRange, onDateRangeChange, userRole, activityStatuses = [], onEditEntry, onRemoveEntry, onRequestCorrection
 }) => {
   const [requestModalOpen, setRequestModalOpen] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<AttendanceLogEntry | null>(null);
   const [requestText, setRequestText] = useState('');
+  const [suggestedTime, setSuggestedTime] = useState('');
+  const [suggestedAction, setSuggestedAction] = useState('');
 
   const handleExport = () => exportActivityLog(entries);
 
   const handleOpenRequest = (entry: AttendanceLogEntry) => {
       setSelectedEntry(entry);
-      setRequestText(entry.correctionRequest || '');
+      setRequestText('');
+      // Pre-poblar hora y acción actuales del registro
+      const d = new Date(entry.timestamp);
+      const hh = d.getHours().toString().padStart(2, '0');
+      const mm = d.getMinutes().toString().padStart(2, '0');
+      setSuggestedTime(`${hh}:${mm}`);
+      setSuggestedAction(entry.action || 'Clock In');
       setRequestModalOpen(true);
   };
 
   const handleSubmitRequest = (e: React.FormEvent) => {
       e.preventDefault();
       if (selectedEntry && onRequestCorrection && requestText.trim()) {
-          onRequestCorrection(selectedEntry, requestText.trim());
+          onRequestCorrection(selectedEntry, {
+              text: requestText.trim(),
+              suggestedTime,
+              suggestedAction,
+          });
           setRequestModalOpen(false);
           setSelectedEntry(null);
           setRequestText('');
+          setSuggestedTime('');
+          setSuggestedAction('');
       }
   };
 
@@ -112,6 +134,15 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({
                         >
                             {isPending && <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
                             <EditIcon className="w-5 h-5" />
+                        </button>
+                    )}
+                    {userRole !== 'employee' && onRemoveEntry && (
+                        <button
+                            onClick={() => onRemoveEntry(entry)}
+                            className="p-1.5 rounded-full transition-colors text-bokara-grey/30 hover:text-red-500 hover:bg-red-50"
+                            title="Eliminar registro"
+                        >
+                            <TrashIcon className="w-4 h-4" />
                         </button>
                     )}
                     {userRole === 'employee' && onRequestCorrection && (
@@ -239,23 +270,69 @@ const AttendanceLog: React.FC<AttendanceLogProps> = ({
       </div>
 
       {/* Modal de corrección (empleados) */}
-      {requestModalOpen && (
+      {requestModalOpen && selectedEntry && (
         <div className="fixed inset-0 bg-bokara-grey bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={() => setRequestModalOpen(false)}>
           <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md border border-bokara-grey/10 animate-fade-in" onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl font-bold text-bokara-grey mb-2">Solicitar Corrección</h3>
-            <p className="text-sm text-bokara-grey/70 mb-4">
-              Describe el error (ej: "Olvidé marcar salida a las 18:00" o "El break terminó antes").
-            </p>
-            <form onSubmit={handleSubmitRequest}>
-              <textarea
-                className="w-full h-32 bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-bokara-grey focus:outline-none focus:ring-2 focus:ring-lucius-lime resize-none"
-                placeholder="Escribe tu justificación aquí..."
-                value={requestText}
-                onChange={(e) => setRequestText(e.target.value)}
-                required
-              />
-              <div className="flex justify-end gap-3 mt-4">
-                <button type="button" onClick={() => setRequestModalOpen(false)} className="px-4 py-2 bg-gray-200 text-bokara-grey rounded-lg hover:bg-gray-300">Cancelar</button>
+            <h3 className="text-xl font-bold text-bokara-grey mb-1">Solicitar Corrección</h3>
+
+            {/* Info del registro original */}
+            <div className="mb-4 px-3 py-2 bg-whisper-white rounded-lg border border-bokara-grey/10 text-xs text-bokara-grey/70">
+              <span className="font-bold text-bokara-grey">Registro actual:</span>{' '}
+              {new Date(selectedEntry.timestamp).toLocaleDateString('es-CO')} a las{' '}
+              {new Date(selectedEntry.timestamp).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+              {' · '}<span className="font-medium">{selectedEntry.action}</span>
+            </div>
+
+            <form onSubmit={handleSubmitRequest} className="flex flex-col gap-4">
+
+              {/* Hora y Acción correctas */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-semibold text-lucius-lime mb-1">Hora correcta</label>
+                  <input
+                    type="time"
+                    value={suggestedTime}
+                    onChange={e => setSuggestedTime(e.target.value)}
+                    className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg px-3 py-2 text-bokara-grey focus:outline-none focus:ring-2 focus:ring-lucius-lime"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-lucius-lime mb-1">Acción correcta</label>
+                  <select
+                    value={suggestedAction}
+                    onChange={e => setSuggestedAction(e.target.value)}
+                    className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg px-3 py-2 text-bokara-grey focus:outline-none focus:ring-2 focus:ring-lucius-lime"
+                    required
+                  >
+                    <option value="Clock In">Clock In</option>
+                    <option value="Clock Out">Clock Out</option>
+                    <option value="Start Break">Start Break</option>
+                    <option value="End Break">End Break</option>
+                    {activityStatuses.map(s => (
+                      <React.Fragment key={s.id}>
+                        <option value={`Start ${s.name}`}>Start {s.name}</option>
+                        <option value={`End ${s.name}`}>End {s.name}</option>
+                      </React.Fragment>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Justificación */}
+              <div>
+                <label className="block text-sm font-semibold text-lucius-lime mb-1">Motivo / Justificación</label>
+                <textarea
+                  className="w-full h-24 bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-bokara-grey focus:outline-none focus:ring-2 focus:ring-lucius-lime resize-none"
+                  placeholder="Ej: Olvidé marcar salida, el sistema falló..."
+                  value={requestText}
+                  onChange={(e) => setRequestText(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => setRequestModalOpen(false)} className="px-4 py-2 bg-gray-200 text-bokara-grey rounded-lg hover:bg-gray-300 font-medium">Cancelar</button>
                 <button type="submit" className="px-4 py-2 bg-lucius-lime text-bokara-grey font-bold rounded-lg hover:bg-opacity-80">Enviar Solicitud</button>
               </div>
             </form>

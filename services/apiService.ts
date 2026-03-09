@@ -51,6 +51,7 @@ const createMockApi = () => ({
     addAttendanceLogEntry: async (entry: any) => entry,
     updateEmployeeStatus: async (e: any) => e,
     updateAttendanceLogEntry: async (id: string, updates: any) => ({id, ...updates}),
+    removeAttendanceLogEntry: async (id: string) => {},
     getActivityStatuses: async () => [],
     getWorkSchedules: async () => [],
     getPayrollChangeTypes: async () => [],
@@ -276,6 +277,9 @@ const createRealApi = () => {
 
         updateAttendanceLogEntry: async (id: string, updates: Partial<AttendanceLogEntry>) => {
             await db!.collection('attendanceLog').doc(id).update(updates);
+        },
+        removeAttendanceLogEntry: async (id: string) => {
+            await db!.collection('attendanceLog').doc(id).delete();
         },
 
         // ── ADD EMPLOYEE: email normalizado ──
@@ -542,7 +546,7 @@ export const {
     resendVerificationEmail, verifyEmailWithToken, joinCompany, createCompany, getCompanyDetails,
     registerWithEmailAndPassword, loginWithEmailAndPassword, logout, sendPasswordResetEmail,
     verifyPasswordResetCode, confirmPasswordReset, getEmployeeProfile, streamEmployees,
-    streamAttendanceLog, updateEmployeeStatus, updateAttendanceLogEntry, getActivityStatuses,
+    streamAttendanceLog, updateEmployeeStatus, updateAttendanceLogEntry, removeAttendanceLogEntry, getActivityStatuses,
     getWorkSchedules, getPayrollChangeTypes, getCalendarEvents, getMapItems, updateEmployeeDetails,
     addEmployee, removeEmployee, addAttendanceLogEntry, updateEmployeeCurrentSession,
     addWorkSchedule, updateWorkSchedule, removeWorkSchedule, addActivityStatus, removeActivityStatus,

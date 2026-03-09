@@ -14,7 +14,7 @@ import {
   addActivityStatus, removeActivityStatus,
   addPayrollChangeType, updatePayrollChangeType, removePayrollChangeType,
   addCalendarEvent, updateCalendarEvent, removeCalendarEvent,
-  updateTimesheetEntry, sendPasswordResetEmail, updateAttendanceLogEntry,
+  updateTimesheetEntry, sendPasswordResetEmail, updateAttendanceLogEntry, removeAttendanceLogEntry,
   getCompanyDetails
 } from './services/apiService';
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
@@ -305,6 +305,8 @@ const AppContent: React.FC = () => {
       const updates: any = { status: newStatus, currentStatusStartTime: newStatus === 'Clocked Out' ? null : timestamp };
       if (action === 'Clock In') updates.lastClockInTime = timestamp;
       await updateEmployeeStatus({ ...employee, ...updates });
+      // Actualizar estado del usuario actual para reflejar cambio en el Header
+      if (user && employeeId === user.id) setUser(prev => prev ? { ...prev, ...updates } : prev);
       addNotification(`${action} registrado`, 'success');
     } catch (error) { addNotification('Error al actualizar estado', 'error'); }
   };
@@ -321,6 +323,20 @@ const AppContent: React.FC = () => {
     setConfirmConfig({ title, message, onConfirm: () => { onConfirm(); setIsConfirmModalOpen(false); } });
     setIsConfirmModalOpen(true);
   };
+
+  const handleRemoveLogEntry = (entry: AttendanceLogEntry) => {
+    promptConfirm(
+      'Eliminar Registro',
+      `¿Eliminar el registro de ${entry.employeeName} (${entry.action})?`,
+      async () => {
+        try {
+          await removeAttendanceLogEntry(entry.id);
+          addNotification('Registro eliminado.', 'success');
+        } catch { addNotification('Error al eliminar.', 'error'); }
+      }
+    );
+  };
+
 
   const trackerEmployees = useMemo(() => {
     if (!user) return [];
@@ -382,6 +398,7 @@ const AppContent: React.FC = () => {
           onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
           notifications={bellNotifications}
           onNotificationClick={handleBellNotificationClick}
+          onQuickAction={handleEmployeeAction}
         />
 
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-whisper-white/30 p-4 sm:p-6 lg:p-8 scroll-smooth">
@@ -399,6 +416,7 @@ const AppContent: React.FC = () => {
               activityStatuses={activityStatuses}
               workSchedules={workSchedules}
               onEditEntry={(entry) => { setLogEntryToEdit(entry); setIsEditActivityLogEntryModalOpen(true); }}
+              onRemoveEntry={handleRemoveLogEntry}
             />
           )}
 

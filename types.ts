@@ -63,6 +63,8 @@ export interface AttendanceLogEntry {
   timestamp: number;
   correctionRequest?: string;
   correctionStatus?: 'pending' | 'approved' | 'rejected';
+  correctionSuggestedTime?: string;
+  correctionSuggestedAction?: string;
   adminResponse?: string;
   isAutoLog?: boolean;
 }
