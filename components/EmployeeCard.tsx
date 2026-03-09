@@ -106,7 +106,7 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
         <div className="bg-red-50 border border-red-200 p-3 rounded-lg flex flex-col items-center gap-2 text-red-700 animate-fade-in shadow-inner">
           <AlertIcon className="w-6 h-6 flex-shrink-0" />
           <span className="text-[10px] leading-tight font-bold text-center uppercase tracking-tight">
-            Acceso móvil restringido.<br />Por favor use un computador de escritorio.
+            Acceso móvil restringido.<br />Por favor use su computador asignado.
           </span>
         </div>
       );
