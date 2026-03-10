@@ -15,7 +15,9 @@ import {
   addPayrollChangeType, updatePayrollChangeType, removePayrollChangeType,
   addCalendarEvent, updateCalendarEvent, removeCalendarEvent,
   updateTimesheetEntry, sendPasswordResetEmail, updateAttendanceLogEntry, removeAttendanceLogEntry,
-  getCompanyDetails
+  getCompanyDetails,
+  getNotificationRecipients,
+  getEmailConfig
 } from './services/apiService';
 import { NotificationProvider, useNotification } from './contexts/NotificationContext';
 import { auth } from './services/firebase';
@@ -246,6 +248,63 @@ const AppContent: React.FC = () => {
         setLogEntryToEdit(entry);
         setIsEditActivityLogEntryModalOpen(true);
       }
+    }
+  };
+
+  // ── Email automático al crear un tiquete ──
+  const sendTicketNotification = async (req: any) => {
+    try {
+      const [recipients, emailConfig] = await Promise.all([
+        getNotificationRecipients(),
+        getEmailConfig(),
+      ]);
+      console.log('[EmailJS] recipients:', recipients);
+      console.log('[EmailJS] emailConfig:', emailConfig);
+      if (!emailConfig || !recipients.length) {
+        console.warn('[EmailJS] Sin config o sin destinatarios');
+        return;
+      }
+      // Soportar tanto camelCase como snake_case por si Settings guarda diferente
+      const serviceId = emailConfig.serviceId || emailConfig.service_id;
+      const templateId = emailConfig.templateId || emailConfig.template_id;
+      const publicKey = emailConfig.publicKey || emailConfig.public_key || emailConfig.userId || emailConfig.user_id;
+      console.log('[EmailJS] serviceId:', serviceId, '| templateId:', templateId, '| publicKey:', publicKey);
+      if (!serviceId || !templateId || !publicKey) {
+        console.warn('[EmailJS] Faltan credenciales');
+        return;
+      }
+
+      const empName = employees.find(e => e.id === req.employeeId)?.name || user?.name || 'Colaborador';
+      const dateRange = req.startDate === req.endDate
+        ? req.startDate
+        : `${req.startDate} → ${req.endDate}`;
+
+      const results = await Promise.all(recipients.map((toEmail: string) =>
+        fetch('https://api.emailjs.com/api/v1.0/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            service_id: serviceId,
+            template_id: templateId,
+            user_id: publicKey,
+            template_params: {
+              recipient_email: toEmail,
+              user_name: empName,
+              request_type: req.type || 'Solicitud',
+              request_dates: dateRange,
+              request_notes: req.notes || '',
+              message: `${empName} ha enviado una nueva solicitud de ${req.type || 'tiquete'} para el período ${dateRange}.`,
+            },
+          }),
+        }).then(async r => {
+          const text = await r.text();
+          console.log(`[EmailJS] → ${toEmail}: status=${r.status} body=${text}`);
+          return { toEmail, status: r.status, body: text };
+        })
+      ));
+      console.log('[EmailJS] Resultados:', results);
+    } catch (e) {
+      console.warn('[EmailJS] Error:', e);
     }
   };
 
@@ -485,6 +544,8 @@ const AppContent: React.FC = () => {
                   await addCalendarEvent({ ...req, status: 'pending' });
                   addNotification('Solicitud enviada', 'success');
                   setCalendarEvents(await getCalendarEvents());
+                  // ── Notificar por email a los destinatarios RRHH ──
+                  sendTicketNotification(req);
                 } catch { addNotification('Error al enviar', 'error'); }
               }}
               onUpdateRequest={async (evt) => {
