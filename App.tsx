@@ -309,9 +309,9 @@ const AppContent: React.FC = () => {
   };
 
   // Handlers
-  const handleLogin = async (creds: { email: string; password: string }) => {
+  const handleLogin = async (creds: { email: string; password: string; rememberMe?: boolean }) => {
     try {
-      const loggedUser = await loginWithEmailAndPassword(creds.email, creds.password);
+      const loggedUser = await loginWithEmailAndPassword(creds.email, creds.password, creds.rememberMe ?? false);
       setUser(loggedUser);
       setCurrentPage(loggedUser.companyId ? 'tracker' : 'onboarding');
       addNotification(`¡Bienvenido, ${loggedUser.name}!`, 'success');

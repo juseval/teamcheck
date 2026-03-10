@@ -124,9 +124,14 @@ const createRealApi = () => {
             }, { merge: true });
         },
 
-        // ── LOGIN: email normalizado ──
-        loginWithEmailAndPassword: async (email: string, password: string) => {
+        // ── LOGIN: email normalizado + persistence ──
+        loginWithEmailAndPassword: async (email: string, password: string, rememberMe: boolean = false) => {
             const cleanEmail = normalizeEmail(email);
+            await auth!.setPersistence(
+                rememberMe
+                    ? (firebase as any).auth.Auth.Persistence.LOCAL
+                    : (firebase as any).auth.Auth.Persistence.SESSION
+            );
             const cred = await auth!.signInWithEmailAndPassword(cleanEmail, password);
             const user = cred.user;
             if (!user) throw new Error("Authentication failed");
