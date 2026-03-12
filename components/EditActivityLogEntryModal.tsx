@@ -83,10 +83,21 @@ const EditActivityLogEntryModal: React.FC<EditActivityLogEntryModalProps> = ({ i
   const handleSave = (status: 'approved' | 'rejected' | null = null) => {
     if (!editedDate || !editedTime) return;
 
-    // Combinar la fecha editada + hora editada en un timestamp
     const [year, month, day] = editedDate.split('-').map(Number);
     const [hours, minutes]   = editedTime.split(':').map(Number);
+
+    // Validar que los valores son números reales
+    if ([year, month, day, hours, minutes].some(isNaN)) {
+      alert("Fecha u hora inválida. Por favor verifica los campos.");
+      return;
+    }
+
     const newTimestamp = new Date(year, month - 1, day, hours, minutes, 0, 0);
+
+    if (isNaN(newTimestamp.getTime())) {
+      alert("Fecha u hora inválida.");
+      return;
+    }
 
     if (newTimestamp.getTime() > Date.now()) {
       alert("No se puede establecer una fecha/hora en el futuro.");

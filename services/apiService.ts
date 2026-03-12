@@ -31,27 +31,27 @@ const normalizeEmail = (email: string): string => email.trim().toLowerCase();
 
 // --- MOCK DATA & API ---
 const createMockApi = () => ({
-    resendVerificationEmail: async (email: string) => true,
-    verifyEmailWithToken: async (oobCode: string) => true,
-    joinCompany: async (inviteCode: string) => {},
-    createCompany: async (name: string) => {},
-    getCompanyDetails: async (companyId: string) => null,
+    resendVerificationEmail: async (_email: string) => true,
+    verifyEmailWithToken: async (_oobCode: string) => true,
+    joinCompany: async (_inviteCode: string) => {},
+    createCompany: async (_name: string) => {},
+    getCompanyDetails: async (_companyId: string) => null,
     registerWithEmailAndPassword: async (fullName: string, email: string) => ({ name: fullName, email: normalizeEmail(email), emailVerified: true } as any),
-    loginWithEmailAndPassword: async (email: string, pass: string) => { return initialEmployees[0]; },
+    loginWithEmailAndPassword: async (_email: string, _pass: string) => { return initialEmployees[0]; },
     logout: async () => {},
-    sendPasswordResetEmail: async (email: string) => {},
-    verifyPasswordResetCode: async (code: string) => 'test@example.com',
-    confirmPasswordReset: async (code: string, pass: string) => {},
+    sendPasswordResetEmail: async (_email: string) => {},
+    verifyPasswordResetCode: async (_code: string) => 'test@example.com',
+    confirmPasswordReset: async (_code: string, _pass: string) => {},
     getEmployeeProfile: async (uid: string) => {
         const found = initialEmployees.find(e => e.id === uid);
         return found || null;
     },
-    streamEmployees: (callback: any) => () => {},
-    streamAttendanceLog: (callback: any) => () => {},
+    streamEmployees: (_callback: any) => () => {},
+    streamAttendanceLog: (_callback: any) => () => {},
     addAttendanceLogEntry: async (entry: any) => entry,
     updateEmployeeStatus: async (e: any) => e,
-    updateAttendanceLogEntry: async (id: string, updates: any) => ({id, ...updates}),
-    removeAttendanceLogEntry: async (id: string) => {},
+    updateAttendanceLogEntry: async (_id: string, updates: any) => updates,
+    removeAttendanceLogEntry: async (_id: string) => {},
     getActivityStatuses: async () => [],
     getWorkSchedules: async () => [],
     getPayrollChangeTypes: async () => [],
@@ -59,32 +59,32 @@ const createMockApi = () => ({
     getMapItems: async () => [],
     updateEmployeeDetails: async (e: any) => e,
     addEmployee: async (e: any) => e,
-    removeEmployee: async (id: string) => {},
-    updateEmployeeCurrentSession: async (id: string, time: number) => {},
+    removeEmployee: async (_id: string) => {},
+    updateEmployeeCurrentSession: async (_id: string, _time: number) => {},
     addWorkSchedule: async (s: any) => s,
-    updateWorkSchedule: async (id: string, u: any) => {},
-    removeWorkSchedule: async (id: string) => {},
-    addActivityStatus: async (n: string, c: string) => {},
-    removeActivityStatus: async (id: string) => {},
-    addPayrollChangeType: async (n: string, c: string, e: boolean, a: boolean, q?: number, sq?: number) => {},
-    updatePayrollChangeType: async (id: string, u: any) => {},
-    removePayrollChangeType: async (id: string) => {},
+    updateWorkSchedule: async (_id: string, _u: any) => {},
+    removeWorkSchedule: async (_id: string) => {},
+    addActivityStatus: async (_n: string, _c: string) => {},
+    removeActivityStatus: async (_id: string) => {},
+    addPayrollChangeType: async (_n: string, _c: string, _e: boolean, _a: boolean, _q?: number, _sq?: number) => {},
+    updatePayrollChangeType: async (_id: string, _u: any) => {},
+    removePayrollChangeType: async (_id: string) => {},
     addCalendarEvent: async (e: any) => e,
     updateCalendarEvent: async (e: any) => e,
-    removeCalendarEvent: async (id: string) => {},
-    updateTimesheetEntry: async (eid: string, sid: string, endid: string, s: number, end: number) => {},
-    uploadProfilePicture: async (id: string, file: File) => { return URL.createObjectURL(file); },
-    removeProfilePicture: async (id: string) => {},
-    changePassword: async (pass: string) => {},
-    saveMapItems: async (items: any[]) => {},
-    updateEmployeeSeat: async (eid: string, sid: string | null) => {},
-    getPendingInvitation: async (email: string) => null,
-    acceptInvitation: async (invitationId: string) => {},
+    removeCalendarEvent: async (_id: string) => {},
+    updateTimesheetEntry: async (_eid: string, _sid: string, _endid: string, _s: number, _end: number) => {},
+    uploadProfilePicture: async (_id: string, file: File) => { return URL.createObjectURL(file); },
+    removeProfilePicture: async (_id: string) => {},
+    changePassword: async (_pass: string) => {},
+    saveMapItems: async (_items: any[]) => {},
+    updateEmployeeSeat: async (_eid: string, _sid: string | null) => {},
+    getPendingInvitation: async (_email: string) => null,
+    acceptInvitation: async (_invitationId: string) => {},
     getNotificationRecipients: async () => [],
-    addNotificationRecipient: async (email: string) => {},
-    removeNotificationRecipient: async (email: string) => {},
+    addNotificationRecipient: async (_email: string) => {},
+    removeNotificationRecipient: async (_email: string) => {},
     getEmailConfig: async () => null,
-    saveEmailConfig: async (config: any) => {}
+    saveEmailConfig: async (_config: any) => {}
 });
 
 // --- REAL API (Firebase) ---
@@ -92,8 +92,8 @@ const createRealApi = () => {
     if (!db || !auth) throw new Error("Firebase not initialized");
 
     return {
-        resendVerificationEmail: async (email: string) => true,
-        verifyEmailWithToken: async (oobCode: string) => true,
+        resendVerificationEmail: async (_email: string) => true,
+        verifyEmailWithToken: async (_oobCode: string) => true,
 
         // ── REGISTRO: email normalizado ──
         registerWithEmailAndPassword: async (fullName: string, email: string, password: string) => {
@@ -186,7 +186,15 @@ const createRealApi = () => {
         },
 
         updateEmployeeStatus: async (e: Employee) => {
-            await db!.collection('employees').doc(e.id).update({ status: e.status, lastClockInTime: e.lastClockInTime, currentStatusStartTime: e.currentStatusStartTime });
+            const patch: any = {
+                status:                  e.status,
+                lastClockInTime:         e.lastClockInTime,
+                currentStatusStartTime:  e.currentStatusStartTime,
+            };
+            // Campos del contador acumulado — solo los incluimos si están presentes
+            if (e.accumulatedWorkSeconds !== undefined) patch.accumulatedWorkSeconds = e.accumulatedWorkSeconds;
+            if ('workSessionStartTime' in e)            patch.workSessionStartTime   = e.workSessionStartTime ?? null;
+            await db!.collection('employees').doc(e.id).update(patch);
             return e;
         },
 
@@ -263,7 +271,10 @@ const createRealApi = () => {
         joinCompany: async (inviteCode: string) => {
             const user = auth!.currentUser;
             if (!user) throw new Error("Not logged in");
+            const cleanEmail = normalizeEmail(user.email || '');
             const trimmedCode = inviteCode.trim();
+
+            // Buscar empresa por código
             let compQuery = await db!.collection('companies').where('inviteCode', '==', trimmedCode).limit(1).get();
             if (compQuery.empty) {
                 compQuery = await db!.collection('companies').where('inviteCode', '==', trimmedCode.toUpperCase()).limit(1).get();
@@ -277,7 +288,48 @@ const createRealApi = () => {
             }
             if (compQuery.empty) throw new Error("Código de equipo inválido.");
             const companyId = compQuery.docs[0].id;
-            await db!.collection('employees').doc(user.uid).set({ companyId }, { merge: true });
+
+            // Buscar si hay una invitación pendiente para este email → obtener nombre y datos
+            const invQuery = await db!.collection('invitations')
+                .where('email', '==', cleanEmail)
+                .where('companyId', '==', companyId)
+                .where('status', '==', 'pending')
+                .limit(1).get();
+
+            const invData = invQuery.empty ? null : (invQuery.docs[0].data() as any);
+            const resolvedName = (invData?.name || '').trim()
+                || (user.displayName || '').trim()
+                || cleanEmail.split('@')[0];
+
+            // Escribir/fusionar con UID como doc ID
+            await db!.collection('employees').doc(user.uid).set(cleanObject({
+                id: user.uid, uid: user.uid, email: cleanEmail,
+                name: resolvedName,
+                companyId,
+                role: invData?.role || 'employee',
+                hireDate: invData?.hireDate,
+                terminationDate: invData?.terminationDate,
+                manualVacationAdjustment: invData?.manualVacationAdjustment,
+                phone: invData?.phone,
+                location: invData?.location,
+                workScheduleId: invData?.workScheduleId,
+                status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null,
+                emailVerified: user.emailVerified,
+            }));
+
+            // Marcar invitación como aceptada
+            if (!invQuery.empty) {
+                await invQuery.docs[0].ref.update({ status: 'accepted' });
+            }
+
+            // Eliminar docs duplicados con el mismo email
+            const empsQuery = await db!.collection('employees').where('email', '==', cleanEmail).get();
+            const batch = db!.batch();
+            let hasDups = false;
+            for (const doc of empsQuery.docs) {
+                if (doc.id !== user.uid) { batch.delete(doc.ref); hasDups = true; }
+            }
+            if (hasDups) await batch.commit();
         },
 
         updateAttendanceLogEntry: async (id: string, updates: Partial<AttendanceLogEntry>) => {
@@ -287,15 +339,16 @@ const createRealApi = () => {
             await db!.collection('attendanceLog').doc(id).delete();
         },
 
-        // ── ADD EMPLOYEE: email normalizado ──
+        // ── ADD EMPLOYEE: email normalizado, nombre incluido en invitación ──
         addEmployee: async (employeeData: any) => {
             const user = auth!.currentUser;
             if (!user) throw new Error("No autenticado");
 
-            // Normalizar email antes de guardar
+            // Normalizar email (todo minúsculas, sin espacios)
             const normalizedEmployeeData = {
                 ...employeeData,
                 email: normalizeEmail(employeeData.email || ''),
+                name: (employeeData.name || '').trim(),
             };
 
             let companyId = normalizedEmployeeData.companyId;
@@ -312,6 +365,7 @@ const createRealApi = () => {
             const invitation = cleanObject({
                 id: invRef.id,
                 email: normalizedEmployeeData.email,
+                name: normalizedEmployeeData.name,        // ← nombre del admin para que acceptInvitation lo use
                 companyId: companyId,
                 companyName: companyName,
                 role: normalizedEmployeeData.role || 'employee',
@@ -471,11 +525,20 @@ const createRealApi = () => {
             if (!user) throw new Error("No session");
             const invDoc = await db!.collection('invitations').doc(invitationId).get();
             if (!invDoc.exists) throw new Error("Invitation not found");
-            const data = invDoc.data() as Invitation;
+            const data = invDoc.data() as Invitation & { name?: string };
             const cleanEmail = normalizeEmail(user.email || '');
+
+            // Prioridad del nombre: 1) nombre guardado por el admin en la invitación
+            //                       2) displayName de Firebase Auth
+            //                       3) parte local del email
+            const resolvedName = (data.name || '').trim()
+                || (user.displayName || '').trim()
+                || cleanEmail.split('@')[0];
+
+            // Escribir con el UID como ID del doc (evita duplicados futuros)
             await db!.collection('employees').doc(user.uid).set(cleanObject({
                 id: user.uid, uid: user.uid, email: cleanEmail,
-                name: user.displayName || cleanEmail.split('@')[0] || 'Colaborador',
+                name: resolvedName,
                 companyId: data.companyId, role: data.role || 'employee',
                 hireDate: data.hireDate, terminationDate: data.terminationDate,
                 manualVacationAdjustment: data.manualVacationAdjustment,
@@ -484,9 +547,17 @@ const createRealApi = () => {
                 status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null,
                 emailVerified: user.emailVerified
             }));
+
             await db!.collection('invitations').doc(invitationId).update({ status: 'accepted' });
+
+            // Eliminar cualquier doc duplicado con el mismo email pero diferente ID
             const empsQuery = await db!.collection('employees').where('email', '==', cleanEmail).get();
-            for (const doc of empsQuery.docs) { if (doc.id !== user.uid) await doc.ref.delete(); }
+            const batch = db!.batch();
+            let hasDups = false;
+            for (const doc of empsQuery.docs) {
+                if (doc.id !== user.uid) { batch.delete(doc.ref); hasDups = true; }
+            }
+            if (hasDups) await batch.commit();
         },
 
         getNotificationRecipients: async () => {

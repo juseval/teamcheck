@@ -68,18 +68,48 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Timer + auto clock-out 24h
+  // Timer:
+  // - Working:           acumulado de trabajo (corre)
+  // - Actividad/break:   tiempo EN esa actividad desde currentStatusStartTime (corre)
+  // - Clocked Out:       0
   useEffect(() => {
     if (employee.status === 'Clocked Out') {
       hasAutoClockedOut.current = false;
       setElapsedTime(0);
       return;
     }
-    if (employee.currentStatusStartTime) {
+
+    const isWorking    = employee.status === 'Working';
+    const hasNewFields = employee.accumulatedWorkSeconds !== undefined || employee.workSessionStartTime !== undefined;
+
+    if (isWorking) {
+      // ── Modo Working: mostrar tiempo de trabajo acumulado ──
+      if (!hasNewFields) {
+        // Fallback legacy: desde lastClockInTime
+        const fallbackStart = employee.lastClockInTime ?? employee.currentStatusStartTime ?? null;
+        if (!fallbackStart) return;
+        const updateTimer = () => {
+          const seconds = Math.floor((Date.now() - fallbackStart) / 1000);
+          setElapsedTime(seconds);
+          if (employee.autoClockOut24h !== false && seconds >= 86400 && !hasAutoClockedOut.current) {
+            hasAutoClockedOut.current = true;
+            onAction(employee.id, 'Clock Out');
+          }
+        };
+        updateTimer();
+        const interval = setInterval(updateTimer, 1000);
+        return () => clearInterval(interval);
+      }
+
+      const base         = employee.accumulatedWorkSeconds ?? 0;
+      const sessionStart = employee.workSessionStartTime ?? null;
+      if (!sessionStart) { setElapsedTime(base); return; }
+
       const updateTimer = () => {
-        const seconds = Math.floor((Date.now() - (employee.currentStatusStartTime || 0)) / 1000);
-        setElapsedTime(seconds);
-        if (employee.autoClockOut24h !== false && seconds >= 86400 && !hasAutoClockedOut.current) {
+        const live  = Math.floor((Date.now() - sessionStart) / 1000);
+        const total = base + live;
+        setElapsedTime(total);
+        if (employee.autoClockOut24h !== false && total >= 86400 && !hasAutoClockedOut.current) {
           hasAutoClockedOut.current = true;
           onAction(employee.id, 'Clock Out');
         }
@@ -87,8 +117,19 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
       updateTimer();
       const interval = setInterval(updateTimer, 1000);
       return () => clearInterval(interval);
+
+    } else {
+      // ── Actividad/break: mostrar tiempo EN ese estado (currentStatusStartTime) ──
+      const activityStart = employee.currentStatusStartTime ?? null;
+      if (!activityStart) return;
+      const updateTimer = () => {
+        setElapsedTime(Math.floor((Date.now() - activityStart) / 1000));
+      };
+      updateTimer();
+      const interval = setInterval(updateTimer, 1000);
+      return () => clearInterval(interval);
     }
-  }, [employee.status, employee.currentStatusStartTime, employee.autoClockOut24h, employee.id, onAction]);
+  }, [employee.status, employee.accumulatedWorkSeconds, employee.workSessionStartTime, employee.currentStatusStartTime, employee.lastClockInTime, employee.autoClockOut24h, employee.id, onAction]);
 
   const handleSelectActivity = (activityName: string) => {
     onAction(employee.id, `Start ${activityName}`);
@@ -202,7 +243,9 @@ const EmployeeCard: React.FC<EmployeeCardProps> = ({ employee, onAction, onRemov
           )}
           <div className="text-xs text-bokara-grey/60 -mt-1 truncate">
             {isClockedIn && employee.lastClockInTime
-              ? `Session | In since ${new Date(employee.lastClockInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+              ? employee.status === 'Working'
+                ? `⏱ Working | In since ${new Date(employee.lastClockInTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                : `⏱ ${employee.status} | In since ${employee.currentStatusStartTime ? new Date(employee.currentStatusStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--'}`
               : 'Offline'}
           </div>
         </div>

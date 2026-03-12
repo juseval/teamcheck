@@ -37,6 +37,10 @@ export interface Employee {
   status: EmployeeStatus;
   lastClockInTime: number | null;
   currentStatusStartTime: number | null;
+  /** Segundos de trabajo acumulados en la sesión actual (excluye breaks/actividades) */
+  accumulatedWorkSeconds?: number;
+  /** Timestamp de cuando empezó el tramo Working actual (se resetea en cada Start/End Activity) */
+  workSessionStartTime?: number | null;
   avatarUrl?: string;
   workScheduleId?: string | null;
   seatId?: string | null;

@@ -388,10 +388,38 @@ const AppContent: React.FC = () => {
       else if (action === 'Clock Out') newStatus = 'Clocked Out';
       else if (action.startsWith('Start ')) newStatus = action.substring(6);
       else if (action.startsWith('End ')) newStatus = 'Working';
+
       const updates: any = { status: newStatus, currentStatusStartTime: newStatus === 'Clocked Out' ? null : timestamp };
-      if (action === 'Clock In') updates.lastClockInTime = timestamp;
+
+      // ── Contador de trabajo acumulado ──────────────────────────────────────
+      if (action === 'Clock In') {
+        // Empieza sesión desde 0
+        updates.lastClockInTime        = timestamp;
+        updates.accumulatedWorkSeconds = 0;
+        updates.workSessionStartTime   = timestamp;
+      }
+      else if (action.startsWith('Start ')) {
+        // Congela el contador sumando el tramo Working actual
+        const prevStart = employee.workSessionStartTime
+          ?? employee.lastClockInTime
+          ?? employee.currentStatusStartTime
+          ?? timestamp;
+        const elapsed = Math.floor((timestamp - prevStart) / 1000);
+        updates.accumulatedWorkSeconds = (employee.accumulatedWorkSeconds ?? 0) + Math.max(0, elapsed);
+        updates.workSessionStartTime   = null;
+      }
+      else if (action.startsWith('End ')) {
+        // Reactiva desde ahora — SIEMPRE escribir accumulatedWorkSeconds para que no se pierda
+        updates.workSessionStartTime   = timestamp;
+        updates.accumulatedWorkSeconds = employee.accumulatedWorkSeconds ?? 0;
+      }
+      else if (action === 'Clock Out') {
+        updates.accumulatedWorkSeconds = null;
+        updates.workSessionStartTime   = null;
+      }
+      // ──────────────────────────────────────────────────────────────────────
+
       await updateEmployeeStatus({ ...employee, ...updates });
-      // Actualizar estado del usuario actual para reflejar cambio en el Header
       if (user && employeeId === user.id) setUser(prev => prev ? { ...prev, ...updates } : prev);
       addNotification(`${action} registrado`, 'success');
     } catch (error) { addNotification('Error al actualizar estado', 'error'); }
@@ -400,6 +428,22 @@ const AppContent: React.FC = () => {
   const handleUpdateLogEntry = async (logId: string, updates: Partial<AttendanceLogEntry>) => {
     try {
       await updateAttendanceLogEntry(logId, updates);
+
+      // Si se editó un Clock In, actualizar también lastClockInTime en el empleado
+      // para que el tracker y el timeline reflejen la hora correcta
+      const logEntry = attendanceLog.find(e => e.id === logId);
+      if (logEntry && logEntry.action === 'Clock In' && updates.timestamp) {
+        const emp = employees.find(e => e.id === logEntry.employeeId);
+        if (emp) {
+          await updateEmployeeStatus({
+            ...emp,
+            lastClockInTime:       updates.timestamp,
+            workSessionStartTime:  updates.timestamp,   // re-anclar el tramo Working
+            accumulatedWorkSeconds: emp.accumulatedWorkSeconds ?? 0,
+          } as any);
+        }
+      }
+
       setIsEditActivityLogEntryModalOpen(false);
       addNotification('Registro actualizado.', 'success');
     } catch (error) { addNotification('Error al actualizar.', 'error'); }
