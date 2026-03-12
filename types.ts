@@ -1,4 +1,3 @@
-
 export type EmployeeStatus = string;
 
 export interface Company {
@@ -18,7 +17,6 @@ export interface Invitation {
   status: 'pending' | 'accepted';
   invitedBy: string;
   createdAt: number;
-  // Campos de metadatos del contrato
   hireDate?: number;
   terminationDate?: number;
   manualVacationAdjustment?: number;
@@ -29,7 +27,7 @@ export interface Invitation {
 
 export interface Employee {
   id: string;
-  uid?: string; 
+  uid?: string;
   companyId: string;
   name: string;
   email: string;
@@ -93,7 +91,7 @@ export interface Message {
 }
 
 export interface ActivityStatus {
-  id:string;
+  id: string;
   companyId?: string;
   name: string;
   color: string;
@@ -145,9 +143,42 @@ export interface PayrollChangeType {
   companyId?: string;
   name: string;
   color: string;
-  isExclusive?: boolean;
-  adminOnly?: boolean;
+
+  // ── Nombres nuevos (Settings y TicketingPage usan estos) ──
+
+  /**
+   * "Requiere Aprobación"
+   * true  → el colaborador solicita y el admin aprueba antes de que cuente en la tabla anual.
+   * false → el admin lo registra directamente y cuenta de inmediato.
+   */
+  requiereAprobacion?: boolean;
+
+  /**
+   * "Solo Admin"
+   * true  → solo el admin puede registrar esta novedad.
+   * false → el colaborador puede verla y solicitarla.
+   */
+  soloAdmin?: boolean;
+
+  /**
+   * Cupo máximo por AÑO COMPLETO (días/usos).
+   */
   yearlyQuota?: number;
+
+  /**
+   * Cupo máximo por SEMESTRE.
+   * Activa las ventanas semestrales de solicitud para colaboradores:
+   *  - S1 (Ene–Jun): ventana del 1 Dic al 31 May
+   *  - S2 (Jul–Dic): ventana del 1 Jun al 30 Nov
+   * Admins y master siempre pueden registrar sin restricción de ventana.
+   */
+  semesterQuota?: number;
+
+  // ── Aliases de compatibilidad (otros componentes que aún usan los nombres viejos) ──
+  /** @deprecated usa `requiereAprobacion` */
+  isExclusive?: boolean;
+  /** @deprecated usa `soloAdmin` */
+  adminOnly?: boolean;
 }
 
 export interface WorkSchedule {

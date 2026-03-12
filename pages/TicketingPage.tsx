@@ -124,11 +124,141 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
   }, [payrollChangeTypes]);
 
   // ── Tipos visibles según rol ──
+  // soloAdmin (o adminOnly legacy) = true → solo admins/master lo ven
   const visibleTypes = useMemo(() => {
     if (!currentUser || currentUser.role === 'admin' || currentUser.role === 'master')
       return payrollChangeTypes;
-    return payrollChangeTypes.filter(t => !t.adminOnly);
+    return payrollChangeTypes.filter(t => !t.soloAdmin && !t.adminOnly);
   }, [payrollChangeTypes, currentUser]);
+
+  // ─────────────────────────────────────────────
+  //  HELPER: Ventanas semestrales y cupos
+  // ─────────────────────────────────────────────
+
+  /**
+   * Devuelve { allowed, reason } para el colaborador al solicitar un tipo con semesterQuota.
+   * Los admins/master siempre pasan (allowed=true).
+   *
+   * Semestres:
+   *  S1: Ene 1 – Jun 30  →  ventana de solicitud: Dic 1 (año ant.) – May 31
+   *  S2: Jul 1 – Dic 31  →  ventana de solicitud: Jun 1 – Nov 30
+   */
+  const checkSemesterQuota = (typeConfig: typeof payrollChangeTypes[0], startDate: string): { allowed: boolean; reason?: string } => {
+    // Admins/master sin restricción de ventana
+    if (currentUser.role === 'admin' || currentUser.role === 'master') return { allowed: true };
+
+    const today = new Date();
+    const todayMonth = today.getMonth() + 1; // 1–12
+
+    // ¿En qué ventana estamos hoy?
+    // S1 window: Dic(12) | Ene-May(1-5)
+    // S2 window: Jun(6) – Nov(11)
+    const inS1Window = todayMonth === 12 || todayMonth <= 5;
+    const inS2Window = todayMonth >= 6 && todayMonth <= 11;
+
+    const eventDate = new Date(startDate + 'T00:00:00');
+    const eventMonth = eventDate.getMonth() + 1; // 1–12
+    const eventYear  = eventDate.getFullYear();
+
+    // ¿A qué semestre pertenece la fecha solicitada?
+    const eventInS1 = eventMonth >= 1 && eventMonth <= 6;   // Ene–Jun
+    const eventInS2 = eventMonth >= 7 && eventMonth <= 12;  // Jul–Dic
+
+    // Validar que la fecha caiga en el semestre habilitado hoy
+    if (eventInS1 && !inS1Window) {
+      return { allowed: false, reason: 'Las solicitudes para el 1° semestre (Ene–Jun) se abren el 1 de diciembre.' };
+    }
+    if (eventInS2 && !inS2Window) {
+      return { allowed: false, reason: 'Las solicitudes para el 2° semestre (Jul–Dic) se abren el 1 de junio.' };
+    }
+
+    // Calcular cuántas veces usó el cupo en este semestre (solo aprobadas)
+    const semStart = eventInS1 ? `${eventYear}-01-01` : `${eventYear}-07-01`;
+    const semEnd   = eventInS1 ? `${eventYear}-06-30` : `${eventYear}-12-31`;
+
+    const used = events.filter(e =>
+      e.employeeId === currentUser.id &&
+      e.type === typeConfig.name &&
+      e.status === 'approved' &&
+      e.startDate >= semStart &&
+      e.startDate <= semEnd
+    ).length;
+
+    const quota = typeConfig.semesterQuota ?? 1;
+    if (used >= quota) {
+      const semLabel = eventInS1 ? '1° semestre' : '2° semestre';
+      return { allowed: false, reason: `Ya usaste tu cupo del ${semLabel} (${quota} de ${quota}).` };
+    }
+
+    return { allowed: true };
+  };
+
+  /**
+   * Devuelve { allowed, reason } para cupo anual (yearlyQuota).
+   * Admins/master sin restricción.
+   */
+  const checkYearlyQuota = (typeConfig: typeof payrollChangeTypes[0], startDate: string): { allowed: boolean; reason?: string } => {
+    if (currentUser.role === 'admin' || currentUser.role === 'master') return { allowed: true };
+    if (!typeConfig.yearlyQuota) return { allowed: true };
+
+    const eventYear = new Date(startDate + 'T00:00:00').getFullYear();
+    const used = events.filter(e =>
+      e.employeeId === currentUser.id &&
+      e.type === typeConfig.name &&
+      e.status === 'approved' &&
+      e.startDate.startsWith(eventYear.toString())
+    ).length;
+
+    if (used >= typeConfig.yearlyQuota) {
+      return { allowed: false, reason: `Ya alcanzaste el cupo anual de ${typeConfig.yearlyQuota} para ${typeConfig.name}.` };
+    }
+    return { allowed: true };
+  };
+
+  /**
+   * Resumen legible del cupo para mostrar en el modal de solicitud.
+   */
+  const quotaSummary = useMemo(() => {
+    if (!newRequestType || !newRequestStartDate) return null;
+    const typeConfig = payrollChangeTypes.find(t => t.name === newRequestType);
+    if (!typeConfig) return null;
+    if (currentUser.role === 'admin' || currentUser.role === 'master') return null;
+
+    const lines: string[] = [];
+
+    if (typeConfig.semesterQuota) {
+      const eventDate  = new Date(newRequestStartDate + 'T00:00:00');
+      const eventMonth = eventDate.getMonth() + 1;
+      const eventYear  = eventDate.getFullYear();
+      const eventInS1  = eventMonth >= 1 && eventMonth <= 6;
+      const semStart   = eventInS1 ? `${eventYear}-01-01` : `${eventYear}-07-01`;
+      const semEnd     = eventInS1 ? `${eventYear}-06-30` : `${eventYear}-12-31`;
+      const used       = events.filter(e =>
+        e.employeeId === currentUser.id &&
+        e.type === typeConfig.name &&
+        e.status === 'approved' &&
+        e.startDate >= semStart &&
+        e.startDate <= semEnd
+      ).length;
+      const remaining = Math.max(0, (typeConfig.semesterQuota ?? 1) - used);
+      const semLabel  = eventInS1 ? '1er semestre' : '2do semestre';
+      lines.push(`Cupo ${semLabel}: ${remaining} restante(s) de ${typeConfig.semesterQuota}`);
+    }
+
+    if (typeConfig.yearlyQuota && !typeConfig.semesterQuota) {
+      const eventYear = new Date(newRequestStartDate + 'T00:00:00').getFullYear();
+      const used      = events.filter(e =>
+        e.employeeId === currentUser.id &&
+        e.type === typeConfig.name &&
+        e.status === 'approved' &&
+        e.startDate.startsWith(eventYear.toString())
+      ).length;
+      const remaining = Math.max(0, typeConfig.yearlyQuota - used);
+      lines.push(`Cupo anual: ${remaining} restante(s) de ${typeConfig.yearlyQuota}`);
+    }
+
+    return lines.length > 0 ? lines.join(' · ') : null;
+  }, [newRequestType, newRequestStartDate, payrollChangeTypes, events, currentUser]);
 
   useEffect(() => {
     if (visibleTypes.length > 0) {
@@ -217,7 +347,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
         const dayStr    = d.toISOString().split('T')[0];
         const dayInGrid = days.find(day => day.date.toISOString().split('T')[0] === dayStr);
         if (dayInGrid) {
-          if (!isMine && selectedTypeConfig?.isExclusive && event.type === viewType && event.status === 'approved')
+          if (!isMine && (selectedTypeConfig?.requiereAprobacion || selectedTypeConfig?.isExclusive) && event.type === viewType && event.status === 'approved')
             dayInGrid.isBlocked = true;
           if (isMine) {
             dayInGrid.events.push({
@@ -266,6 +396,27 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
       endDate:    newRequestEndDate,
       status:     'pending' as const,
     };
+
+    // ── Validaciones de cupo y ventana (solo para colaboradores, no en edición) ──
+    if (!editingEvent && currentUser.role === 'employee') {
+      const typeConfig = payrollChangeTypes.find(t => t.name === newRequestType);
+
+      if (typeConfig?.semesterQuota) {
+        const semCheck = checkSemesterQuota(typeConfig, newRequestStartDate);
+        if (!semCheck.allowed) {
+          addNotification(semCheck.reason ?? 'No puedes solicitar esta novedad ahora.', 'error');
+          setIsSubmitting(false);
+          return;
+        }
+      } else if (typeConfig?.yearlyQuota) {
+        const yearCheck = checkYearlyQuota(typeConfig, newRequestStartDate);
+        if (!yearCheck.allowed) {
+          addNotification(yearCheck.reason ?? 'Cupo anual agotado.', 'error');
+          setIsSubmitting(false);
+          return;
+        }
+      }
+    }
 
     try {
       if (editingEvent) {
@@ -578,6 +729,11 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
                   <div className="mt-3 p-2 bg-blue-50 text-blue-800 rounded border border-blue-100 text-[10px] leading-tight">
                     <strong>Regla CST (Dinero):</strong> Máximo 50% compensable.<br />
                     Te quedan <strong>{vacationStats.maxCompensable.toFixed(2)} días</strong> para solicitar en dinero.
+                  </div>
+                )}
+                {quotaSummary && (
+                  <div className="mt-2 p-2 bg-lucius-lime/10 text-bokara-grey rounded border border-lucius-lime/30 text-[10px] leading-tight font-medium">
+                    📊 {quotaSummary}
                   </div>
                 )}
               </div>

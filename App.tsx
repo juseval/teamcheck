@@ -53,7 +53,7 @@ import EditEventModal from './components/EditEventModal';
 import EditActivityLogEntryModal from './components/EditActivityLogEntryModal';
 import ConfirmationModal from './components/ConfirmationModal';
 
-// --- Error Boundary ---
+// --- Error Boundary (app level - full screen) ---
 type ErrorBoundaryProps = { children: React.ReactNode };
 type ErrorBoundaryState = { hasError: boolean; error: any };
 
@@ -71,6 +71,33 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
           <h1 className="text-4xl font-bold text-red-600 mb-4">¡Ups! Algo salió mal</h1>
           <p className="text-gray-600 mb-8 max-w-md">La aplicación encontró un error inesperado.</p>
           <button onClick={() => window.location.reload()} className="bg-lucius-lime text-bokara-grey font-bold py-3 px-8 rounded-xl shadow-lg">Recargar Aplicación</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// --- Page Error Boundary (page level - keeps header, shows inline error) ---
+type PageErrorBoundaryState = { hasError: boolean };
+class PageErrorBoundary extends React.Component<{ children: React.ReactNode; onReset?: () => void }, PageErrorBoundaryState> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: any) { console.error('[PageErrorBoundary]', error); }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-64 gap-4 text-center">
+          <p className="text-red-500 font-bold">Ocurrió un error en esta sección.</p>
+          <button
+            onClick={() => { this.setState({ hasError: false }); this.props.onReset?.(); }}
+            className="px-4 py-2 bg-lucius-lime text-bokara-grey font-bold rounded-lg text-sm"
+          >
+            Reintentar
+          </button>
         </div>
       );
     }
@@ -464,81 +491,96 @@ const AppContent: React.FC = () => {
 
           {/* TRACKER */}
           {currentPage === 'tracker' && (
-            <TrackerPage
-              employees={trackerEmployees}
-              attendanceLog={attendanceLog}
-              onEmployeeAction={handleEmployeeAction}
-              onAddEmployee={() => setIsAddEmployeeModalOpen(true)}
-              onRemoveEmployee={(id) => promptConfirm('Eliminar Colaborador', '¿Estás seguro?', () => removeEmployee(id))}
-              onEditTime={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeForTimeEdit(emp); setIsEditTimeModalOpen(true); } }}
-              userRole={user.role}
-              activityStatuses={activityStatuses}
-              workSchedules={workSchedules}
-              onEditEntry={(entry) => { setLogEntryToEdit(entry); setIsEditActivityLogEntryModalOpen(true); }}
-              onRemoveEntry={handleRemoveLogEntry}
-            />
+            <PageErrorBoundary>
+              <TrackerPage
+                employees={trackerEmployees}
+                attendanceLog={attendanceLog}
+                onEmployeeAction={handleEmployeeAction}
+                onAddEmployee={() => setIsAddEmployeeModalOpen(true)}
+                onRemoveEmployee={(id) => promptConfirm('Eliminar Colaborador', '¿Estás seguro?', () => removeEmployee(id))}
+                onEditTime={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeForTimeEdit(emp); setIsEditTimeModalOpen(true); } }}
+                userRole={user.role}
+                activityStatuses={activityStatuses}
+                workSchedules={workSchedules}
+                onEditEntry={(entry) => { setLogEntryToEdit(entry); setIsEditActivityLogEntryModalOpen(true); }}
+                onRemoveEntry={handleRemoveLogEntry}
+              />
+            </PageErrorBoundary>
           )}
 
           {/* DASHBOARD */}
           {currentPage === 'dashboard' && isAdminOrMaster && (
-            <DashboardPage attendanceLog={attendanceLog} employees={employees} onEmployeeAction={handleEmployeeAction} activityStatuses={activityStatuses} workSchedules={workSchedules} calendarEvents={calendarEvents} inviteCode={company?.inviteCode} />
+            <PageErrorBoundary>
+              <DashboardPage attendanceLog={attendanceLog} employees={employees} onEmployeeAction={handleEmployeeAction} activityStatuses={activityStatuses} workSchedules={workSchedules} calendarEvents={calendarEvents} inviteCode={company?.inviteCode} />
+            </PageErrorBoundary>
           )}
 
           {/* TIMESHEET */}
           {currentPage === 'timesheet' && isAdminOrMaster && (
-            <TimesheetPage employees={employees} attendanceLog={attendanceLog} activityStatuses={activityStatuses} onEditEntry={(entry) => { setTimesheetEntryToEdit(entry); setIsEditTimesheetModalOpen(true); }} />
+            <PageErrorBoundary>
+              <TimesheetPage employees={employees} attendanceLog={attendanceLog} activityStatuses={activityStatuses} onEditEntry={(entry) => { setTimesheetEntryToEdit(entry); setIsEditTimesheetModalOpen(true); }} />
+            </PageErrorBoundary>
           )}
 
           {/* EMPLOYEES */}
           {currentPage === 'employees' && isAdminOrMaster && (
-            <EmployeesPage
-              employees={employees}
-              onAddEmployee={() => setIsAddEmployeeModalOpen(true)}
-              onEditEmployee={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeToEdit(emp); setIsEditEmployeeModalOpen(true); } }}
-              onRemoveEmployee={(id) => promptConfirm('Eliminar Colaborador', '¿Estás seguro?', () => removeEmployee(id))}
-              workSchedules={workSchedules}
-              currentUser={user}
-              inviteCode={company?.inviteCode}
-            />
+            <PageErrorBoundary>
+              <EmployeesPage
+                employees={employees}
+                onAddEmployee={() => setIsAddEmployeeModalOpen(true)}
+                onEditEmployee={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeToEdit(emp); setIsEditEmployeeModalOpen(true); } }}
+                onRemoveEmployee={(id) => promptConfirm('Eliminar Colaborador', '¿Estás seguro?', () => removeEmployee(id))}
+                workSchedules={workSchedules}
+                currentUser={user}
+                inviteCode={company?.inviteCode}
+              />
+            </PageErrorBoundary>
           )}
 
           {/* SCHEDULE */}
           {currentPage === 'schedule' && (
-            <SchedulePage
-              events={calendarEvents}
-              employees={employees}
-              payrollChangeTypes={payrollChangeTypes}
-              onAddEvent={() => setIsAddEventModalOpen(true)}
-              onEditEvent={(event) => { setEventToEdit(event); setIsEditEventModalOpen(true); }}
-              onRemoveEvent={(event) => promptConfirm(
-                'Eliminar Evento', '¿Estás seguro?',
-                async () => {
+            <PageErrorBoundary>
+              <SchedulePage
+                events={calendarEvents}
+                employees={employees}
+                payrollChangeTypes={payrollChangeTypes}
+                onAddEvent={() => setIsAddEventModalOpen(true)}
+                onEditEvent={(event) => { setEventToEdit(event); setIsEditEventModalOpen(true); }}
+                onRemoveEvent={(event) => promptConfirm(
+                  'Eliminar Evento', '¿Estás seguro?',
+                  async () => {
+                    try {
+                      await removeCalendarEvent(event.id);
+                      setCalendarEvents(await getCalendarEvents());
+                      addNotification('Evento eliminado', 'success');
+                    } catch { addNotification('Error al eliminar', 'error'); }
+                  }
+                )}
+                onUpdateEventStatus={async (event, status) => {
                   try {
-                    await removeCalendarEvent(event.id);
-                    setCalendarEvents(await getCalendarEvents());
-                    addNotification('Evento eliminado', 'success');
-                  } catch { addNotification('Error al eliminar', 'error'); }
-                }
-              )}
-              onUpdateEventStatus={async (event, status) => {
-                await updateCalendarEvent({ ...event, status });
-                setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e));
-              }}
-            />
+                    await updateCalendarEvent({ ...event, status });
+                    setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e));
+                  } catch { addNotification('Error al actualizar estado', 'error'); }
+                }}
+              />
+            </PageErrorBoundary>
           )}
 
           {/* SEATING */}
           {currentPage === 'seating' && (
-            <SeatingPage employees={employees} activityStatuses={activityStatuses} currentUserRole={user.role} />
+            <PageErrorBoundary>
+              <SeatingPage employees={employees} activityStatuses={activityStatuses} currentUserRole={user.role} />
+            </PageErrorBoundary>
           )}
 
           {/* TICKETING */}
           {currentPage === 'ticketing' && (
-            <TicketingPage
-              events={calendarEvents}
-              currentUser={user}
-              employees={employees}
-              payrollChangeTypes={payrollChangeTypes}
+            <PageErrorBoundary>
+              <TicketingPage
+                events={calendarEvents}
+                currentUser={user}
+                employees={employees}
+                payrollChangeTypes={payrollChangeTypes}
               onAddRequest={async (req) => {
                 try {
                   await addCalendarEvent({ ...req, status: 'pending' });
@@ -569,25 +611,28 @@ const AppContent: React.FC = () => {
                 } catch { addNotification('Error al actualizar estado', 'error'); }
               }}
             />
+            </PageErrorBoundary>
           )}
 
           {/* SETTINGS */}
           {currentPage === 'settings' && isAdminOrMaster && (
-            <SettingsPage
-              statuses={activityStatuses}
-              onAddStatus={async (n, c) => { await addActivityStatus(n, c); setActivityStatuses(await getActivityStatuses()); }}
-              onRemoveStatus={async (id) => { await removeActivityStatus(id); setActivityStatuses(await getActivityStatuses()); }}
-              payrollChangeTypes={payrollChangeTypes}
-              onAddPayrollChangeType={async (n, c, e, a, quota) => { await addPayrollChangeType(n, c, e, a, quota); setPayrollChangeTypes(await getPayrollChangeTypes()); }}
-              onUpdatePayrollChangeType={async (id, u) => { await updatePayrollChangeType(id, u); setPayrollChangeTypes(await getPayrollChangeTypes()); }}
-              onRemovePayrollChangeType={async (id) => { await removePayrollChangeType(id); setPayrollChangeTypes(await getPayrollChangeTypes()); }}
-              workSchedules={workSchedules}
-              onAddWorkSchedule={async (s) => { await addWorkSchedule(s); setWorkSchedules(await getWorkSchedules()); }}
-              onUpdateWorkSchedule={async (id, u) => { await updateWorkSchedule(id, u); setWorkSchedules(await getWorkSchedules()); }}
-              onRemoveWorkSchedule={async (id) => { await removeWorkSchedule(id); setWorkSchedules(await getWorkSchedules()); }}
-              companyId={user.companyId}
-              inviteCode={company?.inviteCode}
-            />
+            <PageErrorBoundary>
+              <SettingsPage
+                statuses={activityStatuses}
+                onAddStatus={async (n, c) => { try { await addActivityStatus(n, c); setActivityStatuses(await getActivityStatuses()); } catch { addNotification('Error al guardar estado', 'error'); } }}
+                onRemoveStatus={async (id) => { try { await removeActivityStatus(id); setActivityStatuses(await getActivityStatuses()); } catch { addNotification('Error al eliminar estado', 'error'); } }}
+                payrollChangeTypes={payrollChangeTypes}
+                onAddPayrollChangeType={async (n, c, e, a, quota, semQuota) => { try { await addPayrollChangeType(n, c, e, a, quota, semQuota); setPayrollChangeTypes(await getPayrollChangeTypes()); } catch { addNotification('Error al agregar tipo', 'error'); } }}
+                onUpdatePayrollChangeType={async (id, u) => { try { await updatePayrollChangeType(id, u); setPayrollChangeTypes(await getPayrollChangeTypes()); } catch { addNotification('Error al actualizar tipo', 'error'); } }}
+                onRemovePayrollChangeType={async (id) => { try { await removePayrollChangeType(id); setPayrollChangeTypes(await getPayrollChangeTypes()); } catch { addNotification('Error al eliminar tipo', 'error'); } }}
+                workSchedules={workSchedules}
+                onAddWorkSchedule={async (s) => { try { await addWorkSchedule(s); setWorkSchedules(await getWorkSchedules()); } catch { addNotification('Error al agregar horario', 'error'); } }}
+                onUpdateWorkSchedule={async (id, u) => { try { await updateWorkSchedule(id, u); setWorkSchedules(await getWorkSchedules()); } catch { addNotification('Error al actualizar horario', 'error'); } }}
+                onRemoveWorkSchedule={async (id) => { try { await removeWorkSchedule(id); setWorkSchedules(await getWorkSchedules()); } catch { addNotification('Error al eliminar horario', 'error'); } }}
+                companyId={user.companyId}
+                inviteCode={company?.inviteCode}
+              />
+            </PageErrorBoundary>
           )}
 
           {/* PROFILE */}

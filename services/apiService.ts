@@ -66,7 +66,7 @@ const createMockApi = () => ({
     removeWorkSchedule: async (id: string) => {},
     addActivityStatus: async (n: string, c: string) => {},
     removeActivityStatus: async (id: string) => {},
-    addPayrollChangeType: async (n: string, c: string, e: boolean, a: boolean, q?: number) => {},
+    addPayrollChangeType: async (n: string, c: string, e: boolean, a: boolean, q?: number, sq?: number) => {},
     updatePayrollChangeType: async (id: string, u: any) => {},
     removePayrollChangeType: async (id: string) => {},
     addCalendarEvent: async (e: any) => e,
@@ -384,12 +384,12 @@ const createRealApi = () => {
 
         removeActivityStatus: async (id: string) => { await db!.collection('activityStatuses').doc(id).delete(); },
 
-        addPayrollChangeType: async (name: string, color: string, isExclusive: boolean, adminOnly: boolean, yearlyQuota?: number) => {
+        addPayrollChangeType: async (name: string, color: string, requiereAprobacion: boolean, soloAdmin: boolean, yearlyQuota?: number, semesterQuota?: number) => {
             const user = auth!.currentUser;
             const doc = await db!.collection('employees').doc(user!.uid).get();
             const companyId = doc.data()?.companyId;
             const ref = db!.collection('payrollChangeTypes').doc();
-            await ref.set({ id: ref.id, name, color, isExclusive, adminOnly, yearlyQuota, companyId });
+            await ref.set({ id: ref.id, name, color, requiereAprobacion, soloAdmin, yearlyQuota, semesterQuota, companyId });
         },
 
         updatePayrollChangeType: async (id: string, updates: any) => { await db!.collection('payrollChangeTypes').doc(id).update(updates); },

@@ -10,6 +10,7 @@ interface EditActivityLogEntryModalProps {
 }
 
 const EditActivityLogEntryModal: React.FC<EditActivityLogEntryModalProps> = ({ isOpen, onClose, onSave, entry, activityStatuses }) => {
+  const [editedDate, setEditedDate] = useState('');
   const [editedTime, setEditedTime] = useState('');
   const [editedAction, setEditedAction] = useState('');
   const [adminNote, setAdminNote] = useState('');
@@ -18,9 +19,12 @@ const EditActivityLogEntryModal: React.FC<EditActivityLogEntryModalProps> = ({ i
   useEffect(() => {
     if (entry) {
       const date = new Date(entry.timestamp);
-      const hours = date.getHours().toString().padStart(2, '0');
-      const minutes = date.getMinutes().toString().padStart(2, '0');
-      setEditedTime(`${hours}:${minutes}`);
+      // Fecha en formato YYYY-MM-DD para el input type="date"
+      const yyyy = date.getFullYear();
+      const mm   = (date.getMonth() + 1).toString().padStart(2, '0');
+      const dd   = date.getDate().toString().padStart(2, '0');
+      setEditedDate(`${yyyy}-${mm}-${dd}`);
+      setEditedTime(`${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`);
       setEditedAction(entry.action);
       setAdminNote(entry.adminResponse || '');
       setIsHandlingRequest(entry.correctionStatus === 'pending');
@@ -47,12 +51,25 @@ const EditActivityLogEntryModal: React.FC<EditActivityLogEntryModalProps> = ({ i
     return options;
   }, [activityStatuses]);
 
+  // Fecha máxima permitida = hoy (no se puede corregir a fecha futura)
+  const todayStr = useMemo(() => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm   = (now.getMonth() + 1).toString().padStart(2, '0');
+    const dd   = now.getDate().toString().padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  }, []);
+
   const hasChanges = useMemo(() => {
     if (!entry) return false;
     const originalDate = new Date(entry.timestamp);
-    const originalTime = `${originalDate.getHours().toString().padStart(2, '0')}:${originalDate.getMinutes().toString().padStart(2, '0')}`;
-    return editedAction !== entry.action || editedTime !== originalTime || adminNote !== (entry.adminResponse || '');
-  }, [entry, editedAction, editedTime, adminNote]);
+    const origDateStr = `${originalDate.getFullYear()}-${(originalDate.getMonth()+1).toString().padStart(2,'0')}-${originalDate.getDate().toString().padStart(2,'0')}`;
+    const origTimeStr = `${originalDate.getHours().toString().padStart(2,'0')}:${originalDate.getMinutes().toString().padStart(2,'0')}`;
+    return editedAction !== entry.action
+      || editedTime !== origTimeStr
+      || editedDate !== origDateStr
+      || adminNote !== (entry.adminResponse || '');
+  }, [entry, editedAction, editedTime, editedDate, adminNote]);
 
   const quickReplies = [
     "Aprobado.",
@@ -64,31 +81,35 @@ const EditActivityLogEntryModal: React.FC<EditActivityLogEntryModalProps> = ({ i
   if (!isOpen || !entry) return null;
 
   const handleSave = (status: 'approved' | 'rejected' | null = null) => {
-    if (editedTime) {
-      const [hours, minutes] = editedTime.split(':').map(Number);
-      const newTimestamp = new Date(entry.timestamp);
-      newTimestamp.setHours(hours, minutes, 0, 0);
+    if (!editedDate || !editedTime) return;
 
-      if (newTimestamp.getTime() > Date.now()) {
-        alert("No se puede establecer una hora en el futuro.");
-        return;
-      }
+    // Combinar la fecha editada + hora editada en un timestamp
+    const [year, month, day] = editedDate.split('-').map(Number);
+    const [hours, minutes]   = editedTime.split(':').map(Number);
+    const newTimestamp = new Date(year, month - 1, day, hours, minutes, 0, 0);
 
-      const updates: Partial<AttendanceLogEntry> = {
-        action: editedAction,
-        timestamp: newTimestamp.getTime(),
-        adminResponse: adminNote,
-      };
-      if (status) updates.correctionStatus = status;
-
-      onSave(entry.id, updates);
+    if (newTimestamp.getTime() > Date.now()) {
+      alert("No se puede establecer una fecha/hora en el futuro.");
+      return;
     }
+
+    const updates: Partial<AttendanceLogEntry> = {
+      action: editedAction,
+      timestamp: newTimestamp.getTime(),
+      adminResponse: adminNote,
+    };
+    if (status) updates.correctionStatus = status;
+
+    onSave(entry.id, updates);
   };
 
   const handleSubmitNormal = (e: React.FormEvent) => {
     e.preventDefault();
     handleSave(null);
   };
+
+  // Etiqueta de la fecha para mostrar al lado del input
+  const editedDateLabel = editedDate ? new Date(editedDate + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' }) : '';
 
   return (
     <div className="fixed inset-0 bg-bokara-grey bg-opacity-60 flex items-center justify-center z-50 transition-opacity" onClick={onClose} aria-modal="true" role="dialog">
@@ -97,7 +118,7 @@ const EditActivityLogEntryModal: React.FC<EditActivityLogEntryModalProps> = ({ i
           {isHandlingRequest ? 'Responder Solicitud' : 'Editar Registro'}
         </h2>
         <p className="text-bokara-grey/80 mb-1">Colaborador: <span className="font-semibold">{entry.employeeName}</span></p>
-        <p className="text-bokara-grey/60 mb-4 text-sm">Fecha: {new Date(entry.timestamp).toLocaleDateString()}</p>
+        <p className="text-bokara-grey/60 mb-4 text-sm">Fecha original: {new Date(entry.timestamp).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</p>
 
         {/* SOLICITUD DEL COLABORADOR */}
         {entry.correctionRequest && (
@@ -105,7 +126,6 @@ const EditActivityLogEntryModal: React.FC<EditActivityLogEntryModalProps> = ({ i
             <p className="text-xs text-yellow-800 font-bold uppercase mb-1">Solicitud del Colaborador</p>
             <p className="text-sm text-bokara-grey italic">"{entry.correctionRequest}"</p>
 
-            {/* Sugerencia de hora y acción */}
             {hasSuggestion && (
               <div className="mt-2 pt-2 border-t border-yellow-200">
                 <p className="text-xs text-yellow-800 font-bold uppercase mb-1.5">Corrección sugerida</p>
@@ -138,6 +158,27 @@ const EditActivityLogEntryModal: React.FC<EditActivityLogEntryModalProps> = ({ i
         )}
 
         <form onSubmit={handleSubmitNormal} className="space-y-4">
+
+          {/* ── FECHA ── */}
+          <div>
+            <label htmlFor="logDate" className="block text-sm font-medium text-lucius-lime mb-1">Fecha</label>
+            <div className="flex items-center gap-3">
+              <input
+                id="logDate"
+                type="date"
+                value={editedDate}
+                max={todayStr}
+                onChange={e => setEditedDate(e.target.value)}
+                className="bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime"
+                required
+              />
+              {editedDateLabel && (
+                <span className="text-xs text-bokara-grey/50 capitalize">{editedDateLabel}</span>
+              )}
+            </div>
+          </div>
+
+          {/* ── HORA + ACCIÓN ── */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="logTime" className="block text-sm font-medium text-lucius-lime mb-1">Hora</label>
@@ -145,7 +186,7 @@ const EditActivityLogEntryModal: React.FC<EditActivityLogEntryModalProps> = ({ i
                 id="logTime"
                 type="time"
                 value={editedTime}
-                onChange={(e) => setEditedTime(e.target.value)}
+                onChange={e => setEditedTime(e.target.value)}
                 className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 text-lg focus:outline-none focus:ring-2 focus:ring-lucius-lime"
                 required
               />
@@ -155,7 +196,7 @@ const EditActivityLogEntryModal: React.FC<EditActivityLogEntryModalProps> = ({ i
               <select
                 id="logAction"
                 value={editedAction}
-                onChange={(e) => setEditedAction(e.target.value)}
+                onChange={e => setEditedAction(e.target.value)}
                 className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime"
               >
                 {actionOptions.map(action => (
@@ -165,6 +206,7 @@ const EditActivityLogEntryModal: React.FC<EditActivityLogEntryModalProps> = ({ i
             </div>
           </div>
 
+          {/* ── CONTEXTO / RESPUESTA ── */}
           <div>
             <label htmlFor="adminNote" className="block text-sm font-medium text-lucius-lime mb-1">
               Contexto / Respuesta
@@ -172,7 +214,7 @@ const EditActivityLogEntryModal: React.FC<EditActivityLogEntryModalProps> = ({ i
             <textarea
               id="adminNote"
               value={adminNote}
-              onChange={(e) => setAdminNote(e.target.value)}
+              onChange={e => setAdminNote(e.target.value)}
               className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-lucius-lime resize-none h-20"
               placeholder="Ej: Aprobado, ajusté la hora de salida."
             />
