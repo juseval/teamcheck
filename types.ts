@@ -140,6 +140,7 @@ export interface CalendarEvent {
   startDate: string;
   endDate: string;
   status: EventStatus;
+  createdAt?: number;   // timestamp ms — orden de llegada
 }
 
 export interface PayrollChangeType {

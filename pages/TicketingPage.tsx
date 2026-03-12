@@ -13,6 +13,7 @@ interface TicketingPageProps {
   onUpdateRequest: (event: CalendarEvent) => void;
   onRemoveRequest: (event: CalendarEvent) => void;
   onUpdateEventStatus?: (event: CalendarEvent, status: 'approved' | 'rejected') => void;
+  onBulkImport?: (events: Omit<CalendarEvent, 'id'>[]) => Promise<void>;
 }
 
 interface CalendarDay {
@@ -99,11 +100,14 @@ const sendEmailJS = async (params: {
 // ─────────────────────────────────────────────
 const TicketingPage: React.FC<TicketingPageProps> = ({
   events, currentUser, payrollChangeTypes, employees,
-  onAddRequest, onUpdateRequest, onRemoveRequest, onUpdateEventStatus,
+  onAddRequest, onUpdateRequest, onRemoveRequest, onUpdateEventStatus, onBulkImport,
 }) => {
   const { addNotification } = useNotification();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+  const [isImportModalOpen,  setIsImportModalOpen]  = useState(false);
+  const [importRows,         setImportRows]         = useState<{ emp: string; type: string; start: string; end: string; status: 'ok'|'err'; msg: string }[]>([]);
+  const [isImporting,        setIsImporting]        = useState(false);
   const [viewType,      setViewType]      = useState('');
   const [editingEvent,  setEditingEvent]  = useState<CalendarEvent | null>(null);
 
@@ -485,8 +489,76 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
     if (currentUser.role !== 'admin' && currentUser.role !== 'master') return [];
     return events
       .filter(e => e.status === 'pending')
-      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+      .sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0)); // orden de llegada
   }, [events, currentUser.role]);
+
+  // ─────────────────────────────────────────────
+  //  IMPORTACIÓN MASIVA
+  // ─────────────────────────────────────────────
+  const isAdminOrMaster = currentUser.role === 'admin' || currentUser.role === 'master';
+
+  const downloadTemplate = () => {
+    const header = 'Colaborador,Novedad,Fecha Inicio (YYYY-MM-DD),Fecha Fin (YYYY-MM-DD)';
+    const example = employees.slice(0, 2).map((e, i) => {
+      const t = payrollChangeTypes[i % payrollChangeTypes.length]?.name ?? 'Reserve Holiday';
+      return `${e.name},${t},2026-01-15,2026-01-15`;
+    }).join('\n') || `Juan Perez,Reserve Holiday,2026-01-15,2026-01-17`;
+    const blob = new Blob([header + '\n' + example], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'plantilla_novedades.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      const dataLines = lines[0]?.toLowerCase().includes('colaborador') ? lines.slice(1) : lines;
+      const empNameMap = new Map(employees.map(emp => [emp.name.trim().toLowerCase(), emp]));
+      const typeNameMap = new Map(payrollChangeTypes.map(t => [t.name.trim().toLowerCase(), t]));
+
+      const parsed = dataLines.map(line => {
+        const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+        const [empRaw, typeRaw, start, end] = cols;
+        const emp  = empNameMap.get(empRaw?.toLowerCase() ?? '');
+        const type = typeNameMap.get(typeRaw?.toLowerCase() ?? '');
+        if (!emp)  return { emp: empRaw, type: typeRaw, start, end, status: 'err' as const, msg: `Colaborador "${empRaw}" no encontrado` };
+        if (!type) return { emp: empRaw, type: typeRaw, start, end, status: 'err' as const, msg: `Novedad "${typeRaw}" no existe` };
+        if (!start?.match(/^\d{4}-\d{2}-\d{2}/)) return { emp: empRaw, type: typeRaw, start, end, status: 'err' as const, msg: 'Fecha inicio inválida (usa YYYY-MM-DD)' };
+        const endDate = end?.match(/^\d{4}-\d{2}-\d{2}/) ? end : start;
+        return { emp: emp.name, type: type.name, start, end: endDate, status: 'ok' as const, msg: '' };
+      });
+      setImportRows(parsed);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const handleConfirmImport = async () => {
+    if (!onBulkImport) return;
+    const valid = importRows.filter(r => r.status === 'ok');
+    if (valid.length === 0) return;
+    setIsImporting(true);
+    try {
+      const empNameMap = new Map(employees.map(e => [e.name, e]));
+      const eventsToCreate = valid.map(r => ({
+        employeeId: empNameMap.get(r.emp)!.id,
+        type: r.type,
+        startDate: r.start,
+        endDate: r.end,
+        status: 'approved' as const,
+        createdAt: Date.now(),
+      }));
+      await onBulkImport(eventsToCreate as any);
+      addNotification(`${valid.length} novedades importadas correctamente.`, 'success');
+      setIsImportModalOpen(false);
+      setImportRows([]);
+    } catch { addNotification('Error al importar.', 'error'); }
+    finally { setIsImporting(false); }
+  };
 
   // ─────────────────────────────────────────────
   //  RENDER
@@ -519,82 +591,179 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
       {/* ── ENCABEZADO ── */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-3xl font-bold text-bokara-grey">Tiquetera de Novedades</h1>
-        <button
-          onClick={() => { setEditingEvent(null); setIsRequestModalOpen(true); }}
-          className="bg-lucius-lime hover:bg-opacity-80 text-bokara-grey font-bold py-2 px-4 rounded-lg shadow-md transition-all flex items-center gap-2 cursor-pointer"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          <span>Solicitar Tiquete</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {isAdminOrMaster && (
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="border border-bokara-grey/20 text-bokara-grey/70 hover:text-bokara-grey hover:border-bokara-grey/40 font-bold py-2 px-4 rounded-lg transition-all flex items-center gap-2 bg-white shadow-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+              Importar
+            </button>
+          )}
+          <button
+            onClick={() => { setEditingEvent(null); setIsRequestModalOpen(true); }}
+            className="bg-lucius-lime hover:bg-opacity-80 text-bokara-grey font-bold py-2 px-4 rounded-lg shadow-md transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+            <span>Solicitar Tiquete</span>
+          </button>
+        </div>
       </div>
 
       {/* ── ADMIN: SOLICITUDES PENDIENTES ── */}
-      {(currentUser.role === 'admin' || currentUser.role === 'master') && pendingRequests.length > 0 && (
-        <div className="bg-white rounded-xl shadow-lg border border-orange-200 p-6">
-          <h3 className="font-bold text-orange-600 mb-4 flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
-            Solicitudes Pendientes por Aprobar
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {pendingRequests.map(req => {
-              const empName = employees.find(e => e.id === req.employeeId)?.name || 'Desconocido';
-              return (
-                <div key={req.id} className="border border-orange-100 bg-orange-50/50 p-4 rounded-lg flex flex-col justify-between gap-3">
-                  <div>
-                    <div className="flex justify-between">
-                      <span className="font-bold text-bokara-grey">{empName}</span>
-                      <span className="text-xs font-bold bg-white px-2 py-1 rounded border border-orange-200 text-orange-600">{req.type}</span>
+      {(currentUser.role === 'admin' || currentUser.role === 'master') && pendingRequests.length > 0 && (() => {
+        // Agrupar por tipo preservando orden de llegada del primer ticket de cada grupo
+        const groups = new Map<string, { color: string; requests: typeof pendingRequests }>();
+        pendingRequests.forEach(req => {
+          if (!groups.has(req.type)) {
+            const color = payrollChangeTypes.find(t => t.name === req.type)?.color ?? '#AE8F60';
+            groups.set(req.type, { color, requests: [] });
+          }
+          groups.get(req.type)!.requests.push(req);
+        });
+        const groupList = Array.from(groups.entries());
+        // Índice global para numerar por orden de llegada
+        const globalIndex: Record<string, number> = {};
+        pendingRequests.forEach((req, i) => { globalIndex[req.id] = i + 1; });
+
+        return (
+          <div className="bg-white rounded-xl shadow-lg border border-orange-200 p-6">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-orange-600 flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                Solicitudes Pendientes por Aprobar
+                <span className="ml-1 bg-orange-100 text-orange-700 text-xs font-black px-2 py-0.5 rounded-full">{pendingRequests.length}</span>
+              </h3>
+              {/* Aprobar todo */}
+              <button
+                onClick={() => { if (window.confirm(`¿Aprobar las ${pendingRequests.length} solicitudes pendientes?`)) pendingRequests.forEach(r => handleStatusAction(r, 'approved')); }}
+                className="text-xs font-bold px-3 py-1.5 bg-lucius-lime text-bokara-grey rounded-lg hover:bg-opacity-80 transition-colors shadow-sm"
+              >
+                ✓ Aprobar todas
+              </button>
+            </div>
+
+            {/* Tabs por concepto */}
+            <div className="flex flex-col gap-5">
+              {groupList.map(([type, { color, requests }]) => (
+                <div key={type} className="rounded-xl border overflow-hidden" style={{ borderColor: `${color}40` }}>
+                  {/* Cabecera del grupo */}
+                  <div className="flex items-center justify-between px-4 py-2.5" style={{ backgroundColor: `${color}15` }}>
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                      <span className="font-bold text-sm text-bokara-grey">{type}</span>
+                      <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full text-white" style={{ backgroundColor: color }}>
+                        {requests.length}
+                      </span>
                     </div>
-                    <p className="text-sm text-bokara-grey/70 mt-1 font-mono">{req.startDate} ➜ {req.endDate}</p>
+                    <button
+                      onClick={() => { if (window.confirm(`¿Aprobar las ${requests.length} solicitudes de "${type}"?`)) requests.forEach(r => handleStatusAction(r, 'approved')); }}
+                      className="text-[11px] font-bold px-2.5 py-1 rounded-lg text-white transition-opacity hover:opacity-80"
+                      style={{ backgroundColor: color }}
+                    >
+                      Aprobar grupo
+                    </button>
                   </div>
-                  <div className="flex gap-2 justify-end">
-                    <button
-                      onClick={() => handleStatusAction(req, 'rejected')}
-                      className="px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded-md text-sm font-bold hover:bg-red-50 transition-colors"
-                    >
-                      Rechazar
-                    </button>
-                    <button
-                      onClick={() => handleStatusAction(req, 'approved')}
-                      className="px-3 py-1.5 bg-lucius-lime text-bokara-grey rounded-md text-sm font-bold shadow-sm hover:bg-opacity-80 transition-colors"
-                    >
-                      Aprobar
-                    </button>
+
+                  {/* Lista de tickets */}
+                  <div className="divide-y divide-gray-100">
+                    {requests.map(req => {
+                      const empName = employees.find(e => e.id === req.employeeId)?.name || 'Desconocido';
+                      const arrivalNum = globalIndex[req.id];
+                      const days = Math.ceil((new Date(req.endDate).getTime() - new Date(req.startDate).getTime()) / 86_400_000) + 1;
+                      const arrivedAt = req.createdAt ? new Date(req.createdAt).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : null;
+                      return (
+                        <div key={req.id} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors">
+                          {/* Número de orden */}
+                          <div className="w-7 h-7 rounded-full bg-gray-100 text-bokara-grey text-xs font-black flex items-center justify-center flex-shrink-0">
+                            {arrivalNum}
+                          </div>
+
+                          {/* Info */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-sm text-bokara-grey truncate">{empName}</span>
+                              <span className="text-[10px] text-bokara-grey/50 font-mono bg-gray-100 px-1.5 py-0.5 rounded">
+                                {req.startDate === req.endDate ? req.startDate : `${req.startDate} → ${req.endDate}`}
+                                {' · '}{days} día{days !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                            {arrivedAt && (
+                              <p className="text-[10px] text-bokara-grey/40 mt-0.5">Recibido: {arrivedAt}</p>
+                            )}
+                          </div>
+
+                          {/* Acciones */}
+                          <div className="flex gap-1.5 flex-shrink-0">
+                            <button
+                              onClick={() => handleStatusAction(req, 'rejected')}
+                              className="px-2.5 py-1 bg-white border border-red-200 text-red-500 rounded-md text-xs font-bold hover:bg-red-50 transition-colors"
+                            >
+                              Rechazar
+                            </button>
+                            <button
+                              onClick={() => handleStatusAction(req, 'approved')}
+                              className="px-2.5 py-1 text-white rounded-md text-xs font-bold hover:opacity-80 transition-colors shadow-sm"
+                              style={{ backgroundColor: color }}
+                            >
+                              Aprobar
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── GRID PRINCIPAL: CALENDARIO + MIS SOLICITUDES ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* CALENDARIO */}
         <div className="lg:col-span-2 bg-white rounded-xl shadow-md border border-bokara-grey/10 p-6 flex flex-col">
-          {/* Selector de tipo */}
-          <div className="mb-6">
-            <div className="bg-[#F3F0E9] p-3 rounded-2xl border border-[#E5E0D6] flex items-center gap-4 shadow-sm">
-              <div className="bg-white p-3 rounded-xl shadow-sm text-lucius-lime border border-[#E5E0D6] flex-shrink-0">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <div className="flex-grow min-w-0">
-                <label className="block text-[10px] font-bold text-lucius-lime uppercase tracking-widest mb-0.5">Filtrar por Novedad</label>
-                <select
-                  className="appearance-none bg-transparent font-bold text-bokara-grey text-lg w-full focus:outline-none cursor-pointer"
-                  value={viewType}
-                  onChange={e => setViewType(e.target.value)}
+          {/* Filtro por tipo — pills */}
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-2">
+              <svg className="w-4 h-4 text-bokara-grey/40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"/></svg>
+              <span className="text-[11px] font-bold text-bokara-grey/40 uppercase tracking-widest">Filtrar por novedad</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {visibleTypes.map(p => {
+                const isActive = viewType === p.name;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setViewType(isActive ? '' : p.name)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold border transition-all ${
+                      isActive
+                        ? 'bg-bokara-grey text-white border-bokara-grey'
+                        : 'bg-white text-bokara-grey border-gray-300 hover:border-bokara-grey hover:bg-gray-50'
+                    }`}
+                  >
+                    {isActive && <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />}
+                    {p.name}
+                  </button>
+                );
+              })}
+              {viewType && (
+                <button
+                  onClick={() => setViewType('')}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-bold border border-gray-200 text-gray-400 hover:border-gray-400 transition-all"
                 >
-                  {visibleTypes.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
-                </select>
-              </div>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>
+                  Limpiar
+                </button>
+              )}
             </div>
           </div>
 
@@ -760,6 +929,101 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL IMPORTACIÓN ── */}
+      {isImportModalOpen && isAdminOrMaster && (
+        <div className="fixed inset-0 bg-bokara-grey/60 flex items-center justify-center z-50 p-4" onClick={() => { setIsImportModalOpen(false); setImportRows([]); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-bold text-bokara-grey">Importar Novedades</h3>
+                <p className="text-sm text-bokara-grey/50 mt-0.5">Sube un archivo CSV con el historial de novedades</p>
+              </div>
+              <button onClick={() => { setIsImportModalOpen(false); setImportRows([]); }} className="text-bokara-grey/30 hover:text-bokara-grey text-2xl">&times;</button>
+            </div>
+
+            <div className="p-6 flex flex-col gap-5 overflow-y-auto">
+              {/* Paso 1: Descargar plantilla */}
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex items-start gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg text-blue-600 flex-shrink-0">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                </div>
+                <div className="flex-1">
+                  <p className="font-bold text-blue-800 text-sm">Paso 1 — Descarga la plantilla</p>
+                  <p className="text-xs text-blue-600/80 mt-0.5">Formato: <span className="font-mono">Colaborador, Novedad, Fecha Inicio, Fecha Fin</span></p>
+                  <p className="text-xs text-blue-500/70 mt-1">Las fechas deben ir en formato <strong>YYYY-MM-DD</strong> (ej: 2026-03-15). Si es un solo día, repite la misma fecha en ambas columnas.</p>
+                  <button onClick={downloadTemplate} className="mt-2 flex items-center gap-1.5 text-xs font-bold text-blue-700 hover:underline">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    Descargar plantilla_novedades.csv
+                  </button>
+                </div>
+              </div>
+
+              {/* Tipos disponibles */}
+              <div className="text-xs text-bokara-grey/50">
+                <p className="font-bold mb-1">Novedades disponibles (copia exactamente como están):</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {payrollChangeTypes.map(t => (
+                    <span key={t.id} className="px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border" style={{ borderColor: `${t.color}50`, color: t.color, backgroundColor: `${t.color}10` }}>
+                      {t.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Paso 2: Subir archivo */}
+              <div>
+                <p className="font-bold text-bokara-grey text-sm mb-2">Paso 2 — Sube tu archivo CSV</p>
+                <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-bokara-grey/20 rounded-xl cursor-pointer hover:border-lucius-lime/50 hover:bg-lucius-lime/5 transition-all">
+                  <svg className="w-7 h-7 text-bokara-grey/30 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                  <span className="text-sm text-bokara-grey/50">Haz clic o arrastra tu archivo .csv aquí</span>
+                  <input type="file" accept=".csv,.txt" className="hidden" onChange={handleFileUpload} />
+                </label>
+              </div>
+
+              {/* Preview de filas */}
+              {importRows.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="font-bold text-bokara-grey text-sm">
+                      Vista previa — {importRows.filter(r => r.status === 'ok').length} válidas, {importRows.filter(r => r.status === 'err').length} con error
+                    </p>
+                    <button onClick={() => setImportRows([])} className="text-xs text-gray-400 hover:text-gray-600">Limpiar</button>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
+                    {importRows.map((row, i) => (
+                      <div key={i} className={`flex items-center gap-3 px-3 py-2 text-xs ${row.status === 'err' ? 'bg-red-50' : 'bg-white'}`}>
+                        <span className={`w-4 h-4 rounded-full flex items-center justify-center text-white font-black text-[9px] flex-shrink-0 ${row.status === 'ok' ? 'bg-green-500' : 'bg-red-400'}`}>
+                          {row.status === 'ok' ? '✓' : '!'}
+                        </span>
+                        <span className="font-bold text-bokara-grey truncate w-28 flex-shrink-0">{row.emp}</span>
+                        <span className="text-bokara-grey/60 truncate flex-1">{row.type}</span>
+                        <span className="font-mono text-bokara-grey/50 flex-shrink-0">{row.start}{row.end !== row.start ? ` → ${row.end}` : ''}</span>
+                        {row.msg && <span className="text-red-500 flex-shrink-0 text-[10px]">{row.msg}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-gray-100 flex justify-end gap-3">
+              <button onClick={() => { setIsImportModalOpen(false); setImportRows([]); }} className="px-4 py-2 bg-gray-100 rounded-lg font-bold text-bokara-grey text-sm">
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmImport}
+                disabled={isImporting || importRows.filter(r => r.status === 'ok').length === 0}
+                className="px-4 py-2 bg-lucius-lime text-bokara-grey font-bold rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isImporting ? 'Importando...' : `Importar ${importRows.filter(r => r.status === 'ok').length} novedades`}
+              </button>
+            </div>
           </div>
         </div>
       )}

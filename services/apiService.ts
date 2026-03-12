@@ -454,7 +454,7 @@ const createRealApi = () => {
             const doc = await db!.collection('employees').doc(user!.uid).get();
             const companyId = doc.data()?.companyId;
             const ref = db!.collection('calendarEvents').doc();
-            const event = { ...eventData, id: ref.id, companyId };
+            const event = { ...eventData, id: ref.id, companyId, createdAt: Date.now() };
             await ref.set(event);
             return event;
         },

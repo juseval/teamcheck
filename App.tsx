@@ -555,7 +555,7 @@ const AppContent: React.FC = () => {
           {/* DASHBOARD */}
           {currentPage === 'dashboard' && isAdminOrMaster && (
             <PageErrorBoundary>
-              <DashboardPage attendanceLog={attendanceLog} employees={employees} onEmployeeAction={handleEmployeeAction} activityStatuses={activityStatuses} workSchedules={workSchedules} calendarEvents={calendarEvents} inviteCode={company?.inviteCode} />
+              <DashboardPage attendanceLog={attendanceLog} employees={employees} onEmployeeAction={handleEmployeeAction} activityStatuses={activityStatuses} workSchedules={workSchedules} calendarEvents={calendarEvents} payrollChangeTypes={payrollChangeTypes} inviteCode={company?.inviteCode} />
             </PageErrorBoundary>
           )}
 
@@ -653,6 +653,12 @@ const AppContent: React.FC = () => {
                   await updateCalendarEvent({ ...event, status });
                   setCalendarEvents(await getCalendarEvents());
                 } catch { addNotification('Error al actualizar estado', 'error'); }
+              }}
+              onBulkImport={async (eventsToCreate) => {
+                for (const ev of eventsToCreate) {
+                  await addCalendarEvent(ev);
+                }
+                setCalendarEvents(await getCalendarEvents());
               }}
             />
             </PageErrorBoundary>
