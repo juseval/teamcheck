@@ -23,11 +23,27 @@ const convertFileToBase64 = (file: File): Promise<string> => {
     });
 };
 
-// ─────────────────────────────────────────────
-//  HELPER: Normalizar email — siempre minúsculas
-//  Aplica en TODOS los puntos de entrada de email
-// ─────────────────────────────────────────────
 const normalizeEmail = (email: string): string => email.trim().toLowerCase();
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  CACHE DE companyId
+//  Evita leer el doc del empleado en cada función que necesite el companyId.
+//  Se invalida automáticamente cuando cambia el UID.
+// ─────────────────────────────────────────────────────────────────────────────
+let _companyIdCache: { uid: string; companyId: string } | null = null;
+
+const getCachedCompanyId = async (): Promise<string | null> => {
+    const user = auth!.currentUser;
+    if (!user) return null;
+    if (_companyIdCache?.uid === user.uid) return _companyIdCache.companyId;
+    const doc = await db!.collection('employees').doc(user.uid).get();
+    const cid = doc.data()?.companyId ?? null;
+    if (cid) _companyIdCache = { uid: user.uid, companyId: cid };
+    return cid;
+};
+
+/** Llamar al hacer logout para limpiar el caché */
+export const clearCompanyIdCache = () => { _companyIdCache = null; };
 
 // --- MOCK DATA & API ---
 const createMockApi = () => ({
@@ -95,7 +111,6 @@ const createRealApi = () => {
         resendVerificationEmail: async (_email: string) => true,
         verifyEmailWithToken: async (_oobCode: string) => true,
 
-        // ── REGISTRO: email normalizado ──
         registerWithEmailAndPassword: async (fullName: string, email: string, password: string) => {
             const cleanEmail = normalizeEmail(email);
             const userCredential = await auth!.createUserWithEmailAndPassword(cleanEmail, password);
@@ -115,7 +130,8 @@ const createRealApi = () => {
             const code = Math.random().toString(36).substring(2, 5).toUpperCase() + "-" + Math.floor(100 + Math.random() * 900);
             const companyRef = db!.collection('companies').doc();
             const finalCompanyId = companyRef.id;
-            await companyRef.set({ id: finalCompanyId, name: name, inviteCode: code, ownerId: user.uid, createdAt: Date.now() });
+            await companyRef.set({ id: finalCompanyId, name, inviteCode: code, ownerId: user.uid, createdAt: Date.now() });
+            _companyIdCache = { uid: user.uid, companyId: finalCompanyId };
             await db!.collection('employees').doc(user.uid).set({
                 id: user.uid, uid: user.uid, companyId: finalCompanyId, role: 'master',
                 name: user.displayName || user.email?.split('@')[0] || 'Master',
@@ -124,7 +140,6 @@ const createRealApi = () => {
             }, { merge: true });
         },
 
-        // ── LOGIN: email normalizado + persistence ──
         loginWithEmailAndPassword: async (email: string, password: string, rememberMe: boolean = false) => {
             const cleanEmail = normalizeEmail(email);
             await auth!.setPersistence(
@@ -137,7 +152,9 @@ const createRealApi = () => {
             if (!user) throw new Error("Authentication failed");
             const doc = await db!.collection('employees').doc(user.uid).get();
             if (doc.exists) {
-                return { id: doc.id, ...doc.data() } as Employee;
+                const data = doc.data()!;
+                if (data.companyId) _companyIdCache = { uid: user.uid, companyId: data.companyId };
+                return { id: doc.id, ...data } as Employee;
             } else {
                 return {
                     id: user.uid, uid: user.uid, companyId: '', name: user.displayName || cleanEmail.split('@')[0],
@@ -147,17 +164,21 @@ const createRealApi = () => {
             }
         },
 
-        logout: async () => await auth!.signOut(),
+        logout: async () => {
+            clearCompanyIdCache();
+            await auth!.signOut();
+        },
 
-        // ── RESET PASSWORD: email normalizado ──
         sendPasswordResetEmail: async (email: string) => await auth!.sendPasswordResetEmail(normalizeEmail(email)),
-
         verifyPasswordResetCode: async (code: string) => await auth!.verifyPasswordResetCode(code),
         confirmPasswordReset: async (code: string, pass: string) => await auth!.confirmPasswordReset(code, pass),
 
         getEmployeeProfile: async (uid: string) => {
             const doc = await db!.collection('employees').doc(uid).get();
-            return doc.exists ? { id: doc.id, ...doc.data() } as Employee : null;
+            if (!doc.exists) return null;
+            const data = doc.data()!;
+            if (data.companyId) _companyIdCache = { uid, companyId: data.companyId };
+            return { id: doc.id, ...data } as Employee;
         },
 
         streamEmployees: (callback: any) => {
@@ -166,7 +187,10 @@ const createRealApi = () => {
             let unsub = () => {};
             db!.collection('employees').doc(user.uid).get().then(doc => {
                 const cid = doc.data()?.companyId;
-                if (cid) unsub = db!.collection('employees').where('companyId', '==', cid).onSnapshot(s => callback(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+                if (cid) {
+                    _companyIdCache = { uid: user.uid, companyId: cid };
+                    unsub = db!.collection('employees').where('companyId', '==', cid).onSnapshot(s => callback(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+                }
             });
             return () => unsub();
         },
@@ -175,23 +199,30 @@ const createRealApi = () => {
             const user = auth!.currentUser;
             if (!user) return () => {};
             let unsub = () => {};
-            db!.collection('employees').doc(user.uid).get().then(doc => {
-                const cid = doc.data()?.companyId;
-                if (cid) unsub = db!.collection('attendanceLog').where('companyId', '==', cid).limit(500).onSnapshot(s => {
+            // Intentar usar el caché primero para no leer el doc del empleado de nuevo
+            const setupListener = (cid: string) => {
+                unsub = db!.collection('attendanceLog').where('companyId', '==', cid).limit(500).onSnapshot(s => {
                     const logs = s.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLogEntry));
                     callback(logs.sort((a, b) => b.timestamp - a.timestamp));
                 });
-            });
+            };
+            if (_companyIdCache?.uid === user.uid) {
+                setupListener(_companyIdCache.companyId);
+            } else {
+                db!.collection('employees').doc(user.uid).get().then(doc => {
+                    const cid = doc.data()?.companyId;
+                    if (cid) { _companyIdCache = { uid: user.uid, companyId: cid }; setupListener(cid); }
+                });
+            }
             return () => unsub();
         },
 
         updateEmployeeStatus: async (e: Employee) => {
             const patch: any = {
-                status:                  e.status,
-                lastClockInTime:         e.lastClockInTime,
-                currentStatusStartTime:  e.currentStatusStartTime,
+                status:                 e.status,
+                lastClockInTime:        e.lastClockInTime,
+                currentStatusStartTime: e.currentStatusStartTime,
             };
-            // Campos del contador acumulado — solo los incluimos si están presentes
             if (e.accumulatedWorkSeconds !== undefined) patch.accumulatedWorkSeconds = e.accumulatedWorkSeconds;
             if ('workSessionStartTime' in e)            patch.workSessionStartTime   = e.workSessionStartTime ?? null;
             await db!.collection('employees').doc(e.id).update(patch);
@@ -205,51 +236,38 @@ const createRealApi = () => {
             return log;
         },
 
+        // ── Todas las funciones get* usan el caché ──────────────────────────
+
         getActivityStatuses: async () => {
-            const user = auth!.currentUser;
-            if (!user) return [];
-            const doc = await db!.collection('employees').doc(user.uid).get();
-            const cid = doc.data()?.companyId;
+            const cid = await getCachedCompanyId();
             if (!cid) return [];
             const s = await db!.collection('activityStatuses').where('companyId', '==', cid).get();
             return s.docs.map(d => ({ id: d.id, ...d.data() } as ActivityStatus));
         },
 
         getWorkSchedules: async () => {
-            const user = auth!.currentUser;
-            if (!user) return [];
-            const doc = await db!.collection('employees').doc(user.uid).get();
-            const cid = doc.data()?.companyId;
+            const cid = await getCachedCompanyId();
             if (!cid) return [];
             const s = await db!.collection('workSchedules').where('companyId', '==', cid).get();
             return s.docs.map(d => ({ id: d.id, ...d.data() } as WorkSchedule));
         },
 
         getPayrollChangeTypes: async () => {
-            const user = auth!.currentUser;
-            if (!user) return [];
-            const doc = await db!.collection('employees').doc(user.uid).get();
-            const cid = doc.data()?.companyId;
+            const cid = await getCachedCompanyId();
             if (!cid) return [];
             const s = await db!.collection('payrollChangeTypes').where('companyId', '==', cid).get();
             return s.docs.map(d => ({ id: d.id, ...d.data() } as PayrollChangeType));
         },
 
         getCalendarEvents: async () => {
-            const user = auth!.currentUser;
-            if (!user) return [];
-            const doc = await db!.collection('employees').doc(user.uid).get();
-            const cid = doc.data()?.companyId;
+            const cid = await getCachedCompanyId();
             if (!cid) return [];
             const s = await db!.collection('calendarEvents').where('companyId', '==', cid).get();
             return s.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent));
         },
 
         getMapItems: async () => {
-            const user = auth!.currentUser;
-            if (!user) return [];
-            const doc = await db!.collection('employees').doc(user.uid).get();
-            const cid = doc.data()?.companyId;
+            const cid = await getCachedCompanyId();
             if (!cid) return [];
             const s = await db!.collection('mapItems').where('companyId', '==', cid).get();
             return s.docs.map(d => ({ id: d.id, ...d.data() } as MapItem));
@@ -257,7 +275,6 @@ const createRealApi = () => {
 
         updateEmployeeDetails: async (e: Employee) => {
             const { id, ...data } = e;
-            // ── Normalizar email si se actualiza ──
             if (data.email) data.email = normalizeEmail(data.email);
             await db!.collection('employees').doc(id).update(cleanObject(data));
             return { ...e, email: data.email || e.email };
@@ -273,62 +290,33 @@ const createRealApi = () => {
             if (!user) throw new Error("Not logged in");
             const cleanEmail = normalizeEmail(user.email || '');
             const trimmedCode = inviteCode.trim();
-
-            // Buscar empresa por código
             let compQuery = await db!.collection('companies').where('inviteCode', '==', trimmedCode).limit(1).get();
-            if (compQuery.empty) {
-                compQuery = await db!.collection('companies').where('inviteCode', '==', trimmedCode.toUpperCase()).limit(1).get();
-            }
+            if (compQuery.empty) compQuery = await db!.collection('companies').where('inviteCode', '==', trimmedCode.toUpperCase()).limit(1).get();
             if (compQuery.empty) {
                 const docById = await db!.collection('companies').doc(trimmedCode).get();
                 if (docById.exists) {
+                    _companyIdCache = { uid: user.uid, companyId: docById.id };
                     await db!.collection('employees').doc(user.uid).set({ companyId: docById.id }, { merge: true });
                     return;
                 }
             }
             if (compQuery.empty) throw new Error("Código de equipo inválido.");
             const companyId = compQuery.docs[0].id;
-
-            // Buscar si hay una invitación pendiente para este email → obtener nombre y datos
-            const invQuery = await db!.collection('invitations')
-                .where('email', '==', cleanEmail)
-                .where('companyId', '==', companyId)
-                .where('status', '==', 'pending')
-                .limit(1).get();
-
+            _companyIdCache = { uid: user.uid, companyId };
+            const invQuery = await db!.collection('invitations').where('email', '==', cleanEmail).where('companyId', '==', companyId).where('status', '==', 'pending').limit(1).get();
             const invData = invQuery.empty ? null : (invQuery.docs[0].data() as any);
-            const resolvedName = (invData?.name || '').trim()
-                || (user.displayName || '').trim()
-                || cleanEmail.split('@')[0];
-
-            // Escribir/fusionar con UID como doc ID
+            const resolvedName = (invData?.name || '').trim() || (user.displayName || '').trim() || cleanEmail.split('@')[0];
             await db!.collection('employees').doc(user.uid).set(cleanObject({
-                id: user.uid, uid: user.uid, email: cleanEmail,
-                name: resolvedName,
-                companyId,
-                role: invData?.role || 'employee',
-                hireDate: invData?.hireDate,
-                terminationDate: invData?.terminationDate,
-                manualVacationAdjustment: invData?.manualVacationAdjustment,
-                phone: invData?.phone,
-                location: invData?.location,
-                workScheduleId: invData?.workScheduleId,
-                status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null,
-                emailVerified: user.emailVerified,
+                id: user.uid, uid: user.uid, email: cleanEmail, name: resolvedName, companyId,
+                role: invData?.role || 'employee', hireDate: invData?.hireDate, terminationDate: invData?.terminationDate,
+                manualVacationAdjustment: invData?.manualVacationAdjustment, phone: invData?.phone,
+                location: invData?.location, workScheduleId: invData?.workScheduleId,
+                status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, emailVerified: user.emailVerified,
             }));
-
-            // Marcar invitación como aceptada
-            if (!invQuery.empty) {
-                await invQuery.docs[0].ref.update({ status: 'accepted' });
-            }
-
-            // Eliminar docs duplicados con el mismo email
+            if (!invQuery.empty) await invQuery.docs[0].ref.update({ status: 'accepted' });
             const empsQuery = await db!.collection('employees').where('email', '==', cleanEmail).get();
-            const batch = db!.batch();
-            let hasDups = false;
-            for (const doc of empsQuery.docs) {
-                if (doc.id !== user.uid) { batch.delete(doc.ref); hasDups = true; }
-            }
+            const batch = db!.batch(); let hasDups = false;
+            for (const doc of empsQuery.docs) { if (doc.id !== user.uid) { batch.delete(doc.ref); hasDups = true; } }
             if (hasDups) await batch.commit();
         },
 
@@ -339,58 +327,24 @@ const createRealApi = () => {
             await db!.collection('attendanceLog').doc(id).delete();
         },
 
-        // ── ADD EMPLOYEE: email normalizado, nombre incluido en invitación ──
         addEmployee: async (employeeData: any) => {
             const user = auth!.currentUser;
             if (!user) throw new Error("No autenticado");
-
-            // Normalizar email (todo minúsculas, sin espacios)
-            const normalizedEmployeeData = {
-                ...employeeData,
-                email: normalizeEmail(employeeData.email || ''),
-                name: (employeeData.name || '').trim(),
-            };
-
-            let companyId = normalizedEmployeeData.companyId;
-            if (!companyId) {
-                const adminDoc = await db!.collection('employees').doc(user.uid).get();
-                companyId = adminDoc.data()?.companyId;
-            }
+            const normalizedEmployeeData = { ...employeeData, email: normalizeEmail(employeeData.email || ''), name: (employeeData.name || '').trim() };
+            const companyId = normalizedEmployeeData.companyId || await getCachedCompanyId();
             if (!companyId) throw new Error("No se encontró una organización vinculada a tu cuenta.");
-
             const compDoc = await db!.collection('companies').doc(companyId).get();
             const companyName = compDoc.data()?.name || "Tu Empresa";
-
             const invRef = db!.collection('invitations').doc();
             const invitation = cleanObject({
-                id: invRef.id,
-                email: normalizedEmployeeData.email,
-                name: normalizedEmployeeData.name,        // ← nombre del admin para que acceptInvitation lo use
-                companyId: companyId,
-                companyName: companyName,
-                role: normalizedEmployeeData.role || 'employee',
-                status: 'pending',
-                invitedBy: user.uid,
-                createdAt: Date.now(),
-                hireDate: normalizedEmployeeData.hireDate,
-                terminationDate: normalizedEmployeeData.terminationDate,
-                manualVacationAdjustment: normalizedEmployeeData.manualVacationAdjustment,
-                phone: normalizedEmployeeData.phone,
-                location: normalizedEmployeeData.location,
-                workScheduleId: normalizedEmployeeData.workScheduleId
+                id: invRef.id, email: normalizedEmployeeData.email, name: normalizedEmployeeData.name,
+                companyId, companyName, role: normalizedEmployeeData.role || 'employee', status: 'pending',
+                invitedBy: user.uid, createdAt: Date.now(), hireDate: normalizedEmployeeData.hireDate,
+                terminationDate: normalizedEmployeeData.terminationDate, manualVacationAdjustment: normalizedEmployeeData.manualVacationAdjustment,
+                phone: normalizedEmployeeData.phone, location: normalizedEmployeeData.location, workScheduleId: normalizedEmployeeData.workScheduleId
             });
-
             const empRef = db!.collection('employees').doc();
-            const newEmp = cleanObject({
-                ...normalizedEmployeeData,
-                id: empRef.id,
-                companyId: companyId,
-                status: 'Clocked Out',
-                lastClockInTime: null,
-                currentStatusStartTime: null,
-                emailVerified: false
-            });
-
+            const newEmp = cleanObject({ ...normalizedEmployeeData, id: empRef.id, companyId, status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, emailVerified: false });
             await Promise.all([invRef.set(invitation), empRef.set(newEmp)]);
             return newEmp;
         },
@@ -400,14 +354,11 @@ const createRealApi = () => {
             if (!empDoc.exists) return;
             const empData = empDoc.data();
             if (empData?.role === 'master') throw new Error("No se puede eliminar al usuario Propietario (Master).");
-            const email = empData?.email;
-            const companyId = empData?.companyId;
+            const email = empData?.email; const companyId = empData?.companyId;
             await db!.collection('employees').doc(id).delete();
             if (email && companyId) {
                 const invQuery = await db!.collection('invitations').where('email', '==', email).where('companyId', '==', companyId).get();
-                const batch = db!.batch();
-                invQuery.forEach(doc => batch.delete(doc.ref));
-                await batch.commit();
+                const batch = db!.batch(); invQuery.forEach(doc => batch.delete(doc.ref)); await batch.commit();
             }
         },
 
@@ -416,11 +367,9 @@ const createRealApi = () => {
         },
 
         addWorkSchedule: async (schedule: any) => {
-            const user = auth!.currentUser;
-            const doc = await db!.collection('employees').doc(user!.uid).get();
-            const companyId = doc.data()?.companyId;
+            const cid = await getCachedCompanyId();
             const ref = db!.collection('workSchedules').doc();
-            const newSchedule = { ...schedule, id: ref.id, companyId };
+            const newSchedule = { ...schedule, id: ref.id, companyId: cid };
             await ref.set(newSchedule);
             return newSchedule;
         },
@@ -429,32 +378,29 @@ const createRealApi = () => {
         removeWorkSchedule: async (id: string) => { await db!.collection('workSchedules').doc(id).delete(); },
 
         addActivityStatus: async (name: string, color: string) => {
-            const user = auth!.currentUser;
-            const doc = await db!.collection('employees').doc(user!.uid).get();
-            const companyId = doc.data()?.companyId;
+            const cid = await getCachedCompanyId();
             const ref = db!.collection('activityStatuses').doc();
-            await ref.set({ id: ref.id, name, color, companyId });
+            await ref.set({ id: ref.id, name, color, companyId: cid });
+            return { id: ref.id, name, color, companyId: cid } as ActivityStatus;
         },
 
         removeActivityStatus: async (id: string) => { await db!.collection('activityStatuses').doc(id).delete(); },
 
         addPayrollChangeType: async (name: string, color: string, requiereAprobacion: boolean, soloAdmin: boolean, yearlyQuota?: number, semesterQuota?: number) => {
-            const user = auth!.currentUser;
-            const doc = await db!.collection('employees').doc(user!.uid).get();
-            const companyId = doc.data()?.companyId;
+            const cid = await getCachedCompanyId();
             const ref = db!.collection('payrollChangeTypes').doc();
-            await ref.set({ id: ref.id, name, color, requiereAprobacion, soloAdmin, yearlyQuota, semesterQuota, companyId });
+            const newType = { id: ref.id, name, color, requiereAprobacion, soloAdmin, yearlyQuota, semesterQuota, companyId: cid };
+            await ref.set(newType);
+            return newType as PayrollChangeType;
         },
 
         updatePayrollChangeType: async (id: string, updates: any) => { await db!.collection('payrollChangeTypes').doc(id).update(updates); },
         removePayrollChangeType: async (id: string) => { await db!.collection('payrollChangeTypes').doc(id).delete(); },
 
         addCalendarEvent: async (eventData: any) => {
-            const user = auth!.currentUser;
-            const doc = await db!.collection('employees').doc(user!.uid).get();
-            const companyId = doc.data()?.companyId;
+            const cid = await getCachedCompanyId();
             const ref = db!.collection('calendarEvents').doc();
-            const event = { ...eventData, id: ref.id, companyId, createdAt: Date.now() };
+            const event = { ...eventData, id: ref.id, companyId: cid, createdAt: Date.now() };
             await ref.set(event);
             return event;
         },
@@ -495,16 +441,11 @@ const createRealApi = () => {
         },
 
         saveMapItems: async (items: any[]) => {
-            const user = auth!.currentUser;
-            const doc = await db!.collection('employees').doc(user!.uid).get();
-            const companyId = doc.data()?.companyId;
+            const cid = await getCachedCompanyId();
             const batch = db!.batch();
-            const existing = await db!.collection('mapItems').where('companyId', '==', companyId).get();
+            const existing = await db!.collection('mapItems').where('companyId', '==', cid).get();
             existing.forEach(d => batch.delete(d.ref));
-            items.forEach(item => {
-                const ref = db!.collection('mapItems').doc();
-                batch.set(ref, { ...item, id: ref.id, companyId });
-            });
+            items.forEach(item => { const ref = db!.collection('mapItems').doc(); batch.set(ref, { ...item, id: ref.id, companyId: cid }); });
             await batch.commit();
         },
 
@@ -512,7 +453,6 @@ const createRealApi = () => {
             await db!.collection('employees').doc(employeeId).update({ seatId });
         },
 
-        // ── GET PENDING INVITATION: email normalizado ──
         getPendingInvitation: async (email: string) => {
             const cleanEmail = normalizeEmail(email);
             const q = await db!.collection('invitations').where('email', '==', cleanEmail).where('status', '==', 'pending').limit(1).get();
@@ -527,91 +467,49 @@ const createRealApi = () => {
             if (!invDoc.exists) throw new Error("Invitation not found");
             const data = invDoc.data() as Invitation & { name?: string };
             const cleanEmail = normalizeEmail(user.email || '');
-
-            // Prioridad del nombre: 1) nombre guardado por el admin en la invitación
-            //                       2) displayName de Firebase Auth
-            //                       3) parte local del email
-            const resolvedName = (data.name || '').trim()
-                || (user.displayName || '').trim()
-                || cleanEmail.split('@')[0];
-
-            // Escribir con el UID como ID del doc (evita duplicados futuros)
+            const resolvedName = (data.name || '').trim() || (user.displayName || '').trim() || cleanEmail.split('@')[0];
+            _companyIdCache = { uid: user.uid, companyId: data.companyId };
             await db!.collection('employees').doc(user.uid).set(cleanObject({
-                id: user.uid, uid: user.uid, email: cleanEmail,
-                name: resolvedName,
-                companyId: data.companyId, role: data.role || 'employee',
-                hireDate: data.hireDate, terminationDate: data.terminationDate,
-                manualVacationAdjustment: data.manualVacationAdjustment,
-                phone: data.phone, location: data.location,
-                workScheduleId: data.workScheduleId,
-                status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null,
-                emailVerified: user.emailVerified
+                id: user.uid, uid: user.uid, email: cleanEmail, name: resolvedName, companyId: data.companyId,
+                role: data.role || 'employee', hireDate: data.hireDate, terminationDate: data.terminationDate,
+                manualVacationAdjustment: data.manualVacationAdjustment, phone: data.phone,
+                location: data.location, workScheduleId: data.workScheduleId,
+                status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, emailVerified: user.emailVerified
             }));
-
             await db!.collection('invitations').doc(invitationId).update({ status: 'accepted' });
-
-            // Eliminar cualquier doc duplicado con el mismo email pero diferente ID
             const empsQuery = await db!.collection('employees').where('email', '==', cleanEmail).get();
-            const batch = db!.batch();
-            let hasDups = false;
-            for (const doc of empsQuery.docs) {
-                if (doc.id !== user.uid) { batch.delete(doc.ref); hasDups = true; }
-            }
+            const batch = db!.batch(); let hasDups = false;
+            for (const doc of empsQuery.docs) { if (doc.id !== user.uid) { batch.delete(doc.ref); hasDups = true; } }
             if (hasDups) await batch.commit();
         },
 
         getNotificationRecipients: async () => {
-            const user = auth!.currentUser;
-            if (!user) return [];
-            const empDoc = await db!.collection('employees').doc(user.uid).get();
-            const cid = empDoc.data()?.companyId;
+            const cid = await getCachedCompanyId();
             if (!cid) return [];
             const doc = await db!.collection('notificationSettings').doc(cid).get();
             return doc.exists ? (doc.data()?.emails || []) : [];
         },
 
-        // ── NOTIFICATION RECIPIENTS: email normalizado ──
         addNotificationRecipient: async (email: string) => {
-            const user = auth!.currentUser;
-            const empDoc = await db!.collection('employees').doc(user!.uid).get();
-            const cid = empDoc.data()?.companyId;
-            if (cid) {
-                await db!.collection('notificationSettings').doc(cid).set({
-                    emails: firebase.firestore.FieldValue.arrayUnion(normalizeEmail(email))
-                }, { merge: true });
-            }
+            const cid = await getCachedCompanyId();
+            if (cid) await db!.collection('notificationSettings').doc(cid).set({ emails: firebase.firestore.FieldValue.arrayUnion(normalizeEmail(email)) }, { merge: true });
         },
 
         removeNotificationRecipient: async (email: string) => {
-            const user = auth!.currentUser;
-            const empDoc = await db!.collection('employees').doc(user!.uid).get();
-            const cid = empDoc.data()?.companyId;
-            if (cid) {
-                await db!.collection('notificationSettings').doc(cid).set({
-                    emails: firebase.firestore.FieldValue.arrayRemove(normalizeEmail(email))
-                }, { merge: true });
-            }
+            const cid = await getCachedCompanyId();
+            if (cid) await db!.collection('notificationSettings').doc(cid).set({ emails: firebase.firestore.FieldValue.arrayRemove(normalizeEmail(email)) }, { merge: true });
         },
 
         getEmailConfig: async () => {
-            const user = auth!.currentUser;
-            if (!user) return null;
-            const empDoc = await db!.collection('employees').doc(user.uid).get();
-            const cid = empDoc.data()?.companyId;
+            const cid = await getCachedCompanyId();
             if (!cid) return null;
             const doc = await db!.collection('notificationSettings').doc(cid).get();
             return doc.exists ? doc.data()?.emailConfig : null;
         },
 
         saveEmailConfig: async (config: any) => {
-            const user = auth!.currentUser;
-            const empDoc = await db!.collection('employees').doc(user!.uid).get();
-            const cid = empDoc.data()?.companyId;
-            if (cid) {
-                await db!.collection('notificationSettings').doc(cid).set({
-                    emailConfig: config
-                }, { merge: true });
-            }
+            const cid = await getCachedCompanyId();
+            if (cid) await db!.collection('notificationSettings').doc(cid).set({ emailConfig: config }, { merge: true });
         }
     };
 };

@@ -53,15 +53,12 @@ import EditEventModal from './components/EditEventModal';
 import EditActivityLogEntryModal from './components/EditActivityLogEntryModal';
 import ConfirmationModal from './components/ConfirmationModal';
 
-// --- Error Boundary (app level - full screen) ---
+// --- Error Boundary (app level) ---
 type ErrorBoundaryProps = { children: React.ReactNode };
 type ErrorBoundaryState = { hasError: boolean; error: any };
 
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
+  constructor(props: ErrorBoundaryProps) { super(props); this.state = { hasError: false, error: null }; }
   static getDerivedStateFromError(error: any) { return { hasError: true, error }; }
   componentDidCatch(error: any, errorInfo: React.ErrorInfo) { console.error("ErrorBoundary caught an error", error, errorInfo); }
   render() {
@@ -78,13 +75,10 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
   }
 }
 
-// --- Page Error Boundary (page level - keeps header, shows inline error) ---
+// --- Page Error Boundary ---
 type PageErrorBoundaryState = { hasError: boolean };
 class PageErrorBoundary extends React.Component<{ children: React.ReactNode; onReset?: () => void }, PageErrorBoundaryState> {
-  constructor(props: any) {
-    super(props);
-    this.state = { hasError: false };
-  }
+  constructor(props: any) { super(props); this.state = { hasError: false }; }
   static getDerivedStateFromError() { return { hasError: true }; }
   componentDidCatch(error: any) { console.error('[PageErrorBoundary]', error); }
   render() {
@@ -92,12 +86,7 @@ class PageErrorBoundary extends React.Component<{ children: React.ReactNode; onR
       return (
         <div className="flex flex-col items-center justify-center h-64 gap-4 text-center">
           <p className="text-red-500 font-bold">Ocurrió un error en esta sección.</p>
-          <button
-            onClick={() => { this.setState({ hasError: false }); this.props.onReset?.(); }}
-            className="px-4 py-2 bg-lucius-lime text-bokara-grey font-bold rounded-lg text-sm"
-          >
-            Reintentar
-          </button>
+          <button onClick={() => { this.setState({ hasError: false }); this.props.onReset?.(); }} className="px-4 py-2 bg-lucius-lime text-bokara-grey font-bold rounded-lg text-sm">Reintentar</button>
         </div>
       );
     }
@@ -142,9 +131,7 @@ const AppContent: React.FC = () => {
   const [isEditActivityLogEntryModalOpen, setIsEditActivityLogEntryModalOpen] = useState(false);
   const [logEntryToEdit, setLogEntryToEdit] = useState<AttendanceLogEntry | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [confirmConfig, setConfirmConfig] = useState<{ title: string; message: string; onConfirm: () => void }>({
-    title: '', message: '', onConfirm: () => {},
-  });
+  const [confirmConfig, setConfirmConfig] = useState<{ title: string; message: string; onConfirm: () => void }>({ title: '', message: '', onConfirm: () => {} });
 
   const [actionCode, setActionCode] = useState<string | null>(null);
   const urlInviteCode = useRef<string | null>(new URLSearchParams(window.location.search).get('inviteCode'));
@@ -155,9 +142,7 @@ const AppContent: React.FC = () => {
   const refreshUserProfile = async () => {
     if (user?.id) {
       const profile = await getEmployeeProfile(user.id);
-      if (profile) {
-        setUser({ ...profile, role: (profile.role || 'employee').toLowerCase() as 'master' | 'admin' | 'employee' });
-      }
+      if (profile) setUser({ ...profile, role: (profile.role || 'employee').toLowerCase() as 'master' | 'admin' | 'employee' });
     }
   };
 
@@ -174,31 +159,17 @@ const AppContent: React.FC = () => {
               setCurrentPage(profile.companyId ? 'tracker' : 'onboarding');
             }
           } else {
-            setUser({
-              id: firebaseUser.uid, uid: firebaseUser.uid, companyId: '',
-              name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Colaborador',
-              email: firebaseUser.email || '', phone: '', location: '',
-              role: 'employee', status: 'Clocked Out',
-              lastClockInTime: null, currentStatusStartTime: null,
-              emailVerified: firebaseUser.emailVerified,
-            });
+            setUser({ id: firebaseUser.uid, uid: firebaseUser.uid, companyId: '', name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Colaborador', email: firebaseUser.email || '', phone: '', location: '', role: 'employee', status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, emailVerified: firebaseUser.emailVerified });
             setCurrentPage('onboarding');
           }
         } catch (error) { console.error("Error fetching profile", error); }
       } else {
         setUser(null);
         const params = new URLSearchParams(window.location.search);
-        const mode = params.get('mode');
-        const oobCode = params.get('oobCode');
-        if (mode === 'resetPassword' && oobCode) {
-          setActionCode(oobCode);
-          setCurrentPage('reset-password');
-        } else if (mode === 'verifyEmail' && oobCode) {
-          setActionCode(oobCode);
-          setCurrentPage('verify-email');
-        } else if (!['register'].includes(currentPageRef.current)) {
-          setCurrentPage('home');
-        }
+        const mode = params.get('mode'); const oobCode = params.get('oobCode');
+        if (mode === 'resetPassword' && oobCode) { setActionCode(oobCode); setCurrentPage('reset-password'); }
+        else if (mode === 'verifyEmail' && oobCode) { setActionCode(oobCode); setCurrentPage('verify-email'); }
+        else if (!['register'].includes(currentPageRef.current)) { setCurrentPage('home'); }
       }
       hasInitializedAuth.current = true;
       setLoading(false);
@@ -206,7 +177,9 @@ const AppContent: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Load company data
+  // ── Cargar datos de la empresa
+  // Dependencia: user?.companyId (no el objeto user completo)
+  // Evita re-fetches innecesarios cuando cambia cualquier campo del usuario
   useEffect(() => {
     if (!user?.companyId) return;
     Promise.all([
@@ -225,114 +198,50 @@ const AppContent: React.FC = () => {
     const unsubEmployees = streamEmployees(setEmployees);
     const unsubLog = streamAttendanceLog(setAttendanceLog);
     return () => { unsubEmployees(); unsubLog(); };
-  }, [user]);
+  }, [user?.companyId]); // ← solo se re-ejecuta si cambia la empresa, no cualquier cambio de user
 
-  // ── Notificaciones de la campana (solo admins/masters) ──
-  // Fuente 1: tiquetes con status 'pending'
-  // Fuente 2: entradas del log con correctionRequest
+  // ── Bell notifications ──
   const bellNotifications = useMemo((): BellNotification[] => {
-    const isAdminOrMaster = user?.role === 'admin' || user?.role === 'master';
-    if (!isAdminOrMaster) return [];
-
-    // Tiquetes pendientes → navegar a 'ticketing'
+    if (user?.role !== 'admin' && user?.role !== 'master') return [];
     const ticketNotifs: BellNotification[] = calendarEvents
       .filter(e => e.status === 'pending')
       .map(e => {
         const empName = employees.find(emp => emp.id === e.employeeId)?.name || 'Colaborador';
-        return {
-          id: `ticket-${e.id}`,
-          type: 'ticket_pending' as const,
-          title: empName,
-          subtitle: `${e.type} · ${e.startDate}${e.startDate !== e.endDate ? ` → ${e.endDate}` : ''}`,
-          timestamp: Date.now(),
-          navigateTo: 'ticketing',
-        };
+        return { id: `ticket-${e.id}`, type: 'ticket_pending' as const, title: empName, subtitle: `${e.type} · ${e.startDate}${e.startDate !== e.endDate ? ` → ${e.endDate}` : ''}`, timestamp: Date.now(), navigateTo: 'ticketing' };
       });
-
-    // Solicitudes de corrección de hora → navegar a 'tracker' y abrir modal
     const correctionNotifs: BellNotification[] = attendanceLog
       .filter(entry => entry.correctionRequest && entry.correctionStatus === 'pending')
-      .map(entry => ({
-        id: `correction-${entry.id}`,
-        type: 'correction_request' as const,
-        title: entry.employeeName,
-        subtitle: (entry as any).correctionRequest as string,
-        timestamp: entry.timestamp,
-        navigateTo: 'tracker',
-      }));
-
-    return [...ticketNotifs, ...correctionNotifs]
-      .sort((a, b) => b.timestamp - a.timestamp);
+      .map(entry => ({ id: `correction-${entry.id}`, type: 'correction_request' as const, title: entry.employeeName, subtitle: (entry as any).correctionRequest as string, timestamp: entry.timestamp, navigateTo: 'tracker' }));
+    return [...ticketNotifs, ...correctionNotifs].sort((a, b) => b.timestamp - a.timestamp);
   }, [calendarEvents, attendanceLog, employees, user?.role]);
 
-  // Click en notificación → navegar + abrir modal si aplica
   const handleBellNotificationClick = (notif: BellNotification) => {
     setCurrentPage(notif.navigateTo);
     if (notif.type === 'correction_request') {
       const entryId = notif.id.replace('correction-', '');
       const entry = attendanceLog.find(e => e.id === entryId);
-      if (entry) {
-        setLogEntryToEdit(entry);
-        setIsEditActivityLogEntryModalOpen(true);
-      }
+      if (entry) { setLogEntryToEdit(entry); setIsEditActivityLogEntryModalOpen(true); }
     }
   };
 
-  // ── Email automático al crear un tiquete ──
+  // ── Email al crear tiquete ──
   const sendTicketNotification = async (req: any) => {
     try {
-      const [recipients, emailConfig] = await Promise.all([
-        getNotificationRecipients(),
-        getEmailConfig(),
-      ]);
-      console.log('[EmailJS] recipients:', recipients);
-      console.log('[EmailJS] emailConfig:', emailConfig);
-      if (!emailConfig || !recipients.length) {
-        console.warn('[EmailJS] Sin config o sin destinatarios');
-        return;
-      }
-      // Soportar tanto camelCase como snake_case por si Settings guarda diferente
-      const serviceId = emailConfig.serviceId || emailConfig.service_id;
+      const [recipients, emailConfig] = await Promise.all([getNotificationRecipients(), getEmailConfig()]);
+      if (!emailConfig || !recipients.length) return;
+      const serviceId  = emailConfig.serviceId  || emailConfig.service_id;
       const templateId = emailConfig.templateId || emailConfig.template_id;
-      const publicKey = emailConfig.publicKey || emailConfig.public_key || emailConfig.userId || emailConfig.user_id;
-      console.log('[EmailJS] serviceId:', serviceId, '| templateId:', templateId, '| publicKey:', publicKey);
-      if (!serviceId || !templateId || !publicKey) {
-        console.warn('[EmailJS] Faltan credenciales');
-        return;
-      }
-
+      const publicKey  = emailConfig.publicKey  || emailConfig.public_key || emailConfig.userId || emailConfig.user_id;
+      if (!serviceId || !templateId || !publicKey) return;
       const empName = employees.find(e => e.id === req.employeeId)?.name || user?.name || 'Colaborador';
-      const dateRange = req.startDate === req.endDate
-        ? req.startDate
-        : `${req.startDate} → ${req.endDate}`;
-
-      const results = await Promise.all(recipients.map((toEmail: string) =>
+      const dateRange = req.startDate === req.endDate ? req.startDate : `${req.startDate} → ${req.endDate}`;
+      await Promise.all(recipients.map((toEmail: string) =>
         fetch('https://api.emailjs.com/api/v1.0/email/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            service_id: serviceId,
-            template_id: templateId,
-            user_id: publicKey,
-            template_params: {
-              recipient_email: toEmail,
-              user_name: empName,
-              request_type: req.type || 'Solicitud',
-              request_dates: dateRange,
-              request_notes: req.notes || '',
-              message: `${empName} ha enviado una nueva solicitud de ${req.type || 'tiquete'} para el período ${dateRange}.`,
-            },
-          }),
-        }).then(async r => {
-          const text = await r.text();
-          console.log(`[EmailJS] → ${toEmail}: status=${r.status} body=${text}`);
-          return { toEmail, status: r.status, body: text };
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ service_id: serviceId, template_id: templateId, user_id: publicKey, template_params: { recipient_email: toEmail, user_name: empName, request_type: req.type || 'Solicitud', request_dates: dateRange, request_notes: req.notes || '', message: `${empName} ha enviado una nueva solicitud de ${req.type || 'tiquete'} para el período ${dateRange}.` } }),
         })
       ));
-      console.log('[EmailJS] Resultados:', results);
-    } catch (e) {
-      console.warn('[EmailJS] Error:', e);
-    }
+    } catch (e) { console.warn('[EmailJS] Error:', e); }
   };
 
   // Handlers
@@ -342,10 +251,7 @@ const AppContent: React.FC = () => {
       setUser(loggedUser);
       setCurrentPage(loggedUser.companyId ? 'tracker' : 'onboarding');
       addNotification(`¡Bienvenido, ${loggedUser.name}!`, 'success');
-    } catch (error: any) {
-      addNotification(error.message || 'Error al entrar', 'error');
-      throw error;
-    }
+    } catch (error: any) { addNotification(error.message || 'Error al entrar', 'error'); throw error; }
   };
 
   const handleRegister = async (data: { fullName: string; email: string; password: string }) => {
@@ -353,29 +259,13 @@ const AppContent: React.FC = () => {
       await registerWithEmailAndPassword(data.fullName, data.email, data.password);
       addNotification('Registro exitoso.', 'success');
     } catch (error: any) {
-      if (!error.message?.includes('auth/email-already-in-use')) {
-        addNotification(error.message || 'Error al registrar', 'error');
-      }
+      if (!error.message?.includes('auth/email-already-in-use')) addNotification(error.message || 'Error al registrar', 'error');
       throw error;
     }
   };
 
-  const handleLogout = async () => {
-    await logout();
-    setUser(null);
-    setCurrentPage('home');
-    addNotification('Sesión cerrada', 'success');
-  };
-
-  const handleForgotPassword = async (email: string) => {
-    try {
-      await sendPasswordResetEmail(email);
-      addNotification('Correo enviado.', 'success');
-    } catch (error: any) {
-      addNotification(error.message || 'Error al enviar.', 'error');
-      throw error;
-    }
-  };
+  const handleLogout = async () => { await logout(); setUser(null); setCurrentPage('home'); addNotification('Sesión cerrada', 'success'); };
+  const handleForgotPassword = async (email: string) => { try { await sendPasswordResetEmail(email); addNotification('Correo enviado.', 'success'); } catch (error: any) { addNotification(error.message || 'Error al enviar.', 'error'); throw error; } };
 
   const handleEmployeeAction = async (employeeId: string, action: AttendanceAction) => {
     try {
@@ -388,37 +278,15 @@ const AppContent: React.FC = () => {
       else if (action === 'Clock Out') newStatus = 'Clocked Out';
       else if (action.startsWith('Start ')) newStatus = action.substring(6);
       else if (action.startsWith('End ')) newStatus = 'Working';
-
       const updates: any = { status: newStatus, currentStatusStartTime: newStatus === 'Clocked Out' ? null : timestamp };
-
-      // ── Contador de trabajo acumulado ──────────────────────────────────────
-      if (action === 'Clock In') {
-        // Empieza sesión desde 0
-        updates.lastClockInTime        = timestamp;
-        updates.accumulatedWorkSeconds = 0;
-        updates.workSessionStartTime   = timestamp;
-      }
+      if (action === 'Clock In') { updates.lastClockInTime = timestamp; updates.accumulatedWorkSeconds = 0; updates.workSessionStartTime = timestamp; }
       else if (action.startsWith('Start ')) {
-        // Congela el contador sumando el tramo Working actual
-        const prevStart = employee.workSessionStartTime
-          ?? employee.lastClockInTime
-          ?? employee.currentStatusStartTime
-          ?? timestamp;
-        const elapsed = Math.floor((timestamp - prevStart) / 1000);
-        updates.accumulatedWorkSeconds = (employee.accumulatedWorkSeconds ?? 0) + Math.max(0, elapsed);
-        updates.workSessionStartTime   = null;
+        const prevStart = employee.workSessionStartTime ?? employee.lastClockInTime ?? employee.currentStatusStartTime ?? timestamp;
+        updates.accumulatedWorkSeconds = (employee.accumulatedWorkSeconds ?? 0) + Math.max(0, Math.floor((timestamp - prevStart) / 1000));
+        updates.workSessionStartTime = null;
       }
-      else if (action.startsWith('End ')) {
-        // Reactiva desde ahora — SIEMPRE escribir accumulatedWorkSeconds para que no se pierda
-        updates.workSessionStartTime   = timestamp;
-        updates.accumulatedWorkSeconds = employee.accumulatedWorkSeconds ?? 0;
-      }
-      else if (action === 'Clock Out') {
-        updates.accumulatedWorkSeconds = null;
-        updates.workSessionStartTime   = null;
-      }
-      // ──────────────────────────────────────────────────────────────────────
-
+      else if (action.startsWith('End ')) { updates.workSessionStartTime = timestamp; updates.accumulatedWorkSeconds = employee.accumulatedWorkSeconds ?? 0; }
+      else if (action === 'Clock Out') { updates.accumulatedWorkSeconds = null; updates.workSessionStartTime = null; }
       await updateEmployeeStatus({ ...employee, ...updates });
       if (user && employeeId === user.id) setUser(prev => prev ? { ...prev, ...updates } : prev);
       addNotification(`${action} registrado`, 'success');
@@ -428,22 +296,11 @@ const AppContent: React.FC = () => {
   const handleUpdateLogEntry = async (logId: string, updates: Partial<AttendanceLogEntry>) => {
     try {
       await updateAttendanceLogEntry(logId, updates);
-
-      // Si se editó un Clock In, actualizar también lastClockInTime en el empleado
-      // para que el tracker y el timeline reflejen la hora correcta
       const logEntry = attendanceLog.find(e => e.id === logId);
       if (logEntry && logEntry.action === 'Clock In' && updates.timestamp) {
         const emp = employees.find(e => e.id === logEntry.employeeId);
-        if (emp) {
-          await updateEmployeeStatus({
-            ...emp,
-            lastClockInTime:       updates.timestamp,
-            workSessionStartTime:  updates.timestamp,   // re-anclar el tramo Working
-            accumulatedWorkSeconds: emp.accumulatedWorkSeconds ?? 0,
-          } as any);
-        }
+        if (emp) await updateEmployeeStatus({ ...emp, lastClockInTime: updates.timestamp, workSessionStartTime: updates.timestamp, accumulatedWorkSeconds: emp.accumulatedWorkSeconds ?? 0 } as any);
       }
-
       setIsEditActivityLogEntryModalOpen(false);
       addNotification('Registro actualizado.', 'success');
     } catch (error) { addNotification('Error al actualizar.', 'error'); }
@@ -455,18 +312,11 @@ const AppContent: React.FC = () => {
   };
 
   const handleRemoveLogEntry = (entry: AttendanceLogEntry) => {
-    promptConfirm(
-      'Eliminar Registro',
-      `¿Eliminar el registro de ${entry.employeeName} (${entry.action})?`,
-      async () => {
-        try {
-          await removeAttendanceLogEntry(entry.id);
-          addNotification('Registro eliminado.', 'success');
-        } catch { addNotification('Error al eliminar.', 'error'); }
-      }
-    );
+    promptConfirm('Eliminar Registro', `¿Eliminar el registro de ${entry.employeeName} (${entry.action})?`, async () => {
+      try { await removeAttendanceLogEntry(entry.id); addNotification('Registro eliminado.', 'success'); }
+      catch { addNotification('Error al eliminar.', 'error'); }
+    });
   };
-
 
   const trackerEmployees = useMemo(() => {
     if (!user) return [];
@@ -480,9 +330,9 @@ const AppContent: React.FC = () => {
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-screen bg-bright-white gap-4">
       <div className="flex space-x-2">
-        <div className="w-4 h-4 rounded-full bg-lucius-lime animate-bounce [animation-delay:-0.3s]"></div>
-        <div className="w-4 h-4 rounded-full bg-lucius-lime animate-bounce [animation-delay:-0.15s]"></div>
-        <div className="w-4 h-4 rounded-full bg-lucius-lime animate-bounce"></div>
+        <div className="w-4 h-4 rounded-full bg-lucius-lime animate-bounce [animation-delay:-0.3s]" />
+        <div className="w-4 h-4 rounded-full bg-lucius-lime animate-bounce [animation-delay:-0.15s]" />
+        <div className="w-4 h-4 rounded-full bg-lucius-lime animate-bounce" />
       </div>
       <p className="font-bold animate-pulse text-lucius-lime">Iniciando TeamCheck...</p>
     </div>
@@ -499,17 +349,8 @@ const AppContent: React.FC = () => {
   // ── Onboarding ──
   if (currentPage === 'onboarding' || !user.companyId) {
     return (
-      <OnboardingPage
-        user={user}
-        onLogout={handleLogout}
-        initialInviteCode={urlInviteCode.current || undefined}
-        onComplete={async () => {
-          setTimeout(async () => {
-            await refreshUserProfile();
-            setCurrentPage('tracker');
-          }, 1000);
-        }}
-      />
+      <OnboardingPage user={user} onLogout={handleLogout} initialInviteCode={urlInviteCode.current || undefined}
+        onComplete={async () => { setTimeout(async () => { await refreshUserProfile(); setCurrentPage('tracker'); }, 1000); }} />
     );
   }
 
@@ -518,37 +359,13 @@ const AppContent: React.FC = () => {
     <div className="flex h-screen bg-bright-white overflow-hidden font-sans text-bokara-grey">
       <SideNav currentPage={currentPage} onNavigate={setCurrentPage} userRole={user.role} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       <div className="flex-1 flex flex-col overflow-hidden relative">
-
-        <Header
-          currentPage={currentPage}
-          onNavigate={setCurrentPage}
-          user={user}
-          userRole={user.role}
-          onLogout={handleLogout}
-          onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          notifications={bellNotifications}
-          onNotificationClick={handleBellNotificationClick}
-          onQuickAction={handleEmployeeAction}
-        />
-
+        <Header currentPage={currentPage} onNavigate={setCurrentPage} user={user} userRole={user.role} onLogout={handleLogout} onMenuClick={() => setIsSidebarOpen(!isSidebarOpen)} notifications={bellNotifications} onNotificationClick={handleBellNotificationClick} onQuickAction={handleEmployeeAction} />
         <main className="flex-1 overflow-x-hidden overflow-y-auto bg-whisper-white/30 p-4 sm:p-6 lg:p-8 scroll-smooth">
 
           {/* TRACKER */}
           {currentPage === 'tracker' && (
             <PageErrorBoundary>
-              <TrackerPage
-                employees={trackerEmployees}
-                attendanceLog={attendanceLog}
-                onEmployeeAction={handleEmployeeAction}
-                onAddEmployee={() => setIsAddEmployeeModalOpen(true)}
-                onRemoveEmployee={(id) => promptConfirm('Eliminar Colaborador', '¿Estás seguro?', () => removeEmployee(id))}
-                onEditTime={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeForTimeEdit(emp); setIsEditTimeModalOpen(true); } }}
-                userRole={user.role}
-                activityStatuses={activityStatuses}
-                workSchedules={workSchedules}
-                onEditEntry={(entry) => { setLogEntryToEdit(entry); setIsEditActivityLogEntryModalOpen(true); }}
-                onRemoveEntry={handleRemoveLogEntry}
-              />
+              <TrackerPage employees={trackerEmployees} attendanceLog={attendanceLog} onEmployeeAction={handleEmployeeAction} onAddEmployee={() => setIsAddEmployeeModalOpen(true)} onRemoveEmployee={(id) => promptConfirm('Eliminar Colaborador', '¿Estás seguro?', () => removeEmployee(id))} onEditTime={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeForTimeEdit(emp); setIsEditTimeModalOpen(true); } }} userRole={user.role} activityStatuses={activityStatuses} workSchedules={workSchedules} onEditEntry={(entry) => { setLogEntryToEdit(entry); setIsEditActivityLogEntryModalOpen(true); }} onRemoveEntry={handleRemoveLogEntry} />
             </PageErrorBoundary>
           )}
 
@@ -569,15 +386,7 @@ const AppContent: React.FC = () => {
           {/* EMPLOYEES */}
           {currentPage === 'employees' && isAdminOrMaster && (
             <PageErrorBoundary>
-              <EmployeesPage
-                employees={employees}
-                onAddEmployee={() => setIsAddEmployeeModalOpen(true)}
-                onEditEmployee={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeToEdit(emp); setIsEditEmployeeModalOpen(true); } }}
-                onRemoveEmployee={(id) => promptConfirm('Eliminar Colaborador', '¿Estás seguro?', () => removeEmployee(id))}
-                workSchedules={workSchedules}
-                currentUser={user}
-                inviteCode={company?.inviteCode}
-              />
+              <EmployeesPage employees={employees} onAddEmployee={() => setIsAddEmployeeModalOpen(true)} onEditEmployee={(id) => { const emp = employees.find(e => e.id === id); if (emp) { setEmployeeToEdit(emp); setIsEditEmployeeModalOpen(true); } }} onRemoveEmployee={(id) => promptConfirm('Eliminar Colaborador', '¿Estás seguro?', () => removeEmployee(id))} workSchedules={workSchedules} currentUser={user} inviteCode={company?.inviteCode} />
             </PageErrorBoundary>
           )}
 
@@ -590,21 +399,23 @@ const AppContent: React.FC = () => {
                 payrollChangeTypes={payrollChangeTypes}
                 onAddEvent={() => setIsAddEventModalOpen(true)}
                 onEditEvent={(event) => { setEventToEdit(event); setIsEditEventModalOpen(true); }}
-                onRemoveEvent={(event) => promptConfirm(
-                  'Eliminar Evento', '¿Estás seguro?',
-                  async () => {
-                    try {
-                      await removeCalendarEvent(event.id);
-                      setCalendarEvents(await getCalendarEvents());
-                      addNotification('Evento eliminado', 'success');
-                    } catch { addNotification('Error al eliminar', 'error'); }
-                  }
-                )}
+                onRemoveEvent={(event) => promptConfirm('Eliminar Evento', '¿Estás seguro?', async () => {
+                  try {
+                    await removeCalendarEvent(event.id);
+                    setCalendarEvents(prev => prev.filter(e => e.id !== event.id)); // ← local
+                    addNotification('Evento eliminado', 'success');
+                  } catch { addNotification('Error al eliminar', 'error'); }
+                })}
                 onUpdateEventStatus={async (event, status) => {
                   try {
                     await updateCalendarEvent({ ...event, status });
-                    setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e));
+                    setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e)); // ← local
                   } catch { addNotification('Error al actualizar estado', 'error'); }
+                }}
+                onBulkImport={async (eventsToCreate) => {
+                  const created: CalendarEvent[] = [];
+                  for (const ev of eventsToCreate) { const saved = await addCalendarEvent(ev); created.push(saved); }
+                  setCalendarEvents(prev => [...prev, ...created]); // ← local
                 }}
               />
             </PageErrorBoundary>
@@ -625,42 +436,40 @@ const AppContent: React.FC = () => {
                 currentUser={user}
                 employees={employees}
                 payrollChangeTypes={payrollChangeTypes}
-              onAddRequest={async (req) => {
-                try {
-                  await addCalendarEvent({ ...req, status: 'pending' });
-                  addNotification('Solicitud enviada', 'success');
-                  setCalendarEvents(await getCalendarEvents());
-                  // ── Notificar por email a los destinatarios RRHH ──
-                  sendTicketNotification(req);
-                } catch { addNotification('Error al enviar', 'error'); }
-              }}
-              onUpdateRequest={async (evt) => {
-                try {
-                  await updateCalendarEvent(evt);
-                  addNotification('Solicitud actualizada', 'success');
-                  setCalendarEvents(await getCalendarEvents());
-                } catch { addNotification('Error al actualizar', 'error'); }
-              }}
-              onRemoveRequest={(evt) => promptConfirm('Borrar Solicitud', '¿Seguro?', async () => {
-                try {
-                  await removeCalendarEvent(evt.id);
-                  addNotification('Solicitud borrada', 'success');
-                  setCalendarEvents(await getCalendarEvents());
-                } catch { addNotification('Error al borrar', 'error'); }
-              })}
-              onUpdateEventStatus={async (event, status) => {
-                try {
-                  await updateCalendarEvent({ ...event, status });
-                  setCalendarEvents(await getCalendarEvents());
-                } catch { addNotification('Error al actualizar estado', 'error'); }
-              }}
-              onBulkImport={async (eventsToCreate) => {
-                for (const ev of eventsToCreate) {
-                  await addCalendarEvent(ev);
-                }
-                setCalendarEvents(await getCalendarEvents());
-              }}
-            />
+                onAddRequest={async (req) => {
+                  try {
+                    const saved = await addCalendarEvent({ ...req, status: 'pending' });
+                    setCalendarEvents(prev => [...prev, saved]); // ← local
+                    addNotification('Solicitud enviada', 'success');
+                    sendTicketNotification(req);
+                  } catch { addNotification('Error al enviar', 'error'); }
+                }}
+                onUpdateRequest={async (evt) => {
+                  try {
+                    await updateCalendarEvent(evt);
+                    setCalendarEvents(prev => prev.map(e => e.id === evt.id ? evt : e)); // ← local
+                    addNotification('Solicitud actualizada', 'success');
+                  } catch { addNotification('Error al actualizar', 'error'); }
+                }}
+                onRemoveRequest={(evt) => promptConfirm('Borrar Solicitud', '¿Seguro?', async () => {
+                  try {
+                    await removeCalendarEvent(evt.id);
+                    setCalendarEvents(prev => prev.filter(e => e.id !== evt.id)); // ← local
+                    addNotification('Solicitud borrada', 'success');
+                  } catch { addNotification('Error al borrar', 'error'); }
+                })}
+                onUpdateEventStatus={async (event, status) => {
+                  try {
+                    await updateCalendarEvent({ ...event, status });
+                    setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e)); // ← local
+                  } catch { addNotification('Error al actualizar estado', 'error'); }
+                }}
+                onBulkImport={async (eventsToCreate) => {
+                  const created: CalendarEvent[] = [];
+                  for (const ev of eventsToCreate) { const saved = await addCalendarEvent(ev); created.push(saved); }
+                  setCalendarEvents(prev => [...prev, ...created]); // ← local
+                }}
+              />
             </PageErrorBoundary>
           )}
 
@@ -669,121 +478,104 @@ const AppContent: React.FC = () => {
             <PageErrorBoundary>
               <SettingsPage
                 statuses={activityStatuses}
-                onAddStatus={async (n, c) => { try { await addActivityStatus(n, c); setActivityStatuses(await getActivityStatuses()); } catch { addNotification('Error al guardar estado', 'error'); } }}
-                onRemoveStatus={async (id) => { try { await removeActivityStatus(id); setActivityStatuses(await getActivityStatuses()); } catch { addNotification('Error al eliminar estado', 'error'); } }}
+                onAddStatus={async (n, c) => {
+                  try {
+                    const saved = await addActivityStatus(n, c) as ActivityStatus;
+                    if (saved) setActivityStatuses(prev => [...prev, saved]);
+                  } catch { addNotification('Error al guardar estado', 'error'); }
+                }}
+                onRemoveStatus={async (id) => {
+                  try {
+                    await removeActivityStatus(id);
+                    setActivityStatuses(prev => prev.filter(s => s.id !== id)); // ← local
+                  } catch { addNotification('Error al eliminar estado', 'error'); }
+                }}
                 payrollChangeTypes={payrollChangeTypes}
-                onAddPayrollChangeType={async (n, c, e, a, quota, semQuota) => { try { await addPayrollChangeType(n, c, e, a, quota, semQuota); setPayrollChangeTypes(await getPayrollChangeTypes()); } catch { addNotification('Error al agregar tipo', 'error'); } }}
-                onUpdatePayrollChangeType={async (id, u) => { try { await updatePayrollChangeType(id, u); setPayrollChangeTypes(await getPayrollChangeTypes()); } catch { addNotification('Error al actualizar tipo', 'error'); } }}
-                onRemovePayrollChangeType={async (id) => { try { await removePayrollChangeType(id); setPayrollChangeTypes(await getPayrollChangeTypes()); } catch { addNotification('Error al eliminar tipo', 'error'); } }}
+                onAddPayrollChangeType={async (n, c, e, a, quota, semQuota) => {
+                  try {
+                    const saved = await addPayrollChangeType(n, c, e, a, quota, semQuota) as PayrollChangeType;
+                    if (saved) setPayrollChangeTypes(prev => [...prev, saved]);
+                  } catch { addNotification('Error al agregar tipo', 'error'); }
+                }}
+                onUpdatePayrollChangeType={async (id, u) => {
+                  try {
+                    await updatePayrollChangeType(id, u);
+                    setPayrollChangeTypes(prev => prev.map(t => t.id === id ? { ...t, ...u } : t)); // ← local
+                  } catch { addNotification('Error al actualizar tipo', 'error'); }
+                }}
+                onRemovePayrollChangeType={async (id) => {
+                  try {
+                    await removePayrollChangeType(id);
+                    setPayrollChangeTypes(prev => prev.filter(t => t.id !== id)); // ← local
+                  } catch { addNotification('Error al eliminar tipo', 'error'); }
+                }}
                 workSchedules={workSchedules}
-                onAddWorkSchedule={async (s) => { try { await addWorkSchedule(s); setWorkSchedules(await getWorkSchedules()); } catch { addNotification('Error al agregar horario', 'error'); } }}
-                onUpdateWorkSchedule={async (id, u) => { try { await updateWorkSchedule(id, u); setWorkSchedules(await getWorkSchedules()); } catch { addNotification('Error al actualizar horario', 'error'); } }}
-                onRemoveWorkSchedule={async (id) => { try { await removeWorkSchedule(id); setWorkSchedules(await getWorkSchedules()); } catch { addNotification('Error al eliminar horario', 'error'); } }}
+                onAddWorkSchedule={async (s) => {
+                  try {
+                    const saved = await addWorkSchedule(s);
+                    setWorkSchedules(prev => [...prev, saved]); // ← local
+                  } catch { addNotification('Error al agregar horario', 'error'); }
+                }}
+                onUpdateWorkSchedule={async (id, u) => {
+                  try {
+                    await updateWorkSchedule(id, u);
+                    setWorkSchedules(prev => prev.map(s => s.id === id ? { ...s, ...u } : s)); // ← local
+                  } catch { addNotification('Error al actualizar horario', 'error'); }
+                }}
+                onRemoveWorkSchedule={async (id) => {
+                  try {
+                    await removeWorkSchedule(id);
+                    setWorkSchedules(prev => prev.filter(s => s.id !== id)); // ← local
+                  } catch { addNotification('Error al eliminar horario', 'error'); }
+                }}
                 companyId={user.companyId}
                 inviteCode={company?.inviteCode}
               />
             </PageErrorBoundary>
           )}
 
-          {/* PROFILE */}
-          {currentPage === 'profile' && <ProfilePage user={user} onUpdateProfile={refreshUserProfile} />}
-
-          {/* CALENDAR */}
-          {currentPage === 'calendar' && <CalendarPage events={calendarEvents} currentUser={user} payrollChangeTypes={payrollChangeTypes} />}
-
-          {/* CHANGE PASSWORD */}
-          {currentPage === 'password' && <ChangePasswordPage />}
+          {currentPage === 'profile'   && <ProfilePage user={user} onUpdateProfile={refreshUserProfile} />}
+          {currentPage === 'calendar'  && <CalendarPage events={calendarEvents} currentUser={user} payrollChangeTypes={payrollChangeTypes} />}
+          {currentPage === 'password'  && <ChangePasswordPage />}
 
         </main>
 
         {/* ── MODALES ── */}
-        <AddEmployeeModal
-          isOpen={isAddEmployeeModalOpen}
-          onClose={() => setIsAddEmployeeModalOpen(false)}
-          workSchedules={workSchedules}
-          inviteCode={company?.inviteCode}
-          companyName={company?.name}
-          onAddEmployee={async (data) => {
-            try { await addEmployee({ ...data, companyId: user.companyId }); addNotification('Colaborador añadido', 'success'); }
-            catch (e: any) { addNotification(e.message || 'Error', 'error'); throw e; }
-          }}
-        />
+        <AddEmployeeModal isOpen={isAddEmployeeModalOpen} onClose={() => setIsAddEmployeeModalOpen(false)} workSchedules={workSchedules} inviteCode={company?.inviteCode} companyName={company?.name}
+          onAddEmployee={async (data) => { try { await addEmployee({ ...data, companyId: user.companyId }); addNotification('Colaborador añadido', 'success'); } catch (e: any) { addNotification(e.message || 'Error', 'error'); throw e; } }} />
 
-        <EditEmployeeModal
-          isOpen={isEditEmployeeModalOpen}
-          onClose={() => setIsEditEmployeeModalOpen(false)}
-          employeeToEdit={employeeToEdit}
-          workSchedules={workSchedules}
-          onUpdateEmployee={async (emp) => {
-            try { await updateEmployeeDetails(emp); setIsEditEmployeeModalOpen(false); addNotification('Colaborador actualizado', 'success'); }
-            catch { addNotification('Error', 'error'); }
-          }}
-        />
+        <EditEmployeeModal isOpen={isEditEmployeeModalOpen} onClose={() => setIsEditEmployeeModalOpen(false)} employeeToEdit={employeeToEdit} workSchedules={workSchedules}
+          onUpdateEmployee={async (emp) => { try { await updateEmployeeDetails(emp); setIsEditEmployeeModalOpen(false); addNotification('Colaborador actualizado', 'success'); } catch { addNotification('Error', 'error'); } }} />
 
-        <EditTimeModal
-          isOpen={isEditTimeModalOpen}
-          onClose={() => setIsEditTimeModalOpen(false)}
-          employee={employeeForTimeEdit}
-          onSave={async (id, time) => {
-            try { await updateEmployeeCurrentSession(id, time); setIsEditTimeModalOpen(false); addNotification('Hora actualizada', 'success'); }
-            catch { addNotification('Error', 'error'); }
-          }}
-        />
+        <EditTimeModal isOpen={isEditTimeModalOpen} onClose={() => setIsEditTimeModalOpen(false)} employee={employeeForTimeEdit}
+          onSave={async (id, time) => { try { await updateEmployeeCurrentSession(id, time); setIsEditTimeModalOpen(false); addNotification('Hora actualizada', 'success'); } catch { addNotification('Error', 'error'); } }} />
 
-        <EditTimesheetEntryModal
-          isOpen={isEditTimesheetModalOpen}
-          onClose={() => setIsEditTimesheetModalOpen(false)}
-          entry={timesheetEntryToEdit}
-          onSave={async (sid, eid, start, end) => {
-            try {
-              await updateTimesheetEntry(
-                timesheetEntryToEdit!.employeeId,
-                String(sid), String(eid), Number(start), Number(end),
-              );
-              setIsEditTimesheetModalOpen(false);
-              addNotification('Entrada actualizada', 'success');
-            } catch { addNotification('Error', 'error'); }
-          }}
-        />
+        <EditTimesheetEntryModal isOpen={isEditTimesheetModalOpen} onClose={() => setIsEditTimesheetModalOpen(false)} entry={timesheetEntryToEdit}
+          onSave={async (sid, eid, start, end) => { try { await updateTimesheetEntry(timesheetEntryToEdit!.employeeId, String(sid), String(eid), Number(start), Number(end)); setIsEditTimesheetModalOpen(false); addNotification('Entrada actualizada', 'success'); } catch { addNotification('Error', 'error'); } }} />
 
-        <AddEventModal
-          isOpen={isAddEventModalOpen}
-          onClose={() => setIsAddEventModalOpen(false)}
-          employees={employees}
-          payrollChangeTypes={payrollChangeTypes}
+        <AddEventModal isOpen={isAddEventModalOpen} onClose={() => setIsAddEventModalOpen(false)} employees={employees} payrollChangeTypes={payrollChangeTypes}
           onAddEvent={async (data) => {
-            try { await addCalendarEvent({ ...data }); setIsAddEventModalOpen(false); addNotification('Evento añadido', 'success'); setCalendarEvents(await getCalendarEvents()); }
-            catch { addNotification('Error', 'error'); }
-          }}
-        />
+            try {
+              const saved = await addCalendarEvent({ ...data });
+              setCalendarEvents(prev => [...prev, saved]); // ← local
+              setIsAddEventModalOpen(false);
+              addNotification('Evento añadido', 'success');
+            } catch { addNotification('Error', 'error'); }
+          }} />
 
-        <EditEventModal
-          isOpen={isEditEventModalOpen}
-          onClose={() => setIsEditEventModalOpen(false)}
-          eventToEdit={eventToEdit}
-          employees={employees}
-          payrollChangeTypes={payrollChangeTypes}
+        <EditEventModal isOpen={isEditEventModalOpen} onClose={() => setIsEditEventModalOpen(false)} eventToEdit={eventToEdit} employees={employees} payrollChangeTypes={payrollChangeTypes}
           onUpdateEvent={async (data) => {
-            try { await updateCalendarEvent(data); setIsEditEventModalOpen(false); addNotification('Evento actualizado', 'success'); setCalendarEvents(await getCalendarEvents()); }
-            catch { addNotification('Error', 'error'); }
-          }}
-        />
+            try {
+              await updateCalendarEvent(data);
+              setCalendarEvents(prev => prev.map(e => e.id === data.id ? data : e)); // ← local
+              setIsEditEventModalOpen(false);
+              addNotification('Evento actualizado', 'success');
+            } catch { addNotification('Error', 'error'); }
+          }} />
 
-        <EditActivityLogEntryModal
-          isOpen={isEditActivityLogEntryModalOpen}
-          onClose={() => setIsEditActivityLogEntryModalOpen(false)}
-          entry={logEntryToEdit}
-          activityStatuses={activityStatuses}
-          onSave={handleUpdateLogEntry}
-        />
+        <EditActivityLogEntryModal isOpen={isEditActivityLogEntryModalOpen} onClose={() => setIsEditActivityLogEntryModalOpen(false)} entry={logEntryToEdit} activityStatuses={activityStatuses} onSave={handleUpdateLogEntry} />
 
-        <ConfirmationModal
-          isOpen={isConfirmModalOpen}
-          onClose={() => setIsConfirmModalOpen(false)}
-          title={confirmConfig.title}
-          message={confirmConfig.message}
-          onConfirm={confirmConfig.onConfirm}
-        />
+        <ConfirmationModal isOpen={isConfirmModalOpen} onClose={() => setIsConfirmModalOpen(false)} title={confirmConfig.title} message={confirmConfig.message} onConfirm={confirmConfig.onConfirm} />
       </div>
     </div>
   );
