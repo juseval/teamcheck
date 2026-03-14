@@ -177,9 +177,7 @@ const AppContent: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // ── Cargar datos de la empresa
-  // Dependencia: user?.companyId (no el objeto user completo)
-  // Evita re-fetches innecesarios cuando cambia cualquier campo del usuario
+  // ── Cargar datos de la empresa ──
   useEffect(() => {
     if (!user?.companyId) return;
     Promise.all([
@@ -198,7 +196,59 @@ const AppContent: React.FC = () => {
     const unsubEmployees = streamEmployees(setEmployees);
     const unsubLog = streamAttendanceLog(setAttendanceLog);
     return () => { unsubEmployees(); unsubLog(); };
-  }, [user?.companyId]); // ← solo se re-ejecuta si cambia la empresa, no cualquier cambio de user
+  }, [user?.companyId]);
+
+  // ── Auto Clock-Out tras 10 horas ──
+  // Corre al cargar y cada 5 minutos. Si un colaborador lleva más de 10h
+  // en cualquier estado (Working, Break, etc.) se le hace Clock Out automático.
+  useEffect(() => {
+    if (!employees.length) return;
+
+    const AUTO_HOURS = 10;
+    const MAX_MS = AUTO_HOURS * 60 * 60 * 1000;
+
+    const check = async () => {
+      const now = Date.now();
+      for (const emp of employees) {
+        // Solo actuar sobre empleados que NO están Clocked Out
+        if (emp.status === 'Clocked Out') continue;
+
+        // Referencia de tiempo: desde cuándo está en este estado
+        const ref = emp.currentStatusStartTime ?? emp.lastClockInTime;
+        if (!ref) continue;
+
+        const elapsed = now - ref;
+        if (elapsed < MAX_MS) continue;
+
+        console.info(`[AutoClockOut] ${emp.name} lleva +${AUTO_HOURS}h en estado "${emp.status}". Cerrando sesión automáticamente.`);
+
+        try {
+          await addAttendanceLogEntry({
+            employeeId:   emp.id,
+            companyId:    emp.companyId,
+            employeeName: emp.name,
+            action:       'Clock Out',
+            timestamp:    now,
+            isAutoLog:    true,
+          });
+          await updateEmployeeStatus({
+            ...emp,
+            status:                 'Clocked Out',
+            currentStatusStartTime: null,
+            accumulatedWorkSeconds: null,
+            workSessionStartTime:   null,
+          });
+        } catch (err) {
+          console.error('[AutoClockOut] Error al cerrar sesión de', emp.name, err);
+        }
+      }
+    };
+
+    // Verificar inmediatamente al montar y luego cada 5 minutos
+    check();
+    const interval = setInterval(check, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [employees]);
 
   // ── Bell notifications ──
   const bellNotifications = useMemo((): BellNotification[] => {
@@ -402,20 +452,20 @@ const AppContent: React.FC = () => {
                 onRemoveEvent={(event) => promptConfirm('Eliminar Evento', '¿Estás seguro?', async () => {
                   try {
                     await removeCalendarEvent(event.id);
-                    setCalendarEvents(prev => prev.filter(e => e.id !== event.id)); // ← local
+                    setCalendarEvents(prev => prev.filter(e => e.id !== event.id));
                     addNotification('Evento eliminado', 'success');
                   } catch { addNotification('Error al eliminar', 'error'); }
                 })}
                 onUpdateEventStatus={async (event, status) => {
                   try {
                     await updateCalendarEvent({ ...event, status });
-                    setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e)); // ← local
+                    setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e));
                   } catch { addNotification('Error al actualizar estado', 'error'); }
                 }}
                 onBulkImport={async (eventsToCreate) => {
                   const created: CalendarEvent[] = [];
                   for (const ev of eventsToCreate) { const saved = await addCalendarEvent(ev); created.push(saved); }
-                  setCalendarEvents(prev => [...prev, ...created]); // ← local
+                  setCalendarEvents(prev => [...prev, ...created]);
                 }}
               />
             </PageErrorBoundary>
@@ -439,7 +489,7 @@ const AppContent: React.FC = () => {
                 onAddRequest={async (req) => {
                   try {
                     const saved = await addCalendarEvent({ ...req, status: 'pending' });
-                    setCalendarEvents(prev => [...prev, saved]); // ← local
+                    setCalendarEvents(prev => [...prev, saved]);
                     addNotification('Solicitud enviada', 'success');
                     sendTicketNotification(req);
                   } catch { addNotification('Error al enviar', 'error'); }
@@ -447,27 +497,27 @@ const AppContent: React.FC = () => {
                 onUpdateRequest={async (evt) => {
                   try {
                     await updateCalendarEvent(evt);
-                    setCalendarEvents(prev => prev.map(e => e.id === evt.id ? evt : e)); // ← local
+                    setCalendarEvents(prev => prev.map(e => e.id === evt.id ? evt : e));
                     addNotification('Solicitud actualizada', 'success');
                   } catch { addNotification('Error al actualizar', 'error'); }
                 }}
                 onRemoveRequest={(evt) => promptConfirm('Borrar Solicitud', '¿Seguro?', async () => {
                   try {
                     await removeCalendarEvent(evt.id);
-                    setCalendarEvents(prev => prev.filter(e => e.id !== evt.id)); // ← local
+                    setCalendarEvents(prev => prev.filter(e => e.id !== evt.id));
                     addNotification('Solicitud borrada', 'success');
                   } catch { addNotification('Error al borrar', 'error'); }
                 })}
                 onUpdateEventStatus={async (event, status) => {
                   try {
                     await updateCalendarEvent({ ...event, status });
-                    setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e)); // ← local
+                    setCalendarEvents(prev => prev.map(e => e.id === event.id ? { ...e, status } : e));
                   } catch { addNotification('Error al actualizar estado', 'error'); }
                 }}
                 onBulkImport={async (eventsToCreate) => {
                   const created: CalendarEvent[] = [];
                   for (const ev of eventsToCreate) { const saved = await addCalendarEvent(ev); created.push(saved); }
-                  setCalendarEvents(prev => [...prev, ...created]); // ← local
+                  setCalendarEvents(prev => [...prev, ...created]);
                 }}
               />
             </PageErrorBoundary>
@@ -487,7 +537,7 @@ const AppContent: React.FC = () => {
                 onRemoveStatus={async (id) => {
                   try {
                     await removeActivityStatus(id);
-                    setActivityStatuses(prev => prev.filter(s => s.id !== id)); // ← local
+                    setActivityStatuses(prev => prev.filter(s => s.id !== id));
                   } catch { addNotification('Error al eliminar estado', 'error'); }
                 }}
                 payrollChangeTypes={payrollChangeTypes}
@@ -500,32 +550,32 @@ const AppContent: React.FC = () => {
                 onUpdatePayrollChangeType={async (id, u) => {
                   try {
                     await updatePayrollChangeType(id, u);
-                    setPayrollChangeTypes(prev => prev.map(t => t.id === id ? { ...t, ...u } : t)); // ← local
+                    setPayrollChangeTypes(prev => prev.map(t => t.id === id ? { ...t, ...u } : t));
                   } catch { addNotification('Error al actualizar tipo', 'error'); }
                 }}
                 onRemovePayrollChangeType={async (id) => {
                   try {
                     await removePayrollChangeType(id);
-                    setPayrollChangeTypes(prev => prev.filter(t => t.id !== id)); // ← local
+                    setPayrollChangeTypes(prev => prev.filter(t => t.id !== id));
                   } catch { addNotification('Error al eliminar tipo', 'error'); }
                 }}
                 workSchedules={workSchedules}
                 onAddWorkSchedule={async (s) => {
                   try {
                     const saved = await addWorkSchedule(s);
-                    setWorkSchedules(prev => [...prev, saved]); // ← local
+                    setWorkSchedules(prev => [...prev, saved]);
                   } catch { addNotification('Error al agregar horario', 'error'); }
                 }}
                 onUpdateWorkSchedule={async (id, u) => {
                   try {
                     await updateWorkSchedule(id, u);
-                    setWorkSchedules(prev => prev.map(s => s.id === id ? { ...s, ...u } : s)); // ← local
+                    setWorkSchedules(prev => prev.map(s => s.id === id ? { ...s, ...u } : s));
                   } catch { addNotification('Error al actualizar horario', 'error'); }
                 }}
                 onRemoveWorkSchedule={async (id) => {
                   try {
                     await removeWorkSchedule(id);
-                    setWorkSchedules(prev => prev.filter(s => s.id !== id)); // ← local
+                    setWorkSchedules(prev => prev.filter(s => s.id !== id));
                   } catch { addNotification('Error al eliminar horario', 'error'); }
                 }}
                 companyId={user.companyId}
@@ -557,7 +607,7 @@ const AppContent: React.FC = () => {
           onAddEvent={async (data) => {
             try {
               const saved = await addCalendarEvent({ ...data });
-              setCalendarEvents(prev => [...prev, saved]); // ← local
+              setCalendarEvents(prev => [...prev, saved]);
               setIsAddEventModalOpen(false);
               addNotification('Evento añadido', 'success');
             } catch { addNotification('Error', 'error'); }
@@ -567,7 +617,7 @@ const AppContent: React.FC = () => {
           onUpdateEvent={async (data) => {
             try {
               await updateCalendarEvent(data);
-              setCalendarEvents(prev => prev.map(e => e.id === data.id ? data : e)); // ← local
+              setCalendarEvents(prev => prev.map(e => e.id === data.id ? data : e));
               setIsEditEventModalOpen(false);
               addNotification('Evento actualizado', 'success');
             } catch { addNotification('Error', 'error'); }
