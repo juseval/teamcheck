@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Employee, WorkSchedule } from '../types';
 
@@ -10,6 +9,15 @@ interface EditEmployeeModalProps {
   workSchedules: WorkSchedule[];
 }
 
+const ID_TYPES = [
+  'Cédula de Ciudadanía',
+  'Tarjeta de Identidad',
+  'Registro Civil',
+  'Cédula de Extranjería',
+  'Pasaporte',
+  'NIT',
+];
+
 const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, onClose, onUpdateEmployee, employeeToEdit, workSchedules }) => {
   const [activeTab, setActiveTab] = useState('info');
   const [employeeData, setEmployeeData] = useState<Employee | null>(null);
@@ -19,7 +27,9 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, onClose, 
       setEmployeeData({
           ...employeeToEdit,
           allowMobileClockIn: employeeToEdit.allowMobileClockIn ?? false,
-          autoClockOut24h: employeeToEdit.autoClockOut24h ?? true
+          autoClockOut24h: employeeToEdit.autoClockOut24h ?? true,
+          idType: employeeToEdit.idType ?? '',
+          idNumber: employeeToEdit.idNumber ?? '',
       });
     }
   }, [employeeToEdit]);
@@ -35,12 +45,10 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, onClose, 
           if (type === 'checkbox') val = (e.target as HTMLInputElement).checked;
           if (name === 'manualVacationAdjustment') val = Number(value);
           
-          // FIX: Manejo robusto de fechas para evitar desfases de un día por zona horaria
           if (name === 'hireDate' || name === 'terminationDate') {
               if (!value) {
                   val = undefined;
               } else {
-                  // Creamos la fecha usando el string YYYY-MM-DD y forzamos la hora a 00:00 local
                   const [year, month, day] = value.split('-').map(Number);
                   val = new Date(year, month - 1, day).getTime();
               }
@@ -55,12 +63,13 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, onClose, 
     if (employeeData && employeeData.name?.trim() && employeeData.email?.trim()) {
       onUpdateEmployee({
           ...employeeData,
-          workScheduleId: employeeData.workScheduleId || null
+          workScheduleId: employeeData.workScheduleId || null,
+          idType: employeeData.idType || undefined,
+          idNumber: employeeData.idNumber || undefined,
       });
     }
   };
 
-  // Helper para convertir timestamp a string YYYY-MM-DD compatible con input date
   const timestampToDateString = (ts?: number) => {
       if (!ts) return '';
       const d = new Date(ts);
@@ -119,6 +128,34 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, onClose, 
                     <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Correo Electrónico</label>
                     <input name="email" type="email" value={employeeData.email || ''} onChange={handleChange} className="w-full border border-bokara-grey/20 rounded-lg p-2 focus:ring-1 focus:ring-lucius-lime" required />
                 </div>
+
+                {/* Tipo de ID */}
+                <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Tipo de Documento</label>
+                    <select
+                        name="idType"
+                        value={employeeData.idType || ''}
+                        onChange={handleChange}
+                        className="w-full border border-bokara-grey/20 rounded-lg p-2 focus:ring-1 focus:ring-lucius-lime"
+                    >
+                        <option value="">Sin especificar</option>
+                        {ID_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                </div>
+
+                {/* Número de ID */}
+                <div>
+                    <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Número de Documento</label>
+                    <input
+                        name="idNumber"
+                        type="text"
+                        placeholder="Ej: 1234567890"
+                        value={employeeData.idNumber || ''}
+                        onChange={handleChange}
+                        className="w-full border border-bokara-grey/20 rounded-lg p-2 focus:ring-1 focus:ring-lucius-lime"
+                    />
+                </div>
+
                 <div>
                     <label className="block text-xs font-bold text-gray-400 uppercase mb-2">Teléfono</label>
                     <input name="phone" type="tel" value={employeeData.phone || ''} onChange={handleChange} className="w-full border border-bokara-grey/20 rounded-lg p-2 focus:ring-1 focus:ring-lucius-lime" />
@@ -193,7 +230,7 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, onClose, 
                               <p className="font-bold text-gray-700 text-sm">Cierre de sesión automático tras 24 horas continuas de trabajo</p>
                           </label>
 
-                           <label className="flex items-center gap-3 cursor-pointer p-3 hover:bg-gray-50 rounded-lg transition-colors border border-transparent hover:border-gray-200">
+                          <label className="flex items-center gap-3 cursor-pointer p-3 hover:bg-gray-50 rounded-lg transition-colors border border-transparent hover:border-gray-200">
                               <input 
                                 type="checkbox" 
                                 name="blockEarlyClockIn" 
@@ -208,7 +245,7 @@ const EditEmployeeModal: React.FC<EditEmployeeModalProps> = ({ isOpen, onClose, 
               </div>
           )}
 
-          {/* TAB: RRHH / DÍAS DE ENTRADA Y SALIDA */}
+          {/* TAB: RRHH */}
           {activeTab === 'hr' && (
               <div className="animate-fade-in space-y-6">
                    <div className="bg-lucius-lime/5 border border-lucius-lime/20 p-4 rounded-xl mb-4">

@@ -23,6 +23,8 @@ export interface Invitation {
   phone?: string;
   location?: string;
   workScheduleId?: string | null;
+  idType?: string;
+  idNumber?: string;
 }
 
 export interface Employee {
@@ -52,6 +54,10 @@ export interface Employee {
   autoClockOut24h?: boolean;
   blockEarlyClockIn?: boolean;
   emailVerified: boolean;
+  /** Tipo de documento de identidad */
+  idType?: string;
+  /** Número de documento de identidad */
+  idNumber?: string;
 }
 
 export type AttendanceAction = string;
@@ -140,7 +146,7 @@ export interface CalendarEvent {
   startDate: string;
   endDate: string;
   status: EventStatus;
-  createdAt?: number;   // timestamp ms — orden de llegada
+  createdAt?: number;
 }
 
 export interface PayrollChangeType {
@@ -148,38 +154,10 @@ export interface PayrollChangeType {
   companyId?: string;
   name: string;
   color: string;
-
-  // ── Nombres nuevos (Settings y TicketingPage usan estos) ──
-
-  /**
-   * "Requiere Aprobación"
-   * true  → el colaborador solicita y el admin aprueba antes de que cuente en la tabla anual.
-   * false → el admin lo registra directamente y cuenta de inmediato.
-   */
   requiereAprobacion?: boolean;
-
-  /**
-   * "Solo Admin"
-   * true  → solo el admin puede registrar esta novedad.
-   * false → el colaborador puede verla y solicitarla.
-   */
   soloAdmin?: boolean;
-
-  /**
-   * Cupo máximo por AÑO COMPLETO (días/usos).
-   */
   yearlyQuota?: number;
-
-  /**
-   * Cupo máximo por SEMESTRE.
-   * Activa las ventanas semestrales de solicitud para colaboradores:
-   *  - S1 (Ene–Jun): ventana del 1 Dic al 31 May
-   *  - S2 (Jul–Dic): ventana del 1 Jun al 30 Nov
-   * Admins y master siempre pueden registrar sin restricción de ventana.
-   */
   semesterQuota?: number;
-
-  // ── Aliases de compatibilidad (otros componentes que aún usan los nombres viejos) ──
   /** @deprecated usa `requiereAprobacion` */
   isExclusive?: boolean;
   /** @deprecated usa `soloAdmin` */

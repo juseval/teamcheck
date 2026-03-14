@@ -11,11 +11,22 @@ interface AddEmployeeModalProps {
     role: 'admin' | 'employee';
     workScheduleId: string | null;
     status: string;
+    idType?: string;
+    idNumber?: string;
   }) => Promise<void>;
   workSchedules: WorkSchedule[];
   inviteCode?: string;
   companyName?: string;
 }
+
+const ID_TYPES = [
+  'Cédula de Ciudadanía',
+  'Tarjeta de Identidad',
+  'Registro Civil',
+  'Cédula de Extranjería',
+  'Pasaporte',
+  'NIT',
+];
 
 type Step = 'form' | 'invite';
 
@@ -39,6 +50,8 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
     phone: '',
     role: 'employee' as 'admin' | 'employee',
     workScheduleId: '' as string | null,
+    idType: '',
+    idNumber: '',
   });
 
   const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
@@ -78,6 +91,8 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         role: formData.role,
         workScheduleId: formData.workScheduleId || null,
         status: 'Clocked Out',
+        idType: formData.idType || undefined,
+        idNumber: formData.idNumber.trim() || undefined,
       });
       setAddedEmail(formData.email.trim().toLowerCase());
       setAddedName(formData.name.trim());
@@ -113,7 +128,7 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
 
   const handleClose = () => {
     setStep('form');
-    setFormData({ name: '', email: '', phone: '', role: 'employee', workScheduleId: '' });
+    setFormData({ name: '', email: '', phone: '', role: 'employee', workScheduleId: '', idType: '', idNumber: '' });
     setErrors({});
     setCopied(false);
     onClose();
@@ -194,6 +209,39 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 {errors.email && (
                   <p className="text-[10px] text-red-500 font-bold mt-1 ml-1">{errors.email}</p>
                 )}
+              </div>
+
+              {/* Tipo y Número de ID */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1.5">
+                    Tipo de ID
+                  </label>
+                  <select
+                    name="idType"
+                    value={formData.idType}
+                    onChange={handleChange}
+                    className="w-full rounded-xl border border-bokara-grey/15 bg-[#F9F8F6] px-4 py-3 text-sm font-medium text-bokara-grey focus:outline-none focus:ring-2 focus:ring-lucius-lime/30 transition-all"
+                  >
+                    <option value="">Sin especificar</option>
+                    {ID_TYPES.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-bokara-grey/50 uppercase tracking-widest mb-1.5">
+                    Número de ID
+                  </label>
+                  <input
+                    name="idNumber"
+                    type="text"
+                    placeholder="Ej: 1234567890"
+                    value={formData.idNumber}
+                    onChange={handleChange}
+                    className="w-full rounded-xl border border-bokara-grey/15 bg-[#F9F8F6] px-4 py-3 text-sm font-medium text-bokara-grey placeholder:text-bokara-grey/25 focus:outline-none focus:ring-2 focus:ring-lucius-lime/30 transition-all"
+                  />
+                </div>
               </div>
 
               {/* Teléfono + Horario */}
@@ -333,7 +381,6 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 <span className="font-bold text-bokara-grey">{addedEmail}</span> usando el siguiente enlace o código:
               </p>
 
-              {/* Invite link */}
               {inviteLink && (
                 <div className="bg-[#F9F8F6] border border-bokara-grey/10 rounded-xl p-4">
                   <p className="text-[9px] font-bold text-bokara-grey/40 uppercase tracking-widest mb-2">
@@ -345,7 +392,6 @@ const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
                 </div>
               )}
 
-              {/* Invite code */}
               {inviteCode && (
                 <div className="flex items-center gap-3">
                   <div className="flex-1 bg-bokara-grey rounded-xl px-5 py-3 flex items-center justify-between">
