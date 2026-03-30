@@ -1,0 +1,230 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { Employee, AttendanceLogEntry, AttendanceAction, ActivityStatus, WorkSchedule, CalendarEvent, PayrollChangeType } from '../types';
+import DashboardSummary from '../components/DashboardSummary';
+import { ClockIcon, PowerIcon, TeamIcon } from '../components/Icons';
+import EmployeeTimeline from '../components/EmployeeTimeline';
+import AgentStateDashboard from '../components/AgentStateDashboard';
+import TimesheetOverview from '../components/TimesheetOverview';
+
+interface DashboardPageProps {
+  attendanceLog?: AttendanceLogEntry[];
+  employees?: Employee[];
+  onEmployeeAction: (employeeId: string, action: AttendanceAction) => void;
+  activityStatuses?: ActivityStatus[];
+  workSchedules?: WorkSchedule[];
+  calendarEvents?: CalendarEvent[];
+  payrollChangeTypes?: PayrollChangeType[];
+  inviteCode?: string;
+}
+
+const formatTime = (totalSeconds: number): string => {
+  const hours = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+  const minutes = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+  const seconds = (totalSeconds % 60).toString().padStart(2, '0');
+  return `${hours}:${minutes}:${seconds}`;
+};
+
+const StatusIndicator: React.FC<{ status: Employee['status'] }> = ({ status }) => {
+  const baseClasses = "px-3 py-1 text-sm font-semibold rounded-full";
+  switch (status) {
+    case 'Working':
+      return <span className={`${baseClasses} bg-lucius-lime/20 text-lucius-lime`}>Working</span>;
+    case 'On Break':
+      return <span className={`${baseClasses} bg-wet-sand/20 text-wet-sand`}>On Break</span>;
+    case 'Clocked Out':
+      return <span className={`${baseClasses} bg-gray-200 text-gray-700`}>Clocked Out</span>;
+    default:
+      return <span className={`${baseClasses} bg-wet-sand/20 text-wet-sand`}>{status}</span>;
+  }
+};
+
+const DashboardPage: React.FC<DashboardPageProps> = ({
+  attendanceLog,
+  employees,
+  onEmployeeAction,
+  activityStatuses,
+  workSchedules,
+  calendarEvents,
+  payrollChangeTypes,
+  inviteCode
+}) => {
+  const safeEmployees        = Array.isArray(employees)        ? employees        : [];
+  const safeAttendanceLog    = Array.isArray(attendanceLog)    ? attendanceLog    : [];
+  const safeWorkSchedules    = Array.isArray(workSchedules)    ? workSchedules    : [];
+  const safeActivityStatuses = Array.isArray(activityStatuses) ? activityStatuses : [];
+  const safeCalendarEvents   = Array.isArray(calendarEvents)   ? calendarEvents   : [];
+  const safePayrollTypes     = Array.isArray(payrollChangeTypes) ? payrollChangeTypes : [];
+
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(() =>
+    safeEmployees.length > 0 ? safeEmployees[0].id : null
+  );
+  const [elapsedTime, setElapsedTime] = useState(0);
+
+  const selectedEmployee = useMemo(() =>
+    safeEmployees.find(e => e.id === selectedEmployeeId),
+    [safeEmployees, selectedEmployeeId]
+  );
+
+  const teamOverviewStats = useMemo(() => {
+    const working    = safeEmployees.filter(e => e.status === 'Working').length;
+    const clockedOut = safeEmployees.filter(e => e.status === 'Clocked Out').length;
+    const onActivity = safeEmployees.length - working - clockedOut;
+    return { working, onActivity, clockedOut };
+  }, [safeEmployees]);
+
+  useEffect(() => {
+    if (selectedEmployee?.status !== 'Clocked Out' && selectedEmployee?.currentStatusStartTime) {
+      const interval = setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - (selectedEmployee.currentStatusStartTime || 0)) / 1000));
+      }, 1000);
+      return () => clearInterval(interval);
+    } else {
+      setElapsedTime(0);
+    }
+  }, [selectedEmployee?.status, selectedEmployee?.currentStatusStartTime]);
+
+  const renderButtons = () => {
+    if (!selectedEmployee) return null;
+    const baseButtonClass = "w-full text-center font-bold py-3 px-6 rounded-lg transition-all duration-300 shadow-lg transform hover:scale-105 text-base";
+    switch (selectedEmployee.status) {
+      case 'Clocked Out':
+        return (
+          <button onClick={() => onEmployeeAction(selectedEmployee.id, 'Clock In')} className={`${baseButtonClass} bg-lucius-lime hover:bg-opacity-80 text-bokara-grey`}>
+            Clock In
+          </button>
+        );
+      default:
+        return (
+          <div className="h-[52px] flex items-center justify-center text-center text-bokara-grey/60">
+            <p>Manage active session on the <strong>Tracker</strong> page.</p>
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-8 pt-8">
+      {/* Invite Section */}
+      <div className="w-full max-w-6xl bg-gradient-to-r from-bokara-grey to-black rounded-2xl shadow-xl p-8 border border-white/5 relative overflow-hidden group">
+        <div className="absolute top-0 right-0 p-12 opacity-5 transform translate-x-1/4 -translate-y-1/4 group-hover:scale-110 transition-transform">
+          <svg className="w-64 h-64 text-lucius-lime" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
+        </div>
+        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+          <div className="text-center md:text-left">
+            <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-tight">Invita a tu Equipo</h2>
+            <p className="text-white/60 font-medium max-w-md">Comparte el código de acceso para que tus colaboradores se unan a la organización.</p>
+          </div>
+          <div className="flex flex-col items-center gap-4">
+            <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl px-10 py-6 shadow-inner flex flex-col items-center group/code">
+              <span className="text-[10px] font-bold text-white/40 uppercase tracking-[0.3em] mb-2">Código de Invitación</span>
+              <span className="text-5xl font-black text-lucius-lime font-mono tracking-widest">{inviteCode || '--- ---'}</span>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { if (inviteCode) { navigator.clipboard.writeText(inviteCode); alert("¡Código copiado!"); } }} className="flex items-center gap-2 bg-white/10 text-white px-6 py-3 rounded-2xl font-bold hover:bg-white/20 transition-all border border-white/10 active:scale-95">
+                Copiar Código
+              </button>
+              <button onClick={() => { if (inviteCode) { const url = `${window.location.origin}/?inviteCode=${inviteCode}`; navigator.clipboard.writeText(url); alert("¡Enlace de invitación copiado!"); } }} className="flex items-center gap-2 bg-lucius-lime text-bokara-grey px-6 py-3 rounded-2xl font-bold hover:bg-white transition-all shadow-lg active:scale-95">
+                Copiar Enlace
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── TimesheetOverview con novedades ── */}
+      <TimesheetOverview
+        employees={safeEmployees}
+        attendanceLog={safeAttendanceLog}
+        workSchedules={safeWorkSchedules}
+        activityStatuses={safeActivityStatuses}
+        calendarEvents={safeCalendarEvents}
+        payrollChangeTypes={safePayrollTypes}
+      />
+
+      <AgentStateDashboard
+        employees={safeEmployees}
+        workSchedules={safeWorkSchedules}
+        activityStatuses={safeActivityStatuses}
+        calendarEvents={safeCalendarEvents}
+      />
+
+      {/* Live Console */}
+      <div className="w-full max-w-6xl bg-white rounded-xl shadow-md p-6 border border-bokara-grey/10">
+        <h2 className="text-3xl font-bold text-bokara-grey mb-2">Consola en Vivo</h2>
+        <p className="text-bokara-grey/80 mb-6">Selecciona un colaborador para acciones rápidas.</p>
+        <div className="mb-6">
+          <label htmlFor="employee-select" className="block text-sm font-medium text-lucius-lime mb-2">Seleccionar Colaborador</label>
+          <select
+            id="employee-select"
+            value={selectedEmployeeId ?? ''}
+            onChange={(e) => setSelectedEmployeeId(e.target.value)}
+            className="w-full bg-whisper-white border border-bokara-grey/20 text-bokara-grey rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-lucius-lime"
+          >
+            {safeEmployees.map(emp => (
+              <option key={emp.id} value={emp.id}>{emp.name}</option>
+            ))}
+          </select>
+        </div>
+        {selectedEmployee ? (
+          <div className="bg-whisper-white/60 rounded-lg p-6 flex flex-col items-center gap-6 text-center border border-bokara-grey/10">
+            <div className="flex flex-col items-center gap-2">
+              <h3 className="text-3xl font-bold text-bokara-grey">{selectedEmployee.name}</h3>
+              <StatusIndicator status={selectedEmployee.status} />
+            </div>
+            <div className="font-display text-7xl text-bokara-grey tracking-widest tabular-nums">
+              {formatTime(elapsedTime)}
+            </div>
+            <div className="w-full max-w-md mt-4">{renderButtons()}</div>
+          </div>
+        ) : (
+          <p className="text-center text-bokara-grey/60 py-16">No hay colaboradores disponibles. Agrega uno en la página de Tracker.</p>
+        )}
+      </div>
+
+      {/* Team Overview */}
+      <div className="w-full max-w-6xl">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="bg-white rounded-xl shadow-md p-6 flex items-center gap-4 border border-lucius-lime/30">
+            <div className="p-3 bg-lucius-lime/20 rounded-full"><TeamIcon className="w-8 h-8 text-lucius-lime" /></div>
+            <div>
+              <p className="text-sm text-lucius-lime font-semibold uppercase tracking-wider">Working</p>
+              <p className="text-3xl font-bold text-bokara-grey">{teamOverviewStats.working}</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-md p-6 flex items-center gap-4 border border-wet-sand/30">
+            <div className="p-3 bg-wet-sand/20 rounded-full"><ClockIcon className="w-8 h-8 text-wet-sand" /></div>
+            <div>
+              <p className="text-sm text-wet-sand font-semibold uppercase tracking-wider">On Activity</p>
+              <p className="text-3xl font-bold text-bokara-grey">{teamOverviewStats.onActivity}</p>
+            </div>
+          </div>
+          <div className="bg-white rounded-xl shadow-md p-6 flex items-center gap-4 border border-bokara-grey/10">
+            <div className="p-3 bg-gray-200 rounded-full"><PowerIcon className="w-8 h-8 text-bokara-grey/70" /></div>
+            <div>
+              <p className="text-sm text-bokara-grey/70 font-semibold uppercase tracking-wider">Offline</p>
+              <p className="text-3xl font-bold text-bokara-grey">{teamOverviewStats.clockedOut}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Activity Dashboard */}
+      <div className="w-full max-w-6xl bg-white rounded-xl shadow-md p-6 border border-bokara-grey/10">
+        <div>
+          <h2 className="text-3xl font-bold text-bokara-grey">Activity Dashboard</h2>
+          <p className="text-bokara-grey/80 mt-1">Overview of your team's logged activity.</p>
+        </div>
+        <DashboardSummary attendanceLog={safeAttendanceLog} />
+        <div className="mt-8 border-t border-bokara-grey/10 pt-6">
+          <EmployeeTimeline
+            employees={safeEmployees}
+            attendanceLog={safeAttendanceLog}
+            activityStatuses={safeActivityStatuses}
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default DashboardPage;

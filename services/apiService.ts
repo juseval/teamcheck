@@ -1,0 +1,759 @@
+import { Employee, AttendanceLogEntry, ActivityStatus, CalendarEvent, PayrollChangeType, WorkSchedule, Company, MapItem, Invitation, IdleLogEntry } from '../types';
+import { db, auth, isFirebaseEnabled } from './firebase';
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/storage';
+import { initialEmployees } from '../data/initialData';
+
+// --- HELPERS ---
+
+const cleanObject = (obj: any) => {
+    const newObj = { ...obj };
+    Object.keys(newObj).forEach(key => {
+        if (newObj[key] === undefined) delete newObj[key];
+    });
+    return newObj;
+};
+
+const convertFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = error => reject(error);
+    });
+};
+
+const normalizeEmail = (email: string): string => email.trim().toLowerCase();
+
+// ── Constante de retención (90 días en ms) ──
+const RETENTION_DAYS = 90;
+const RETENTION_MS   = RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  CACHE DE companyId
+// ─────────────────────────────────────────────────────────────────────────────
+let _companyIdCache: { uid: string; companyId: string } | null = null;
+
+const getCachedCompanyId = async (): Promise<string | null> => {
+    const user = auth!.currentUser;
+    if (!user) return null;
+    if (_companyIdCache?.uid === user.uid) return _companyIdCache.companyId;
+    const doc = await db!.collection('employees').doc(user.uid).get();
+    const cid = doc.data()?.companyId ?? null;
+    if (cid) _companyIdCache = { uid: user.uid, companyId: cid };
+    return cid;
+};
+
+export const clearCompanyIdCache = () => { _companyIdCache = null; };
+
+// --- MOCK DATA & API ---
+const createMockApi = () => ({
+    resendVerificationEmail: async (_email: string) => true,
+    verifyEmailWithToken: async (_oobCode: string) => true,
+    joinCompany: async (_inviteCode: string) => {},
+    createCompany: async (_name: string) => {},
+    updateCompanyName: async (_companyId: string, _name: string) => {},
+    getCompanyDetails: async (_companyId: string) => null,
+    getUserCompanies: async () => [] as Company[],
+    switchCompany: async (_companyId: string) => {},
+    registerWithEmailAndPassword: async (fullName: string, email: string) => ({ name: fullName, email: normalizeEmail(email), emailVerified: true } as any),
+    loginWithEmailAndPassword: async (_email: string, _pass: string) => { return initialEmployees[0]; },
+    logout: async () => {},
+    sendPasswordResetEmail: async (_email: string) => {},
+    verifyPasswordResetCode: async (_code: string) => 'test@example.com',
+    confirmPasswordReset: async (_code: string, _pass: string) => {},
+    getEmployeeProfile: async (uid: string) => {
+        const found = initialEmployees.find(e => e.id === uid);
+        return found || null;
+    },
+    streamEmployees: (_callback: any) => () => {},
+    streamAttendanceLog: (_callback: any) => () => {},
+    addAttendanceLogEntry: async (entry: any) => entry,
+    updateEmployeeStatus: async (e: any) => e,
+    updateAttendanceLogEntry: async (_id: string, updates: any) => updates,
+    removeAttendanceLogEntry: async (_id: string) => {},
+    getActivityStatuses: async () => [],
+    getWorkSchedules: async () => [],
+    getPayrollChangeTypes: async () => [],
+    getCalendarEvents: async () => [],
+    getMapItems: async () => [],
+    updateEmployeeDetails: async (e: any) => e,
+    addEmployee: async (e: any) => e,
+    removeEmployee: async (_id: string) => {},
+    updateEmployeeCurrentSession: async (_id: string, _time: number) => {},
+    addWorkSchedule: async (s: any) => s,
+    updateWorkSchedule: async (_id: string, _u: any) => {},
+    removeWorkSchedule: async (_id: string) => {},
+    addActivityStatus: async (_n: string, _c: string) => {},
+    removeActivityStatus: async (_id: string) => {},
+    addPayrollChangeType: async (_n: string, _c: string, _e: boolean, _a: boolean, _q?: number, _sq?: number) => {},
+    updatePayrollChangeType: async (_id: string, _u: any) => {},
+    removePayrollChangeType: async (_id: string) => {},
+    addCalendarEvent: async (e: any) => e,
+    updateCalendarEvent: async (e: any) => e,
+    removeCalendarEvent: async (_id: string) => {},
+    updateTimesheetEntry: async (_eid: string, _sid: string, _endid: string, _s: number, _end: number) => {},
+    uploadProfilePicture: async (_id: string, file: File) => { return URL.createObjectURL(file); },
+    removeProfilePicture: async (_id: string) => {},
+    changePassword: async (_pass: string) => {},
+    saveMapItems: async (_items: any[]) => {},
+    updateEmployeeSeat: async (_eid: string, _sid: string | null) => {},
+    getPendingInvitation: async (_email: string) => null,
+    acceptInvitation: async (_invitationId: string) => {},
+    getNotificationRecipients: async () => [],
+    addNotificationRecipient: async (_email: string) => {},
+    removeNotificationRecipient: async (_email: string) => {},
+    getEmailConfig: async () => null,
+    saveEmailConfig: async (_config: any) => {},
+    // ── Idle Log (mock) ──
+    addIdleLogEntry: async (entry: any) => ({ ...entry, id: String(Date.now()), createdAt: Date.now() } as IdleLogEntry),
+    updateIdleLogEntry: async (_id: string, _updates: any) => {},
+    getIdleLog: async () => [] as IdleLogEntry[],
+    streamIdleLog: (_callback: (entries: IdleLogEntry[]) => void) => () => {},
+    // ── Query por rango (mock) ──
+    queryAttendanceLogByRange: async (_start: number, _end: number) => [] as AttendanceLogEntry[],
+});
+
+// --- REAL API (Firebase) ---
+const createRealApi = () => {
+    if (!db || !auth) throw new Error("Firebase not initialized");
+
+    return {
+        resendVerificationEmail: async (_email: string) => true,
+        verifyEmailWithToken: async (_oobCode: string) => true,
+
+        registerWithEmailAndPassword: async (fullName: string, email: string, password: string) => {
+            const cleanEmail = normalizeEmail(email);
+            const userCredential = await auth!.createUserWithEmailAndPassword(cleanEmail, password);
+            const user = userCredential.user;
+            if (!user) throw new Error("Error en registro");
+            const newEmployee: Employee = {
+                id: user.uid, uid: user.uid, companyId: '', name: fullName, email: cleanEmail, phone: '', location: '',
+                role: 'employee', status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, emailVerified: true
+            };
+            await db!.collection('employees').doc(user.uid).set(newEmployee);
+            return newEmployee;
+        },
+
+        createCompany: async (name: string) => {
+            const user = auth!.currentUser;
+            if (!user) throw new Error("No autenticado");
+
+            const code = Math.random().toString(36).substring(2, 5).toUpperCase() + "-" + Math.floor(100 + Math.random() * 900);
+            const companyRef = db!.collection('companies').doc();
+            const finalCompanyId = companyRef.id;
+
+            await companyRef.set({ id: finalCompanyId, name, inviteCode: code, ownerId: user.uid, createdAt: Date.now() });
+
+            const empDoc = await db!.collection('employees').doc(user.uid).get();
+            const existingIds: string[] = empDoc.data()?.companyIds ?? [];
+            const currentCompanyId: string = empDoc.data()?.companyId ?? '';
+            const newCompanyIds = Array.from(new Set([
+                ...existingIds,
+                ...(currentCompanyId ? [currentCompanyId] : []),
+                finalCompanyId,
+            ]));
+
+            _companyIdCache = { uid: user.uid, companyId: finalCompanyId };
+
+            await db!.collection('employees').doc(user.uid).set({
+                id: user.uid, uid: user.uid, companyId: finalCompanyId,
+                companyIds: newCompanyIds,
+                role: 'master',
+                name: empDoc.data()?.name || user.displayName || user.email?.split('@')[0] || 'Master',
+                email: normalizeEmail(user.email || ''),
+                status: 'Clocked Out', lastClockInTime: null,
+                currentStatusStartTime: null, emailVerified: true, phone: '', location: ''
+            }, { merge: true });
+        },
+
+        getUserCompanies: async (): Promise<Company[]> => {
+            const user = auth!.currentUser;
+            if (!user) return [];
+
+            const empDoc = await db!.collection('employees').doc(user.uid).get();
+            const empData = empDoc.data();
+
+            const knownIds = new Set<string>();
+            if (empData?.companyId) knownIds.add(empData.companyId);
+            (empData?.companyIds ?? []).forEach((id: string) => knownIds.add(id));
+
+            const ownedQuery = await db!.collection('companies')
+                .where('ownerId', '==', user.uid)
+                .get();
+            ownedQuery.docs.forEach(d => knownIds.add(d.id));
+
+            if (knownIds.size === 0) return [];
+
+            const allIds = Array.from(knownIds);
+            const savedIds: string[] = empData?.companyIds ?? [];
+            const hasNewIds = allIds.some(id => !savedIds.includes(id));
+            if (hasNewIds) {
+                await db!.collection('employees').doc(user.uid).update({
+                    companyIds: allIds,
+                });
+            }
+
+            const companies = await Promise.all(
+                allIds.map(async (cid) => {
+                    const doc = await db!.collection('companies').doc(cid).get();
+                    return doc.exists ? { id: doc.id, ...doc.data() } as Company : null;
+                })
+            );
+
+            return companies.filter(Boolean) as Company[];
+        },
+
+        switchCompany: async (newCompanyId: string): Promise<void> => {
+            const user = auth!.currentUser;
+            if (!user) throw new Error("No autenticado");
+
+            _companyIdCache = { uid: user.uid, companyId: newCompanyId };
+
+            await db!.collection('employees').doc(user.uid).update({
+                companyId: newCompanyId,
+            });
+        },
+
+        loginWithEmailAndPassword: async (email: string, password: string, rememberMe: boolean = false) => {
+            const cleanEmail = normalizeEmail(email);
+            await auth!.setPersistence(
+                rememberMe
+                    ? (firebase as any).auth.Auth.Persistence.LOCAL
+                    : (firebase as any).auth.Auth.Persistence.SESSION
+            );
+            const cred = await auth!.signInWithEmailAndPassword(cleanEmail, password);
+            const user = cred.user;
+            if (!user) throw new Error("Authentication failed");
+            const doc = await db!.collection('employees').doc(user.uid).get();
+            if (doc.exists) {
+                const data = doc.data()!;
+                if (data.companyId) _companyIdCache = { uid: user.uid, companyId: data.companyId };
+                return { id: doc.id, ...data } as Employee;
+            } else {
+                return {
+                    id: user.uid, uid: user.uid, companyId: '', name: user.displayName || cleanEmail.split('@')[0],
+                    email: cleanEmail, phone: '', location: '', role: 'employee', status: 'Clocked Out',
+                    lastClockInTime: null, currentStatusStartTime: null, emailVerified: user.emailVerified
+                } as Employee;
+            }
+        },
+
+        logout: async () => {
+            clearCompanyIdCache();
+            await auth!.signOut();
+        },
+
+        sendPasswordResetEmail: async (email: string) => await auth!.sendPasswordResetEmail(normalizeEmail(email)),
+        verifyPasswordResetCode: async (code: string) => await auth!.verifyPasswordResetCode(code),
+        confirmPasswordReset: async (code: string, pass: string) => await auth!.confirmPasswordReset(code, pass),
+
+        getEmployeeProfile: async (uid: string) => {
+            const doc = await db!.collection('employees').doc(uid).get();
+            if (!doc.exists) return null;
+            const data = doc.data()!;
+            if (data.companyId) _companyIdCache = { uid, companyId: data.companyId };
+            return { id: doc.id, ...data } as Employee;
+        },
+
+        streamEmployees: (callback: any) => {
+            const user = auth!.currentUser;
+            if (!user) return () => {};
+            let unsub = () => {};
+            db!.collection('employees').doc(user.uid).get().then(doc => {
+                const cid = doc.data()?.companyId;
+                if (cid) {
+                    _companyIdCache = { uid: user.uid, companyId: cid };
+                    unsub = db!.collection('employees')
+                        .where('companyId', '==', cid)
+                        .onSnapshot(s => callback(s.docs.map(d => ({ id: d.id, ...d.data() }))));
+                }
+            });
+            return () => unsub();
+        },
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  streamAttendanceLog — ahora filtra por timestamp (últimos 90 días)
+        //  en vez de .limit(1000) que cortaba registros antiguos.
+        // ─────────────────────────────────────────────────────────────────────
+        streamAttendanceLog: (callback: any) => {
+            const user = auth!.currentUser;
+            if (!user) return () => {};
+            let unsub = () => {};
+
+            const setupListener = (cid: string) => {
+                const cutoff = Date.now() - RETENTION_MS;
+
+                unsub = db!.collection('attendanceLog')
+                    .where('companyId', '==', cid)
+                    .where('timestamp', '>=', cutoff)
+                    .orderBy('timestamp', 'desc')
+                    .onSnapshot(
+                        snapshot => {
+                            const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLogEntry));
+                            callback(logs);
+                        },
+                        error => {
+                            // ── Fallback: si falta el índice compuesto, lo
+                            //    intentamos sin orderBy y ordenamos en JS.
+                            //    En la consola de Firebase aparecerá un link
+                            //    para crear el índice automáticamente. ──
+                            console.warn(
+                                '[streamAttendanceLog] Índice compuesto faltante. ' +
+                                'Crea el índice attendanceLog(companyId ASC, timestamp DESC) ' +
+                                'en la consola de Firestore. Usando fallback…',
+                                error.message
+                            );
+                            unsub = db!.collection('attendanceLog')
+                                .where('companyId', '==', cid)
+                                .where('timestamp', '>=', cutoff)
+                                .onSnapshot(s => {
+                                    const logs = s.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLogEntry));
+                                    callback(logs.sort((a, b) => b.timestamp - a.timestamp));
+                                });
+                        }
+                    );
+            };
+
+            if (_companyIdCache?.uid === user.uid) {
+                setupListener(_companyIdCache.companyId);
+            } else {
+                db!.collection('employees').doc(user.uid).get().then(doc => {
+                    const cid = doc.data()?.companyId;
+                    if (cid) {
+                        _companyIdCache = { uid: user.uid, companyId: cid };
+                        setupListener(cid);
+                    }
+                });
+            }
+            return () => unsub();
+        },
+
+        // ─────────────────────────────────────────────────────────────────────
+        //  queryAttendanceLogByRange — consulta puntual por rango de fechas.
+        //  Ideal para TimesheetPage: no mantiene un listener abierto,
+        //  solo trae los documentos que caen dentro del rango pedido.
+        // ─────────────────────────────────────────────────────────────────────
+        queryAttendanceLogByRange: async (startTimestamp: number, endTimestamp: number): Promise<AttendanceLogEntry[]> => {
+            const cid = await getCachedCompanyId();
+            if (!cid) return [];
+
+            try {
+                const snap = await db!.collection('attendanceLog')
+                    .where('companyId', '==', cid)
+                    .where('timestamp', '>=', startTimestamp)
+                    .where('timestamp', '<=', endTimestamp)
+                    .orderBy('timestamp', 'desc')
+                    .get();
+                return snap.docs.map(d => ({ id: d.id, ...d.data() } as AttendanceLogEntry));
+            } catch (err: any) {
+                // Fallback sin orderBy si falta índice
+                console.warn('[queryAttendanceLogByRange] fallback sin orderBy:', err.message);
+                const snap = await db!.collection('attendanceLog')
+                    .where('companyId', '==', cid)
+                    .where('timestamp', '>=', startTimestamp)
+                    .where('timestamp', '<=', endTimestamp)
+                    .get();
+                return snap.docs
+                    .map(d => ({ id: d.id, ...d.data() } as AttendanceLogEntry))
+                    .sort((a, b) => b.timestamp - a.timestamp);
+            }
+        },
+
+        updateEmployeeStatus: async (e: Employee) => {
+            const patch: any = {
+                status:                 e.status,
+                lastClockInTime:        e.lastClockInTime,
+                currentStatusStartTime: e.currentStatusStartTime,
+            };
+            if (e.accumulatedWorkSeconds !== undefined) patch.accumulatedWorkSeconds = e.accumulatedWorkSeconds;
+            if ('workSessionStartTime' in e)            patch.workSessionStartTime   = e.workSessionStartTime ?? null;
+            await db!.collection('employees').doc(e.id).update(patch);
+            return e;
+        },
+
+        addAttendanceLogEntry: async (entry: any) => {
+            const ref = db!.collection('attendanceLog').doc();
+            const log = { ...entry, id: ref.id };
+            await ref.set(log);
+            return log;
+        },
+
+        getActivityStatuses: async () => {
+            const cid = await getCachedCompanyId();
+            if (!cid) return [];
+            const s = await db!.collection('activityStatuses').where('companyId', '==', cid).get();
+            return s.docs.map(d => ({ id: d.id, ...d.data() } as ActivityStatus));
+        },
+
+        getWorkSchedules: async () => {
+            const cid = await getCachedCompanyId();
+            if (!cid) return [];
+            const s = await db!.collection('workSchedules').where('companyId', '==', cid).get();
+            return s.docs.map(d => ({ id: d.id, ...d.data() } as WorkSchedule));
+        },
+
+        getPayrollChangeTypes: async () => {
+            const cid = await getCachedCompanyId();
+            if (!cid) return [];
+            const s = await db!.collection('payrollChangeTypes').where('companyId', '==', cid).get();
+            return s.docs.map(d => ({ id: d.id, ...d.data() } as PayrollChangeType));
+        },
+
+        getCalendarEvents: async () => {
+            const cid = await getCachedCompanyId();
+            if (!cid) return [];
+            const s = await db!.collection('calendarEvents').where('companyId', '==', cid).get();
+            return s.docs.map(d => ({ id: d.id, ...d.data() } as CalendarEvent));
+        },
+
+        getMapItems: async () => {
+            const cid = await getCachedCompanyId();
+            if (!cid) return [];
+            const s = await db!.collection('mapItems').where('companyId', '==', cid).get();
+            return s.docs.map(d => ({ id: d.id, ...d.data() } as MapItem));
+        },
+
+        updateEmployeeDetails: async (e: Employee) => {
+            const { id, ...data } = e;
+            if (data.email) data.email = normalizeEmail(data.email);
+            await db!.collection('employees').doc(id).update(cleanObject(data));
+            return { ...e, email: data.email || e.email };
+        },
+
+        updateCompanyName: async (companyId: string, name: string): Promise<void> => {
+            await db!.collection('companies').doc(companyId).update({ name: name.trim() });
+        },
+
+        getCompanyDetails: async (companyId: string) => {
+            const doc = await db!.collection('companies').doc(companyId).get();
+            return doc.exists ? { id: doc.id, ...doc.data() } as Company : null;
+        },
+
+        joinCompany: async (inviteCode: string) => {
+            const user = auth!.currentUser;
+            if (!user) throw new Error("Not logged in");
+            const cleanEmail = normalizeEmail(user.email || '');
+            const trimmedCode = inviteCode.trim();
+            let compQuery = await db!.collection('companies').where('inviteCode', '==', trimmedCode).limit(1).get();
+            if (compQuery.empty) compQuery = await db!.collection('companies').where('inviteCode', '==', trimmedCode.toUpperCase()).limit(1).get();
+            if (compQuery.empty) {
+                const docById = await db!.collection('companies').doc(trimmedCode).get();
+                if (docById.exists) {
+                    _companyIdCache = { uid: user.uid, companyId: docById.id };
+                    await db!.collection('employees').doc(user.uid).set({ companyId: docById.id }, { merge: true });
+                    return;
+                }
+            }
+            if (compQuery.empty) throw new Error("Código de equipo inválido.");
+            const companyId = compQuery.docs[0].id;
+            _companyIdCache = { uid: user.uid, companyId };
+            const invQuery = await db!.collection('invitations').where('email', '==', cleanEmail).where('companyId', '==', companyId).where('status', '==', 'pending').limit(1).get();
+            const invData = invQuery.empty ? null : (invQuery.docs[0].data() as any);
+            const resolvedName = (invData?.name || '').trim() || (user.displayName || '').trim() || cleanEmail.split('@')[0];
+
+            const empDoc = await db!.collection('employees').doc(user.uid).get();
+            const existingIds: string[] = empDoc.data()?.companyIds ?? [];
+            const newCompanyIds = Array.from(new Set([...existingIds, companyId]));
+
+            await db!.collection('employees').doc(user.uid).set(cleanObject({
+                id: user.uid, uid: user.uid, email: cleanEmail, name: resolvedName, companyId,
+                companyIds: newCompanyIds,
+                role: invData?.role || 'employee', hireDate: invData?.hireDate, terminationDate: invData?.terminationDate,
+                manualVacationAdjustment: invData?.manualVacationAdjustment, phone: invData?.phone,
+                location: invData?.location, workScheduleId: invData?.workScheduleId,
+                status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, emailVerified: user.emailVerified,
+            }));
+            if (!invQuery.empty) await invQuery.docs[0].ref.update({ status: 'accepted' });
+            const empsQuery = await db!.collection('employees').where('email', '==', cleanEmail).get();
+            const batch = db!.batch(); let hasDups = false;
+            for (const doc of empsQuery.docs) { if (doc.id !== user.uid) { batch.delete(doc.ref); hasDups = true; } }
+            if (hasDups) await batch.commit();
+        },
+
+        updateAttendanceLogEntry: async (id: string, updates: Partial<AttendanceLogEntry>) => {
+            await db!.collection('attendanceLog').doc(id).update(updates);
+        },
+        removeAttendanceLogEntry: async (id: string) => {
+            await db!.collection('attendanceLog').doc(id).delete();
+        },
+
+        addEmployee: async (employeeData: any) => {
+            const user = auth!.currentUser;
+            if (!user) throw new Error("No autenticado");
+            const normalizedEmployeeData = { ...employeeData, email: normalizeEmail(employeeData.email || ''), name: (employeeData.name || '').trim() };
+            const companyId = normalizedEmployeeData.companyId || await getCachedCompanyId();
+            if (!companyId) throw new Error("No se encontró una organización vinculada a tu cuenta.");
+            const compDoc = await db!.collection('companies').doc(companyId).get();
+            const companyName = compDoc.data()?.name || "Tu Empresa";
+            const invRef = db!.collection('invitations').doc();
+            const invitation = cleanObject({
+                id: invRef.id, email: normalizedEmployeeData.email, name: normalizedEmployeeData.name,
+                companyId, companyName, role: normalizedEmployeeData.role || 'employee', status: 'pending',
+                invitedBy: user.uid, createdAt: Date.now(), hireDate: normalizedEmployeeData.hireDate,
+                terminationDate: normalizedEmployeeData.terminationDate, manualVacationAdjustment: normalizedEmployeeData.manualVacationAdjustment,
+                phone: normalizedEmployeeData.phone, location: normalizedEmployeeData.location, workScheduleId: normalizedEmployeeData.workScheduleId
+            });
+            const empRef = db!.collection('employees').doc();
+            const newEmp = cleanObject({ ...normalizedEmployeeData, id: empRef.id, companyId, status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, emailVerified: false });
+            await Promise.all([invRef.set(invitation), empRef.set(newEmp)]);
+            return newEmp;
+        },
+
+        removeEmployee: async (id: string) => {
+            const empDoc = await db!.collection('employees').doc(id).get();
+            if (!empDoc.exists) return;
+            const empData = empDoc.data();
+            if (empData?.role === 'master') throw new Error("No se puede eliminar al usuario Propietario (Master).");
+            const email = empData?.email; const companyId = empData?.companyId;
+            await db!.collection('employees').doc(id).delete();
+            if (email && companyId) {
+                const invQuery = await db!.collection('invitations').where('email', '==', email).where('companyId', '==', companyId).get();
+                const batch = db!.batch(); invQuery.forEach(doc => batch.delete(doc.ref)); await batch.commit();
+            }
+        },
+
+        updateEmployeeCurrentSession: async (id: string, time: number) => {
+            await db!.collection('employees').doc(id).update({ currentStatusStartTime: time });
+        },
+
+        addWorkSchedule: async (schedule: any) => {
+            const cid = await getCachedCompanyId();
+            const ref = db!.collection('workSchedules').doc();
+            const newSchedule = { ...schedule, id: ref.id, companyId: cid };
+            await ref.set(newSchedule);
+            return newSchedule;
+        },
+
+        updateWorkSchedule: async (id: string, updates: any) => { await db!.collection('workSchedules').doc(id).update(updates); },
+        removeWorkSchedule: async (id: string) => { await db!.collection('workSchedules').doc(id).delete(); },
+
+        addActivityStatus: async (name: string, color: string) => {
+            const cid = await getCachedCompanyId();
+            const ref = db!.collection('activityStatuses').doc();
+            await ref.set({ id: ref.id, name, color, companyId: cid });
+            return { id: ref.id, name, color, companyId: cid } as ActivityStatus;
+        },
+
+        removeActivityStatus: async (id: string) => { await db!.collection('activityStatuses').doc(id).delete(); },
+
+        addPayrollChangeType: async (name: string, color: string, requiereAprobacion: boolean, soloAdmin: boolean, yearlyQuota?: number, semesterQuota?: number) => {
+            const cid = await getCachedCompanyId();
+            const ref = db!.collection('payrollChangeTypes').doc();
+            const newType = { id: ref.id, name, color, requiereAprobacion, soloAdmin, yearlyQuota, semesterQuota, companyId: cid };
+            await ref.set(newType);
+            return newType as PayrollChangeType;
+        },
+
+        updatePayrollChangeType: async (id: string, updates: any) => { await db!.collection('payrollChangeTypes').doc(id).update(updates); },
+        removePayrollChangeType: async (id: string) => { await db!.collection('payrollChangeTypes').doc(id).delete(); },
+
+        addCalendarEvent: async (eventData: any) => {
+            const cid = await getCachedCompanyId();
+            const ref = db!.collection('calendarEvents').doc();
+            const event = { ...eventData, id: ref.id, companyId: cid, createdAt: Date.now() };
+            await ref.set(event);
+            return event;
+        },
+
+        updateCalendarEvent: async (event: any) => {
+            const { id, ...data } = event;
+            await db!.collection('calendarEvents').doc(id).update(data);
+            return event;
+        },
+
+        removeCalendarEvent: async (id: string) => { await db!.collection('calendarEvents').doc(id).delete(); },
+
+        updateTimesheetEntry: async (employeeId: string, startLogId: string, endLogId: string, startTime: number, endTime: number) => {
+            await db!.collection('attendanceLog').doc(startLogId).update({ timestamp: startTime });
+            await db!.collection('attendanceLog').doc(endLogId).update({ timestamp: endTime });
+        },
+
+        uploadProfilePicture: async (employeeId: string, file: File) => {
+            const MAX_SIZE = 500 * 1024;
+            if (file.size > MAX_SIZE) throw new Error("La imagen es demasiado grande. Por favor usa una imagen menor a 500KB.");
+            try {
+                const base64String = await convertFileToBase64(file);
+                await db!.collection('employees').doc(employeeId).update({ avatarUrl: base64String });
+                return base64String;
+            } catch (error) {
+                console.error("Error al guardar imagen en Firestore:", error);
+                throw new Error("No se pudo guardar la imagen.");
+            }
+        },
+
+        removeProfilePicture: async (employeeId: string) => {
+            await db!.collection('employees').doc(employeeId).update({ avatarUrl: null });
+        },
+
+        changePassword: async (newPassword: string) => {
+            const user = auth!.currentUser;
+            if (user) await user.updatePassword(newPassword);
+        },
+
+        saveMapItems: async (items: any[]) => {
+            const cid = await getCachedCompanyId();
+            const batch = db!.batch();
+            const existing = await db!.collection('mapItems').where('companyId', '==', cid).get();
+            existing.forEach(d => batch.delete(d.ref));
+            items.forEach(item => { const ref = db!.collection('mapItems').doc(); batch.set(ref, { ...item, id: ref.id, companyId: cid }); });
+            await batch.commit();
+        },
+
+        updateEmployeeSeat: async (employeeId: string, seatId: string | null) => {
+            await db!.collection('employees').doc(employeeId).update({ seatId });
+        },
+
+        getPendingInvitation: async (email: string) => {
+            const cleanEmail = normalizeEmail(email);
+            const q = await db!.collection('invitations').where('email', '==', cleanEmail).where('status', '==', 'pending').limit(1).get();
+            if (q.empty) return null;
+            return { id: q.docs[0].id, ...q.docs[0].data() } as Invitation;
+        },
+
+        acceptInvitation: async (invitationId: string) => {
+            const user = auth!.currentUser;
+            if (!user) throw new Error("No session");
+            const invDoc = await db!.collection('invitations').doc(invitationId).get();
+            if (!invDoc.exists) throw new Error("Invitation not found");
+            const data = invDoc.data() as Invitation & { name?: string };
+            const cleanEmail = normalizeEmail(user.email || '');
+            const resolvedName = (data.name || '').trim() || (user.displayName || '').trim() || cleanEmail.split('@')[0];
+            _companyIdCache = { uid: user.uid, companyId: data.companyId };
+
+            const empDoc = await db!.collection('employees').doc(user.uid).get();
+            const existingIds: string[] = empDoc.data()?.companyIds ?? [];
+            const newCompanyIds = Array.from(new Set([...existingIds, data.companyId]));
+
+            await db!.collection('employees').doc(user.uid).set(cleanObject({
+                id: user.uid, uid: user.uid, email: cleanEmail, name: resolvedName, companyId: data.companyId,
+                companyIds: newCompanyIds,
+                role: data.role || 'employee', hireDate: data.hireDate, terminationDate: data.terminationDate,
+                manualVacationAdjustment: data.manualVacationAdjustment, phone: data.phone,
+                location: data.location, workScheduleId: data.workScheduleId,
+                status: 'Clocked Out', lastClockInTime: null, currentStatusStartTime: null, emailVerified: user.emailVerified
+            }));
+            await db!.collection('invitations').doc(invitationId).update({ status: 'accepted' });
+            const empsQuery = await db!.collection('employees').where('email', '==', cleanEmail).get();
+            const batch = db!.batch(); let hasDups = false;
+            for (const doc of empsQuery.docs) { if (doc.id !== user.uid) { batch.delete(doc.ref); hasDups = true; } }
+            if (hasDups) await batch.commit();
+        },
+
+        getNotificationRecipients: async () => {
+            const cid = await getCachedCompanyId();
+            if (!cid) return [];
+            const doc = await db!.collection('notificationSettings').doc(cid).get();
+            return doc.exists ? (doc.data()?.emails || []) : [];
+        },
+
+        addNotificationRecipient: async (email: string) => {
+            const cid = await getCachedCompanyId();
+            if (cid) await db!.collection('notificationSettings').doc(cid).set({ emails: firebase.firestore.FieldValue.arrayUnion(normalizeEmail(email)) }, { merge: true });
+        },
+
+        removeNotificationRecipient: async (email: string) => {
+            const cid = await getCachedCompanyId();
+            if (cid) await db!.collection('notificationSettings').doc(cid).set({ emails: firebase.firestore.FieldValue.arrayRemove(normalizeEmail(email)) }, { merge: true });
+        },
+
+        getEmailConfig: async () => {
+            const cid = await getCachedCompanyId();
+            if (!cid) return null;
+            const doc = await db!.collection('notificationSettings').doc(cid).get();
+            return doc.exists ? doc.data()?.emailConfig : null;
+        },
+
+        saveEmailConfig: async (config: any) => {
+            const cid = await getCachedCompanyId();
+            if (cid) await db!.collection('notificationSettings').doc(cid).set({ emailConfig: config }, { merge: true });
+        },
+
+        // ── IDLE LOG ─────────────────────────────────────────────────────────
+
+        addIdleLogEntry: async (entry: Omit<IdleLogEntry, 'id' | 'createdAt'>): Promise<IdleLogEntry> => {
+            const ref = db!.collection('idleLog').doc();
+            const doc: IdleLogEntry = { ...entry, id: ref.id, createdAt: Date.now() };
+            await ref.set(doc);
+            return doc;
+        },
+
+        updateIdleLogEntry: async (id: string, updates: Partial<IdleLogEntry>): Promise<void> => {
+            await db!.collection('idleLog').doc(id).update(updates);
+        },
+
+        getIdleLog: async (): Promise<IdleLogEntry[]> => {
+            const cid = await getCachedCompanyId();
+            if (!cid) return [];
+            const snap = await db!.collection('idleLog')
+                .where('companyId', '==', cid)
+                .orderBy('idleStartedAt', 'desc')
+                .limit(500)
+                .get();
+            return snap.docs.map(d => ({ id: d.id, ...d.data() } as IdleLogEntry));
+        },
+
+        streamIdleLog: (callback: (entries: IdleLogEntry[]) => void) => {
+            const user = auth!.currentUser;
+            if (!user) return () => {};
+            let unsub = () => {};
+
+            const setup = (cid: string) => {
+                unsub = db!.collection('idleLog')
+                    .where('companyId', '==', cid)
+                    .orderBy('idleStartedAt', 'desc')
+                    .limit(500)
+                    .onSnapshot(
+                        snap => callback(snap.docs.map(d => ({ id: d.id, ...d.data() } as IdleLogEntry))),
+                        _err => {
+                            unsub = db!.collection('idleLog')
+                                .where('companyId', '==', cid)
+                                .limit(500)
+                                .onSnapshot(snap =>
+                                    callback(
+                                        snap.docs
+                                            .map(d => ({ id: d.id, ...d.data() } as IdleLogEntry))
+                                            .sort((a, b) => b.idleStartedAt - a.idleStartedAt)
+                                    )
+                                );
+                        }
+                    );
+            };
+
+            if (_companyIdCache?.uid === user.uid) {
+                setup(_companyIdCache.companyId);
+            } else {
+                db!.collection('employees').doc(user.uid).get().then(doc => {
+                    const cid = doc.data()?.companyId;
+                    if (cid) {
+                        _companyIdCache = { uid: user.uid, companyId: cid };
+                        setup(cid);
+                    }
+                });
+            }
+            return () => unsub();
+        },
+    };
+};
+
+const api = isFirebaseEnabled ? createRealApi() : createMockApi();
+
+export const {
+    resendVerificationEmail, verifyEmailWithToken, joinCompany, createCompany, getCompanyDetails,
+    getUserCompanies, switchCompany, updateCompanyName,
+    registerWithEmailAndPassword, loginWithEmailAndPassword, logout, sendPasswordResetEmail,
+    verifyPasswordResetCode, confirmPasswordReset, getEmployeeProfile, streamEmployees,
+    streamAttendanceLog, updateEmployeeStatus, updateAttendanceLogEntry, removeAttendanceLogEntry, getActivityStatuses,
+    getWorkSchedules, getPayrollChangeTypes, getCalendarEvents, getMapItems, updateEmployeeDetails,
+    addEmployee, removeEmployee, addAttendanceLogEntry, updateEmployeeCurrentSession,
+    addWorkSchedule, updateWorkSchedule, removeWorkSchedule, addActivityStatus, removeActivityStatus,
+    addPayrollChangeType, updatePayrollChangeType, removePayrollChangeType, addCalendarEvent,
+    updateCalendarEvent, removeCalendarEvent, updateTimesheetEntry, uploadProfilePicture,
+    removeProfilePicture, changePassword, saveMapItems, updateEmployeeSeat, getPendingInvitation,
+    acceptInvitation, getNotificationRecipients, addNotificationRecipient, removeNotificationRecipient,
+    getEmailConfig, saveEmailConfig,
+    // Idle log
+    addIdleLogEntry, updateIdleLogEntry, getIdleLog, streamIdleLog,
+    // Query por rango de fechas
+    queryAttendanceLogByRange,
+} = api;

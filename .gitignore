@@ -1,0 +1,43 @@
+# Dependencias
+node_modules/
+jspm_packages/
+
+# Salidas de compilación (Builds)
+dist/
+dist-electron/
+dist-ssr/
+release/
+out/
+
+# Binarios específicos que causaron tu error
+*.exe
+*.asar
+*.dmg
+*.zip
+*.deb
+*.rpm
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Entorno y variables locales
+.env
+.env.local
+.env.*.local
+*.local
+
+# Editor (VS Code / JetBrains)
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
