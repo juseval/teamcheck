@@ -133,8 +133,8 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
     if (currentUser.role === 'admin' || currentUser.role === 'master') return { allowed: true };
     const today = new Date();
     const todayMonth = today.getMonth() + 1;
-    const inS1Window = todayMonth === 12 || todayMonth <= 6;
-    const inS2Window = todayMonth >= 6 && todayMonth <= 11;
+    const inS1Window = todayMonth === 12 || todayMonth <= 7;
+    const inS2Window = todayMonth >= 7 && todayMonth <= 11;
     const eventDate = new Date(startDate + 'T00:00:00');
     const eventMonth = eventDate.getMonth() + 1;
     const eventYear  = eventDate.getFullYear();
