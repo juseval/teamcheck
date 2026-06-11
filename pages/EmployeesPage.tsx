@@ -293,7 +293,7 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
                   return (
                     <div key={evt.id} className="flex justify-between items-center p-3 bg-whisper-white/20 rounded-lg border border-bokara-grey/5">
                       <div>
-                        <p className="text-sm font-bold text-bokara-grey">{evt.startDate} al {evt.endDate}</p>
+                        <p className="text-sm font-bold text-bokara-grey">{isMoney ? `Compensación de ${dur} día${dur !== 1 ? 's' : ''}` : `${evt.startDate} al ${evt.endDate}`}</p>
                         <p className={`text-[10px] font-bold uppercase ${isMoney ? 'text-wet-sand' : 'text-lucius-lime'}`}>{isMoney ? 'Compensación $ (Dinero)' : 'Disfrute (Tiempo de Descanso)'}</p>
                       </div>
                       <p className={`text-lg font-bold ${isMoney ? 'text-wet-sand' : 'text-red-400'}`}>-{dur} d</p>

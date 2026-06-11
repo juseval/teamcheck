@@ -3,7 +3,7 @@ import { CalendarEvent, PayrollChangeType, Employee } from '../types';
 import { EditIcon, TrashIcon } from '../components/Icons';
 import { useNotification } from '../contexts/NotificationContext';
 import { getNotificationRecipients, getEmailConfig } from '../services/apiService';
-import { computeVacationData, validateVacationRequest, isMoneyVacationType } from '../utils/vacations';
+import { computeVacationData, validateVacationRequest, isMoneyVacationType, countInclusiveDays } from '../utils/vacations';
 
 interface TicketingPageProps {
   events: CalendarEvent[];
@@ -113,6 +113,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
   const [newRequestType,      setNewRequestType]      = useState('');
   const [newRequestStartDate, setNewRequestStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [newRequestEndDate,   setNewRequestEndDate]   = useState(new Date().toISOString().split('T')[0]);
+  const [newRequestDays,      setNewRequestDays]      = useState(1); // solo para vacaciones en dinero
   const [isSubmitting,        setIsSubmitting]        = useState(false);
 
   const handlePrevMonth = () => setCurrentDate(d => new Date(d.getFullYear(), d.getMonth() - 1, 1));
@@ -256,12 +257,16 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
           if (!isMine && !isMoney && (selectedTypeConfig?.requiereAprobacion || selectedTypeConfig?.isExclusive) && event.type === viewType && event.status === 'approved')
             dayInGrid.isBlocked = true;
           if (isMine) {
-            dayInGrid.events.push({
-              event, isMine: true,
-              color: eventColorMap.get(event.type) || '#91A673',
-              label: event.status === 'pending' ? `${event.type} (Pendiente)` : event.type,
-              isMoney,
-            });
+            // Las vacaciones en DINERO se muestran como UNA sola insignia (en su fecha de
+            // inicio), no repartidas por días, porque el colaborador sigue trabajando.
+            if (!isMoney || dayStr === event.startDate) {
+              dayInGrid.events.push({
+                event, isMine: true,
+                color: eventColorMap.get(event.type) || '#91A673',
+                label: event.status === 'pending' ? `${event.type} (Pendiente)` : event.type,
+                isMoney,
+              });
+            }
           }
         }
       }
@@ -279,6 +284,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
   const handleEditRequest = (event: CalendarEvent) => {
     setEditingEvent(event); setNewRequestType(event.type);
     setNewRequestStartDate(event.startDate); setNewRequestEndDate(event.endDate);
+    setNewRequestDays(countInclusiveDays(event.startDate, event.endDate));
     setIsRequestModalOpen(true);
   };
 
@@ -286,18 +292,32 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
     e.preventDefault();
     if (isSubmitting) return;
     setIsSubmitting(true);
-    const payload = { employeeId: currentUser.id, type: newRequestType, startDate: newRequestStartDate, endDate: newRequestEndDate, status: 'pending' as const };
+
+    // Para vacaciones en DINERO el empleado indica un NÚMERO DE DÍAS, no un rango.
+    // Anclamos el registro a la fecha de hoy y derivamos el rango, así el conteo
+    // (countInclusiveDays) y el resto de la app siguen funcionando igual.
+    let startDate = newRequestStartDate;
+    let endDate   = newRequestEndDate;
+    if (isMoneyVacationType(newRequestType)) {
+      const n = Math.max(1, Math.floor(Number(newRequestDays) || 1));
+      startDate = new Date().toISOString().split('T')[0];
+      const endD = new Date(startDate + 'T00:00:00');
+      endD.setDate(endD.getDate() + n - 1);
+      endDate = endD.toISOString().split('T')[0];
+    }
+
+    const payload = { employeeId: currentUser.id, type: newRequestType, startDate, endDate, status: 'pending' as const };
     if (!editingEvent && currentUser.role === 'employee') {
       const typeConfig = payrollChangeTypes.find(t => t.name === newRequestType);
       if (typeConfig?.semesterQuota) {
-        const semCheck = checkSemesterQuota(typeConfig, newRequestStartDate);
+        const semCheck = checkSemesterQuota(typeConfig, startDate);
         if (!semCheck.allowed) { addNotification(semCheck.reason ?? 'No puedes solicitar esta novedad ahora.', 'error'); setIsSubmitting(false); return; }
       } else if (typeConfig?.yearlyQuota) {
-        const yearCheck = checkYearlyQuota(typeConfig, newRequestStartDate);
+        const yearCheck = checkYearlyQuota(typeConfig, startDate);
         if (!yearCheck.allowed) { addNotification(yearCheck.reason ?? 'Cupo anual agotado.', 'error'); setIsSubmitting(false); return; }
       }
       // ── Validación de vacaciones: saldo disponible y tope 50% en dinero (CST Art. 189) ──
-      const vacCheck = validateVacationRequest(newRequestType, newRequestStartDate, newRequestEndDate, vacationStats);
+      const vacCheck = validateVacationRequest(newRequestType, startDate, endDate, vacationStats);
       if (!vacCheck.ok) { addNotification(vacCheck.error!, 'error'); setIsSubmitting(false); return; }
     }
     try {
@@ -310,7 +330,7 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
         getNotificationRecipients()
           .then(recipients => {
             if (recipients.length === 0) return;
-            return sendEmailJS({ to: recipients, employeeName: currentUser.name, requestType: newRequestType, startDate: newRequestStartDate, endDate: newRequestEndDate, statusLabel: 'NUEVA SOLICITUD' });
+            return sendEmailJS({ to: recipients, employeeName: currentUser.name, requestType: newRequestType, startDate, endDate, statusLabel: 'NUEVA SOLICITUD' });
           })
           .catch(err => console.warn('Fallo silencioso al notificar RRHH:', err));
       }
@@ -741,16 +761,35 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              {isMoneyVacationType(newRequestType) ? (
                 <div>
-                  <label className="block text-xs font-bold text-lucius-lime uppercase tracking-widest mb-1.5">Desde</label>
-                  <input type="date" className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-sm" value={newRequestStartDate} onChange={e => setNewRequestStartDate(e.target.value)} required />
+                  <label className="block text-xs font-bold text-lucius-lime uppercase tracking-widest mb-1.5">Días a compensar</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={Math.max(1, Math.floor(vacationStats.maxCompensable))}
+                    step={1}
+                    className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-sm font-bold"
+                    value={newRequestDays}
+                    onChange={e => setNewRequestDays(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                    required
+                  />
+                  <p className="text-[10px] text-bokara-grey/50 mt-1.5 leading-tight">
+                    Se pagarán <strong>{newRequestDays}</strong> día{newRequestDays !== 1 ? 's' : ''} en dinero. No es una ausencia: el colaborador sigue trabajando.
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-lucius-lime uppercase tracking-widest mb-1.5">Hasta</label>
-                  <input type="date" className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-sm" value={newRequestEndDate} onChange={e => setNewRequestEndDate(e.target.value)} required />
+              ) : (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-lucius-lime uppercase tracking-widest mb-1.5">Desde</label>
+                    <input type="date" className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-sm" value={newRequestStartDate} onChange={e => setNewRequestStartDate(e.target.value)} required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-lucius-lime uppercase tracking-widest mb-1.5">Hasta</label>
+                    <input type="date" className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-sm" value={newRequestEndDate} onChange={e => setNewRequestEndDate(e.target.value)} required />
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="flex justify-end gap-3 mt-8">
                 <button type="button" onClick={() => setIsRequestModalOpen(false)} className="px-5 py-2.5 bg-gray-100 rounded-lg font-bold text-bokara-grey text-sm">Cancelar</button>
                 <button type="submit" disabled={isSubmitting} className="px-5 py-2.5 bg-lucius-lime text-bokara-grey font-bold rounded-lg hover:bg-opacity-80 text-sm disabled:opacity-60 disabled:cursor-wait">
