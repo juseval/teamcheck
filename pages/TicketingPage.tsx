@@ -3,6 +3,7 @@ import { CalendarEvent, PayrollChangeType, Employee } from '../types';
 import { EditIcon, TrashIcon } from '../components/Icons';
 import { useNotification } from '../contexts/NotificationContext';
 import { getNotificationRecipients, getEmailConfig } from '../services/apiService';
+import { computeVacationData, validateVacationRequest, isMoneyVacationType } from '../utils/vacations';
 
 interface TicketingPageProps {
   events: CalendarEvent[];
@@ -27,6 +28,7 @@ interface CalendarDay {
     isMine: boolean;
     color: string;
     label: string;
+    isMoney: boolean;
   }[];
   isBlocked?: boolean;
 }
@@ -210,25 +212,11 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
   }, [visibleTypes]);
 
   // ── Estadísticas de vacaciones (CST 30/360) ──
-  const vacationStats = useMemo(() => {
-    if (!currentUser.hireDate)
-      return { accrued: 0, taken: 0, compensated: 0, balance: 0, maxCompensable: 0 };
-    const start = new Date(currentUser.hireDate);
-    const end   = currentUser.terminationDate ? new Date(currentUser.terminationDate) : new Date();
-    let d1 = start.getDate(); const m1 = start.getMonth() + 1; const y1 = start.getFullYear();
-    let d2 = end.getDate();   const m2 = end.getMonth()   + 1; const y2 = end.getFullYear();
-    if (d1 === 31) d1 = 30; if (d2 === 31) d2 = 30;
-    if (m1 === 2 && d1 >= 28) d1 = 30; if (m2 === 2 && d2 >= 28) d2 = 30;
-    const accountingDays = ((y2 - y1) * 360) + ((m2 - m1) * 30) + (d2 - d1) + 1;
-    const totalAccrued   = ((accountingDays * 15) / 360) + (currentUser.manualVacationAdjustment || 0);
-    let taken = 0; let compensated = 0;
-    events.filter(e => e.employeeId === currentUser.id && e.status === 'approved').forEach(e => {
-      const dur = Math.ceil((new Date(e.endDate).getTime() - new Date(e.startDate).getTime()) / 86_400_000) + 1;
-      if (e.type === 'Vacation' || e.type === 'Vacaciones') taken += dur;
-      if (e.type === 'Vacaciones (Dinero)' || e.type === 'Compensación') compensated += dur;
-    });
-    return { accrued: totalAccrued, taken, compensated, balance: totalAccrued - taken - compensated, maxCompensable: Math.max(0, (totalAccrued / 2) - compensated) };
-  }, [currentUser, events]);
+  // Toda la lógica vive ahora en utils/vacations.ts (fuente única de verdad).
+  const vacationStats = useMemo(
+    () => computeVacationData(currentUser, events),
+    [currentUser, events],
+  );
 
   // ── Grid del calendario ──
   const calendarGrid = useMemo(() => {
@@ -259,17 +247,20 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
       const startDate = new Date(event.startDate + 'T00:00:00');
       const endDate   = new Date(event.endDate   + 'T00:00:00');
       const isMine    = event.employeeId === currentUser.id;
+      const isMoney   = isMoneyVacationType(event.type);
       for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
         const dayStr    = d.toISOString().split('T')[0];
         const dayInGrid = days.find(day => day.date.toISOString().split('T')[0] === dayStr);
         if (dayInGrid) {
-          if (!isMine && (selectedTypeConfig?.requiereAprobacion || selectedTypeConfig?.isExclusive) && event.type === viewType && event.status === 'approved')
+          // Las vacaciones en DINERO no bloquean el día: el colaborador sigue trabajando.
+          if (!isMine && !isMoney && (selectedTypeConfig?.requiereAprobacion || selectedTypeConfig?.isExclusive) && event.type === viewType && event.status === 'approved')
             dayInGrid.isBlocked = true;
           if (isMine) {
             dayInGrid.events.push({
               event, isMine: true,
               color: eventColorMap.get(event.type) || '#91A673',
               label: event.status === 'pending' ? `${event.type} (Pendiente)` : event.type,
+              isMoney,
             });
           }
         }
@@ -305,6 +296,9 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
         const yearCheck = checkYearlyQuota(typeConfig, newRequestStartDate);
         if (!yearCheck.allowed) { addNotification(yearCheck.reason ?? 'Cupo anual agotado.', 'error'); setIsSubmitting(false); return; }
       }
+      // ── Validación de vacaciones: saldo disponible y tope 50% en dinero (CST Art. 189) ──
+      const vacCheck = validateVacationRequest(newRequestType, newRequestStartDate, newRequestEndDate, vacationStats);
+      if (!vacCheck.ok) { addNotification(vacCheck.error!, 'error'); setIsSubmitting(false); return; }
     }
     try {
       if (editingEvent) {
@@ -662,7 +656,17 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
                 ) : (
                   <div className="space-y-1">
                     {day.events.map((evt, i) => (
-                      <div key={i} className="text-[9px] p-1 rounded truncate font-bold text-white shadow-sm" style={{ backgroundColor: evt.color }} title={evt.label}>{evt.label}</div>
+                      evt.isMoney ? (
+                        // Vacaciones en DINERO: insignia (no es ausencia, el colaborador trabaja ese día)
+                        <div key={i} className="text-[9px] px-1 py-0.5 rounded truncate font-bold border bg-white shadow-sm flex items-center gap-0.5"
+                          style={{ borderColor: evt.color, color: evt.color }}
+                          title={`${evt.label} · pagada en dinero (sigue trabajando)`}>
+                          <span aria-hidden>💵</span>
+                          <span className="truncate">{evt.label}</span>
+                        </div>
+                      ) : (
+                        <div key={i} className="text-[9px] p-1 rounded truncate font-bold text-white shadow-sm" style={{ backgroundColor: evt.color }} title={evt.label}>{evt.label}</div>
+                      )
                     ))}
                   </div>
                 )}
@@ -680,10 +684,14 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
               const today = new Date(); today.setHours(0, 0, 0, 0);
               const isPast = new Date(req.endDate + 'T00:00:00') < today;
               const isPending = req.status === 'pending';
+              const isMoney = isMoneyVacationType(req.type);
               return (
                 <div key={req.id} className="p-3 rounded-lg border border-bokara-grey/5 bg-whisper-white/50 hover:bg-whisper-white transition-colors">
                   <div className="flex justify-between items-start mb-1">
-                    <span className="font-bold text-sm text-bokara-grey">{req.type}</span>
+                    <span className="font-bold text-sm text-bokara-grey flex items-center gap-1">
+                      {isMoney && <span aria-hidden title="Pagada en dinero">💵</span>}
+                      {req.type}
+                    </span>
                     <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${req.status === 'approved' ? 'bg-green-100 text-green-700' : req.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>
                       {req.status === 'approved' ? 'Aprobado' : req.status === 'rejected' ? 'Rechazado' : 'Pendiente'}
                     </span>
@@ -720,9 +728,10 @@ const TicketingPage: React.FC<TicketingPageProps> = ({
                 <select className="w-full bg-whisper-white border border-bokara-grey/20 rounded-lg p-3 text-bokara-grey font-bold" value={newRequestType} onChange={e => setNewRequestType(e.target.value)}>
                   {visibleTypes.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                 </select>
-                {(newRequestType === 'Vacaciones (Dinero)' || newRequestType === 'Compensación') && (
+                {isMoneyVacationType(newRequestType) && (
                   <div className="mt-3 p-2 bg-blue-50 text-blue-800 rounded border border-blue-100 text-[10px] leading-tight">
-                    <strong>Regla CST (Dinero):</strong> Máximo 50% compensable.<br/>
+                    <strong>💵 Vacaciones en dinero:</strong> el colaborador sigue trabajando.<br/>
+                    <strong>Regla CST:</strong> máximo 50% compensable.
                     Te quedan <strong>{vacationStats.maxCompensable.toFixed(2)} días</strong> para solicitar en dinero.
                   </div>
                 )}

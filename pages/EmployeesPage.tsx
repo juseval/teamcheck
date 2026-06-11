@@ -4,6 +4,7 @@ import { useNotification } from '../contexts/NotificationContext';
 import EmployeeScheduleBoard from '../components/EmployeeScheduleBoard';
 import { updateEmployeeDetails, getCalendarEvents } from '../services/apiService';
 import { SearchIcon } from '../components/Icons';
+import { computeVacationData, isMoneyVacationType } from '../utils/vacations';
 
 interface EmployeesPageProps {
   employees: Employee[];
@@ -63,31 +64,8 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
     );
   }, [safeEmployees, searchTerm]);
 
-  const getVacationData = (emp: Employee) => {
-    if (!emp.hireDate) return { accrued: 0, taken: 0, compensated: 0, balance: 0, maxCompensable: 0, history: [] };
-    const start = new Date(emp.hireDate);
-    const end = emp.terminationDate ? new Date(emp.terminationDate) : new Date();
-    let d1 = start.getDate(); const m1 = start.getMonth() + 1; const y1 = start.getFullYear();
-    let d2 = end.getDate();   const m2 = end.getMonth()   + 1; const y2 = end.getFullYear();
-    if (d1 === 31) d1 = 30; if (d2 === 31) d2 = 30;
-    if (m1 === 2 && d1 >= 28) d1 = 30; if (m2 === 2 && d2 >= 28) d2 = 30;
-    const accountingDays = ((y2 - y1) * 360) + ((m2 - m1) * 30) + (d2 - d1) + 1;
-    const totalAccrued = ((accountingDays * 15) / 360) + (emp.manualVacationAdjustment || 0);
-    const myEvents = allEvents.filter(e => e.employeeId === emp.id && e.status === 'approved');
-    let taken = 0; let compensated = 0;
-    myEvents.filter(e => e.type === 'Vacation' || e.type === 'Vacaciones').forEach(e => {
-      taken += Math.ceil((new Date(e.endDate).getTime() - new Date(e.startDate).getTime()) / 86400000) + 1;
-    });
-    myEvents.filter(e => e.type === 'Vacaciones (Dinero)' || e.type === 'Compensación').forEach(e => {
-      compensated += Math.ceil((new Date(e.endDate).getTime() - new Date(e.startDate).getTime()) / 86400000) + 1;
-    });
-    return {
-      accrued: totalAccrued, taken, compensated,
-      balance: totalAccrued - taken - compensated,
-      maxCompensable: Math.max(0, (totalAccrued / 2) - compensated),
-      history: myEvents.filter(e => ['Vacation','Vacaciones','Vacaciones (Dinero)','Compensación'].includes(e.type))
-    };
-  };
+  // ── Cálculo de vacaciones: fuente única en utils/vacations.ts ──
+  const getVacationData = (emp: Employee) => computeVacationData(emp, allEvents);
 
   const handleExportCSV = () => {
     const headers = ['Nombre','Correo','Tipo ID','Número ID','Teléfono','Ubicación','Rol','Fecha Ingreso','Horario','Estado','Vac. Acumuladas (d)','Vac. Disfrutadas (d)','Vac. Compensadas (d)','Saldo Vac. (d)','Máx. Compensable (d)'];
@@ -311,7 +289,7 @@ const EmployeesPage: React.FC<EmployeesPageProps> = ({ employees, onAddEmployee,
                   <p className="text-center py-8 text-sm text-bokara-grey/30 italic">No hay movimientos registrados.</p>
                 ) : getVacationData(selectedHistoryEmp).history.map(evt => {
                   const dur = Math.ceil((new Date(evt.endDate).getTime() - new Date(evt.startDate).getTime()) / 86400000) + 1;
-                  const isMoney = evt.type === 'Vacaciones (Dinero)' || evt.type === 'Compensación';
+                  const isMoney = isMoneyVacationType(evt.type);
                   return (
                     <div key={evt.id} className="flex justify-between items-center p-3 bg-whisper-white/20 rounded-lg border border-bokara-grey/5">
                       <div>
