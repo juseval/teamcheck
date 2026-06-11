@@ -3,6 +3,7 @@ import { Employee, AttendanceLogEntry, AttendanceAction, ActivityStatus, WorkSch
 import EmployeeCard from '../components/EmployeeCard';
 import AttendanceLog, { NewLogEntryData } from '../components/AttendanceLog';
 import EmployeeTimeline from '../components/EmployeeTimeline';
+import DailyTimeSummary from '../components/DailyTimeSummary';
 import { updateAttendanceLogEntry } from '../services/apiService';
 import { useNotification } from '../contexts/NotificationContext';
 
@@ -43,6 +44,15 @@ const TrackerPage: React.FC<TrackerPageProps> = ({
       (endTimestamp === Infinity || log.timestamp <= endTimestamp)
     );
   }, [attendanceLog, dateRange, userRole, employees]);
+
+  // Logs del colaborador SIN filtro de fechas (el resumen filtra a "hoy" por dentro,
+  // así el filtro de rango del registro de abajo no afecta el resumen del día).
+  const employeeOnlyLogs = useMemo(() => {
+    if (userRole === 'employee' && employees.length > 0 && employees[0]) {
+      return attendanceLog.filter(log => log.employeeId === employees[0].id);
+    }
+    return attendanceLog;
+  }, [attendanceLog, userRole, employees]);
 
   const handleRequestCorrection = async (
     entry: AttendanceLogEntry,
@@ -144,6 +154,12 @@ const TrackerPage: React.FC<TrackerPageProps> = ({
         {userRole !== 'employee' && (
           <div className="w-full max-w-6xl bg-white rounded-xl shadow-md p-6 border border-bokara-grey/10">
             <EmployeeTimeline employees={employees} attendanceLog={attendanceLog} activityStatuses={activityStatuses} />
+          </div>
+        )}
+
+        {userRole === 'employee' && (
+          <div className="w-full max-w-md">
+            <DailyTimeSummary entries={employeeOnlyLogs} activityStatuses={activityStatuses} />
           </div>
         )}
 
